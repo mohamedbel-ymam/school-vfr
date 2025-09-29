@@ -3,7 +3,10 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
+Route::get('/sanctum/csrf-cookie', [CsrfCookieController::class, 'show'])
+    ->name('sanctum.csrf-cookie');
 Route::get('/', function () {
     return ['Laravel' => app()->version()];
 });
