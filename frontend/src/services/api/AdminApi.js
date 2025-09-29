@@ -1,5 +1,5 @@
 // frontend/src/services/Api/AdminApi.js
-import axiosClient from "../../api/axios"; // <- your configured instance
+import {axiosClient} from "../../api/axios"; // <- your configured instance
 
 const AdminApi = {
   listAdmins(params = {}) {
