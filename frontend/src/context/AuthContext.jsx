@@ -52,14 +52,23 @@ export function AuthProvider({ children }) {
     return () => { isMounted = false; };
   }, []);
 
-  const login = async ({ email, password }) => {
-    await ensureCsrf();
-    // IMPORTANT: web route (no /api), expects JSON (no redirect)
-    await axiosBase.post('/connexion', { email, password });
-    const me = await refreshUser();
-    return normalizeUser(me);
-  };
+  function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(^|; )' + name.replace(/([$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+  return m ? decodeURIComponent(m[2]) : null;
+}
 
+const login = async ({ email, password }) => {
+  await ensureCsrf(); // sets XSRF-TOKEN + session on .takwaetablissement.com
+
+  const token = getCookie('XSRF-TOKEN'); // ← read it from the parent-domain cookie
+  await axiosBase.post('/connexion', { email, password }, token ? {
+    headers: { 'X-XSRF-TOKEN': token, 'Accept': 'application/json' },
+    withCredentials: true,
+  } : { headers: { 'Accept': 'application/json' }, withCredentials: true });
+
+  const me = await refreshUser();
+  return normalizeUser(me);
+};
   const logout = async () => {
     try {
       await ensureCsrf();
