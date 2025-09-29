@@ -6,8 +6,10 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
 Route::get('/sanctum/csrf-cookie', [CsrfCookieController::class, 'show'])
+    ->middleware('web')
     ->name('sanctum.csrf-cookie');
-Route::get('/', function () {
+
+    Route::get('/', function () {
     return ['Laravel' => app()->version()];
 });
 Route::middleware('web')->group(function () {
