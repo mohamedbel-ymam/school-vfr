@@ -5,6 +5,9 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
 use Illuminate\Http\Middleware\HandleCors; // CORS
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
+use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
+use Illuminate\Foundation\Http\Middleware\ValidatePostSize;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful; // Sanctum SPA
 
 // Spatie (single, correct namespaces)
@@ -21,8 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         // Run CORS for every request (incl. OPTIONS preflight)
-        $middleware->append(HandleCors::class);
-
+        $middleware->use([
+            HandleCors::class,
+            ValidatePostSize::class,
+            TrimStrings::class,
+            ConvertEmptyStringsToNull::class,
+        ]);
         // Sanctum: treat SPA origins as stateful on API group
         $middleware->api(prepend: [
             EnsureFrontendRequestsAreStateful::class,
