@@ -14,7 +14,6 @@ Route::get('/sanctum/csrf-cookie', [CsrfCookieController::class, 'show'])
 });
 Route::middleware('web')->group(function () {
     // CSRF cookie (Sanctum)
-    Route::get('/sanctum/csrf-cookie', fn () => response()->noContent());
 
     // Login via Breeze
     Route::post('/connexion', [AuthenticatedSessionController::class, 'store'])->name('web.connexion');
