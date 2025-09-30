@@ -16,9 +16,10 @@ class UserSeeder extends Seeder
     {
         // --- Roles (Spatie) -------------------------------------------------
         $guard = 'web';
-        foreach (['admin','enseignant','élève','parent'] as $r) {
+        foreach (['admin','teacher','student','parent'] as $r) {
             Role::firstOrCreate(['name' => $r, 'guard_name' => $guard]);
         }
+
 
         // --- Ensure a degree exists (don’t assume a 'code' column) ----------
         $degree = Degree::query()->first();
@@ -64,7 +65,7 @@ class UserSeeder extends Seeder
             'email'     => 'mohamed@belymam.com',
             'role'      => UserRole::STUDENT->value,
             'degree_id' => $degree->id,
-        ], 'élève');
+        ], 'student');
 
         // Admin
         $admin = $upsertUser([
@@ -91,7 +92,7 @@ class UserSeeder extends Seeder
             'email'     => 'enseignant@school.com',
             'role'      => UserRole::TEACHER->value,
             'degree_id' => null,
-        ], 'enseignant');
+        ], 'teacher');
 
         // --- Link parent → child (HasMany/BelongsTo) -----------------------
         // Use the BelongsTo side to associate:
