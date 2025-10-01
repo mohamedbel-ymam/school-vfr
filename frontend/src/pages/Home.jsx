@@ -50,6 +50,7 @@ const imgs = {
   info1: "/Img/info-1.jpeg",
   info2: "/Img/info-2.jpeg",
   enseignants: "/Img/enseignant-éleve.jpg",
+  enseignants2:"Img/enseignant-etudiants.jpg",
 };
 
 /***********************************
@@ -343,6 +344,7 @@ const RoleCard = ({ icon: Icon, title, bullets, href }) => (
 const Team = () => (
   <Section id="equipe">
     <Container>
+      <Photo img={imgs.enseignants2} caption="Enseignants & étudiants — pendant les sessions" />
       <Heading kicker="Communauté" title="Équipe pédagogique & étudiants" subtitle="Une communauté soudée où l'on progresse ensemble." />
       <div className="mt-10">
         <Photo img={imgs.enseignants} caption="Enseignants & étudiants — journée d'échanges" />
