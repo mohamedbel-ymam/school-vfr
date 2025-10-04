@@ -4,6 +4,9 @@ namespace App\Http;
 
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
+use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
+
 // Cookie / Session
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -28,6 +31,8 @@ class Kernel extends HttpKernel
      */
     protected $middleware = [
         HandleCors::class,
+    TrimStrings::class,
+    ConvertEmptyStringsToNull::class,
     ];
 
     /**
