@@ -1,7 +1,9 @@
+// src/components/student/StudentDashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { axiosClient } from "../../api/axios";
+import { STUDENT_DASHBOARD_ROUTE } from "../../router/index.jsx";
 
 // Degree dashboards
 import College3emeDashboard from "./degrees/College3emeDashboard.jsx";
@@ -29,8 +31,7 @@ function mapSynonymToCanon(s) {
   const n = norm(s);
   const c = compact(s);
 
-  // direct canonical
-  if (CANON.has(n)) return n;
+  if (CANON.has(n)) return n;                         // direct canonical
 
   // Collège 3ème
   if (c.includes("college") || c.includes("colleg") || c.includes("troisieme") || n.includes("3eme") || n === "3e")
@@ -57,42 +58,36 @@ function mapSynonymToCanon(s) {
   return null;
 }
 
-/* Try to find a degree hint in many shapes */
 function resolveDegreeSlugFrom(anyObj) {
   if (!anyObj || typeof anyObj !== "object") return null;
 
   // 1) direct fields
   const direct =
-    anyObj.degree_slug ??
-    anyObj.degreeSlug ??
-    anyObj.degree_code ??
-    anyObj.degree_key ??
-    anyObj.slug ??
-    null;
-
+    anyObj.degree_slug ?? anyObj.degreeSlug ?? anyObj.degree_code ??
+    anyObj.degree_key ?? anyObj.slug ?? null;
   const directMapped = mapSynonymToCanon(direct);
   if (directMapped) return directMapped;
 
-  // 2) nested degree object (common)
+  // 2) nested degree object
   const degObj = anyObj.degree ?? anyObj.current_degree ?? null;
   if (degObj) {
     const fromDeg =
-      mapSynonymToCanon(degObj.slug) ||
-      mapSynonymToCanon(degObj.code) ||
-      mapSynonymToCanon(degObj.name) ||
+      mapSynonymToCanon(degObj.slug)  ||
+      mapSynonymToCanon(degObj.code)  ||
+      mapSynonymToCanon(degObj.name)  ||
       mapSynonymToCanon(degObj.label) ||
       mapSynonymToCanon(degObj.title);
     if (fromDeg) return fromDeg;
   }
 
-  // 3) in known user subtrees
+  // 3) user subtrees
   const trees = [anyObj.student, anyObj.profile, anyObj.enrollment, anyObj.enrolment].filter(Boolean);
   for (const t of trees) {
     const s = resolveDegreeSlugFrom(t);
     if (s) return s;
   }
 
-  // 4) arrays like enrollments/degrees (pick the most recent/first)
+  // 4) arrays like enrollments/degrees
   for (const key of ["enrollments", "enrolments", "degrees"]) {
     const arr = anyObj[key];
     if (Array.isArray(arr) && arr.length) {
@@ -103,12 +98,9 @@ function resolveDegreeSlugFrom(anyObj) {
     }
   }
 
-  // 5) last-resort: try degree_id if it exists (map if you have a known mapping)
+  // 5) last resort: degree_id heuristics
   const id = anyObj.degree_id ?? anyObj.degreeId ?? anyObj?.degree?.id ?? null;
-  if (id != null) {
-    const idStr = String(id);
-    return mapSynonymToCanon(idStr); // will match "bac2", "tc", etc if your IDs are named like that
-  }
+  if (id != null) return mapSynonymToCanon(String(id));
 
   return null;
 }
@@ -116,9 +108,9 @@ function resolveDegreeSlugFrom(anyObj) {
 function resolveDegreeSlug(user, profile) {
   return (
     resolveDegreeSlugFrom(user?.degree) ||
-    resolveDegreeSlugFrom(user) ||
+    resolveDegreeSlugFrom(user)         ||
     resolveDegreeSlugFrom(profile?.degree) ||
-    resolveDegreeSlugFrom(profile) ||
+    resolveDegreeSlugFrom(profile)      ||
     null
   );
 }
@@ -133,10 +125,9 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState(null);
   const [pLoading, setPLoading] = useState(false);
 
-  // If auth is loading
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
 
-  // Role check (defensive; layout should guard already)
+  // defensive role check (layout should guard already)
   const hasStudentRole = Array.isArray(user?.roles)
     ? user.roles.includes("student")
     : user?.role === "student";
@@ -145,42 +136,39 @@ export default function StudentDashboard() {
     return <div className="p-4 text-center text-red-600">Non autorisé.</div>;
   }
 
-  // 1st pass: try from auth user
-  let allowedSlug = useMemo(() => resolveDegreeSlug(user, null), [user]);
+  // Compute allowedSlug (user first, then profile when available)
+  const allowedSlug = useMemo(() => resolveDegreeSlug(user, profile) ?? null, [user, profile]);
 
-  // If not found, fetch a richer profile once (common in APIs)
+  // If we don't have a slug yet, try to fetch a richer profile ONCE
   useEffect(() => {
     let cancelled = false;
-    async function fetchProfile() {
-      if (allowedSlug) return; // nothing to do
+    if (allowedSlug) return; // already know
+
+    (async () => {
       setPLoading(true);
       try {
-        // Try a couple of common endpoints; first that succeeds wins
         const tryEndpoints = ["/user", "/me", "/student/me"];
-        let data = null;
-
         for (const ep of tryEndpoints) {
           try {
             const r = await axiosClient.get(ep);
-            data = r?.data?.data ?? r?.data ?? null;
-            if (data) break;
+            const data = r?.data?.data ?? r?.data ?? null;
+            if (data) {
+              if (!cancelled) setProfile(data);
+              break;
+            }
           } catch {
-            // keep trying next endpoint
+            // keep trying
           }
         }
-        if (!cancelled) setProfile(data);
       } finally {
         if (!cancelled) setPLoading(false);
       }
-    }
-    fetchProfile();
+    })();
+
     return () => { cancelled = true; };
   }, [allowedSlug]);
 
-  // Recompute with profile (if we fetched one)
-  allowedSlug = useMemo(() => resolveDegreeSlug(user, profile) ?? null, [user, profile]);
-
-  // Still nothing? Tell the student (admin must attach a degree)
+  // Still nothing? Inform the student instead of blank page
   if (!allowedSlug) {
     if (pLoading) return <div className="p-4 text-center">Chargement…</div>;
     return (
@@ -191,13 +179,15 @@ export default function StudentDashboard() {
     );
   }
 
-  // Canonicalize URL once
+  // Canonicalize URL once we know the slug (prevents /…/null)
   useEffect(() => {
+    const target = `${STUDENT_DASHBOARD_ROUTE}/${encodeURIComponent(allowedSlug)}`;
     if (!routeToken || routeToken !== allowedSlug) {
-      navigate(`/élève/tableau de bord/${encodeURIComponent(allowedSlug)}`, { replace: true });
+      navigate(target, { replace: true });
     }
   }, [routeToken, allowedSlug, navigate]);
 
+  // While the router catches up, render nothing (no flicker)
   if (routeToken !== allowedSlug) return null;
 
   // Render the matching degree dashboard

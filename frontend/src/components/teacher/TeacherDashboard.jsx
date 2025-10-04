@@ -1,3 +1,4 @@
+// src/components/teacher/TeacherDashboard.jsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -13,10 +14,11 @@ import HomeworkApi from "../../services/api/HomeworkApi";
 import SubjectBackground from "./SubjectBackground.jsx";
 import { SUBJECT_THEMES, guessSubjectKey } from "./SubjectThemes.js";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { TEACHER_SCHEDULE_ROUTE } from "../../router/index.jsx";
 
 const unwrap = (r) => r?.data?.data?.data ?? r?.data?.data ?? [];
 
-// Affiche un libellé FR fiable selon le code du seeder
+// Libellé FR fiable selon le code du seeder
 function labelFromSubject(code, nameFallback = "Matière") {
   const c = (code || "").toUpperCase().replace(/[^A-Z]/g, "");
   switch (c) {
@@ -38,13 +40,10 @@ export default function TeacherDashboard() {
   const [docs, setDocs] = useState([]);
   const [hws, setHws] = useState([]);
 
-  // Source de vérité affichée sur le dashboard (peut venir de user OU fallback)
-  const [displaySubject, setDisplaySubject] = useState({
-    name: "Matière",
-    code: null,
-  });
+  // Source affichée sur le dashboard
+  const [displaySubject, setDisplaySubject] = useState({ name: "Matière", code: null });
 
-  // 1) Essayer depuis l'utilisateur dès que user change
+  // 1) depuis l'utilisateur
   useEffect(() => {
     const name =
       user?.subject?.name ||
@@ -60,7 +59,7 @@ export default function TeacherDashboard() {
     setDisplaySubject({ name, code });
   }, [user]);
 
-  // Charger les derniers items
+  // Charger les derniers items + fallback matière si absent côté user
   useEffect(() => {
     (async () => {
       try {
@@ -73,29 +72,19 @@ export default function TeacherDashboard() {
         setDocs(dd);
         setHws(hh);
 
-        // 2) Fallback intelligent si on n'a pas de matière côté user
         if (!user?.subject?.code && !user?.subject?.name) {
           const guessName = hh[0]?.subject_name || dd[0]?.subject_name;
-          if (guessName) {
-            setDisplaySubject((prev) => ({
-              name: guessName,
-              code: prev.code, // on n'a pas le code ici, mais le nom suffit pour le thème
-            }));
-          }
+          if (guessName) setDisplaySubject((prev) => ({ name: guessName, code: prev.code }));
         }
-      } catch (e) {
-        // rendre la page quand même
+      } catch {
+        // on affiche quand même
       }
     })();
   }, [user]);
 
-  // Calcul du thème à partir de la matière affichée
   const themeKey = guessSubjectKey(displaySubject.name, displaySubject.code);
   const theme = SUBJECT_THEMES[themeKey] ?? SUBJECT_THEMES.default;
-
-  // Libellé badge FR (préférence au code du seeder)
   const subjectLabel = labelFromSubject(displaySubject.code, displaySubject.name);
-
   const teacherFullName = `${user?.firstname ?? ""} ${user?.lastname ?? ""}`.trim();
 
   return (
@@ -122,7 +111,7 @@ export default function TeacherDashboard() {
               </span>
             </div>
 
-            {/* Boutons -> routes absolues prof */}
+            {/* Boutons */}
             <div className="flex flex-wrap gap-2 mt-2">
               <Link to="/enseignant/documents">
                 <Button size="sm" variant="secondary" className="gap-2">
@@ -134,7 +123,7 @@ export default function TeacherDashboard() {
                   <ClipboardList className="h-4 w-4" /> Donner un devoir
                 </Button>
               </Link>
-              <Link to="/enseignant/emploi-du-temps">
+              <Link to={TEACHER_SCHEDULE_ROUTE}>
                 <Button size="sm" variant="outline" className="gap-2">
                   <Calendar className="h-4 w-4" /> Mon emploi du temps
                 </Button>
@@ -171,12 +160,14 @@ export default function TeacherDashboard() {
                         <div className="min-w-0">
                           <p className="font-medium truncate">{d.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {d.subject_name ? `${d.subject_name} · ` : ""}Degré: {d.degree?.name ?? d.degree_id} · {d.filesize_human}
+                            {d.subject_name ? `${d.subject_name} · ` : ""}Degré: {d?.degree?.name ?? d.degree_id} · {d.filesize_human}
                           </p>
                         </div>
-                        <a className="text-sm underline shrink-0" href={d.file_url} target="_blank" rel="noreferrer">
-                          Télécharger
-                        </a>
+                        {d.file_url ? (
+                          <a className="text-sm underline shrink-0" href={d.file_url} target="_blank" rel="noreferrer">
+                            Télécharger
+                          </a>
+                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -211,13 +202,16 @@ export default function TeacherDashboard() {
                         <div className="min-w-0">
                           <p className="font-medium truncate">{d.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {d.subject_name ? `${d.subject_name} · ` : ""}Degré: {d.degree?.name ?? d.degree_id} · {d.filesize_human}
+                            {d.subject_name ? `${d.subject_name} · ` : ""}Degré: {d?.degree?.name ?? d.degree_id}
+                            {d.filesize_human ? ` · ${d.filesize_human}` : ""}
                             {d.due_at ? ` · Échéance: ${new Date(d.due_at).toLocaleString()}` : ""}
                           </p>
                         </div>
-                        <a className="text-sm underline shrink-0" href={d.file_url} target="_blank" rel="noreferrer">
-                          Télécharger
-                        </a>
+                        {d.file_url ? (
+                          <a className="text-sm underline shrink-0" href={d.file_url} target="_blank" rel="noreferrer">
+                            Télécharger
+                          </a>
+                        ) : null}
                       </div>
                     </li>
                   ))}
