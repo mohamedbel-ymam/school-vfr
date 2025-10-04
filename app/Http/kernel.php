@@ -3,19 +3,35 @@
 namespace App\Http;
 
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
+
+// Cookie / Session
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+
+// CSRF (only for 'web')
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as VerifyCsrfToken;
+
+// Routing / CORS
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Http\Middleware\HandleCors;
+
+// Sanctum
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 class Kernel extends HttpKernel
 {
     /**
-     * The application's route middleware groups.
+     * Global middleware (applies to both 'web' and 'api').
+     * Keeping CORS here is the Laravel default and avoids surprises.
+     */
+    protected $middleware = [
+        HandleCors::class,
+    ];
+
+    /**
+     * Route middleware groups.
      */
     protected $middlewareGroups = [
         'web' => [
@@ -25,19 +41,26 @@ class Kernel extends HttpKernel
             ShareErrorsFromSession::class,
             VerifyCsrfToken::class,
             SubstituteBindings::class,
-            
         ],
 
         'api' => [
-            HandleCors::class,
+            // Sanctum: marks browser requests from your SPA as "stateful"
             EnsureFrontendRequestsAreStateful::class,
-            'throttle:api',
+
+            // Minimal session support so cookies work in API requests
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+
+            // Usual API middleware
+            // 'throttle:api', // (optional) enable if you added a rate limiter
             SubstituteBindings::class,
         ],
     ];
 
     /**
-     * Laravel 10/11 name
+     * Laravel 10/11 aliases.
      */
     protected $middlewareAliases = [
         // Laravel defaults
@@ -52,19 +75,18 @@ class Kernel extends HttpKernel
         'verified'          => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
 
         // Spatie
-        'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-        'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-        'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        'role'              => \Spatie\Permission\Middleware\RoleMiddleware::class,
+        'permission'        => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+        'role_or_permission'=> \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
 
-        // Your custom
-        'lock.degree' => \App\Http\Middleware\EnsureStudentHasCorrectDegree::class,
+        // Custom
+        'lock.degree'       => \App\Http\Middleware\EnsureStudentHasCorrectDegree::class,
     ];
 
     /**
-     * Laravel 8/9 name (same aliases copied here)
+     * Back-compat for Laravel 8/9 (same aliases).
      */
     protected $routeMiddleware = [
-        // Laravel defaults
         'auth'              => \Illuminate\Auth\Middleware\Authenticate::class,
         'auth.basic'        => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'cache.headers'     => \Illuminate\Http\Middleware\SetCacheHeaders::class,
@@ -76,17 +98,11 @@ class Kernel extends HttpKernel
         'verified'          => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
 
         // Spatie
-        'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-    'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-    'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        'role'              => \Spatie\Permission\Middleware\RoleMiddleware::class,
+        'permission'        => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+        'role_or_permission'=> \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
 
-        // Your custom
-        'lock.degree' => \App\Http\Middleware\EnsureStudentHasCorrectDegree::class,
+        // Custom
+        'lock.degree'       => \App\Http\Middleware\EnsureStudentHasCorrectDegree::class,
     ];
 }
-
-        
-       
-
-
-

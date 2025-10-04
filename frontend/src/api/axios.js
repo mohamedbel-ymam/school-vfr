@@ -29,12 +29,41 @@ export const axiosClient = axios.create({
   headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
 });
 
-// Ensure the CSRF cookie exists
+// Helpers
+function getCookie(name) {
+  const m = document.cookie.match(
+    new RegExp(
+      `(^|; )${name.replace(/([$?*|{}()[\]\\/+^])/g, "\\$1")}=([^;]*)`
+    )
+  );
+  return m ? decodeURIComponent(m[2]) : null;
+}
+
 export async function ensureCsrf() {
   await axiosBase.get("/sanctum/csrf-cookie");
 }
 
-// Optional: auto-retry once on 419
+// 🔒 Auto-ensure CSRF for mutating requests + set header if missing
+let csrfBootstrapped = false;
+axiosClient.interceptors.request.use(async (config) => {
+  const method = (config.method || "get").toLowerCase();
+  const needsCsrf = ["post", "put", "patch", "delete"].includes(method);
+
+  if (needsCsrf) {
+    if (!csrfBootstrapped) {
+      await ensureCsrf();
+      csrfBootstrapped = true;
+    }
+    // if header not set by axios automatically, force it from cookie
+    const token = getCookie("XSRF-TOKEN");
+    if (token && !config.headers?.["X-XSRF-TOKEN"]) {
+      config.headers = { ...(config.headers || {}), "X-XSRF-TOKEN": token };
+    }
+  }
+  return config;
+});
+
+// ♻️ Auto-retry once on 419
 let retrying = false;
 axiosClient.interceptors.response.use(
   (r) => r,
@@ -43,33 +72,32 @@ axiosClient.interceptors.response.use(
       retrying = true;
       try {
         await ensureCsrf();
+        const token = getCookie("XSRF-TOKEN");
+        if (token) {
+          err.config.headers = {
+            ...(err.config.headers || {}),
+            "X-XSRF-TOKEN": token,
+          };
+        }
         return await axiosClient.request(err.config);
       } finally {
         retrying = false;
       }
     }
+    // Optional: handle 401 → force re-login flow
+    // if (err?.response?.status === 401) { ... }
     throw err;
   }
 );
 
-// Manual helpers
-function getCookie(name) {
-  const m = document.cookie.match(new RegExp("(^|; )" + name.replace(/([$?*|{}\(\)\[\]\\\/\+^])/g, "\\$1") + "=([^;]*)"));
-  return m ? decodeURIComponent(m[2]) : null;
-}
-
+// Manual auth helpers
 export async function login({ email, password }) {
-  // 1) Get XSRF-TOKEN cookie
   await ensureCsrf();
-
-  // 2) (Belt & suspenders) force header from cookie
   const token = getCookie("XSRF-TOKEN");
   return axiosBase.post(
     "/connexion",
     { email, password },
-    token
-      ? { headers: { "X-XSRF-TOKEN": token } }
-      : undefined
+    token ? { headers: { "X-XSRF-TOKEN": token } } : undefined
   );
 }
 
