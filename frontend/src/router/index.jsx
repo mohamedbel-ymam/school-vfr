@@ -257,6 +257,7 @@ export const router = createBrowserRouter([
       </Guard>
     ),
     children: [
+      { index: true, element: <Navigate to="tableau de bord" replace /> },
       { path: "tableau de bord", element: <TeacherDashboard /> },
       { path: "emploi du temps", element: <TeacherTimetable /> },
       { path: "événements",      element: <TeacherEvents /> },
