@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import SubjectApi from "../../../services/api/admin/SubjectApi.js";
+
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage
 } from "../../ui/form.js";
@@ -18,7 +19,7 @@ const BLOOD_TYPES = ["O-","O+","A+","A-","B+","B-","AB+","AB-"];
 const formSchema = z.object({
   firstname: z.string().min(2).max(50),
   lastname: z.string().min(2).max(50),
-  date_of_birth: z.string().optional().nullable(),
+  date_of_birth: z.string().optional().nullable(), // normalized on submit
   gender: z.enum(["m","f"]),
   blood_type: z.string(),
   subject_id: z.string().min(1, "Please select a subject."),
@@ -40,15 +41,19 @@ export default function TeacherUpsertForm({ handleSubmit, values, onCancel }) {
   const [subjects, setSubjects] = useState([]);
   const [subjectsLoading, setSubjectsLoading] = useState(true);
 
+  // Load subjects
   useEffect(() => {
+    let cancelled = false;
     setSubjectsLoading(true);
     SubjectApi.list()
       .then((res) => {
+        if (cancelled) return;
         const raw = res?.data?.data || [];
         setSubjects(filterSubjects(raw));
       })
-      .catch(() => setSubjects([]))
-      .finally(() => setSubjectsLoading(false));
+      .catch(() => { if (!cancelled) setSubjects([]); })
+      .finally(() => { if (!cancelled) setSubjectsLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const form = useForm({
@@ -68,6 +73,7 @@ export default function TeacherUpsertForm({ handleSubmit, values, onCancel }) {
     },
   });
 
+  // keep in sync when switching record
   useEffect(() => {
     form.reset({
       firstname: values?.firstname || "",
@@ -93,7 +99,28 @@ export default function TeacherUpsertForm({ handleSubmit, values, onCancel }) {
       formData.role = "teacher";
       if (isUpdate && !formData.password) delete formData.password;
       if (isUpdate) formData.id = values.id;
-      formData.subject_id = parseInt(formData.subject_id, 10);
+
+      // Trim scalar strings
+      ["firstname","lastname","email","address","phone"].forEach((k) => {
+        if (typeof formData[k] === "string") formData[k] = formData[k].trim();
+      });
+
+      // Normalize date: "" or "0000-00-00" -> remove
+      const dob = (formData.date_of_birth ?? "").trim();
+      if (!dob || dob === "0000-00-00") {
+        delete formData.date_of_birth; // backend treats missing as null
+      } else {
+        formData.date_of_birth = dob; // YYYY-MM-DD from <input type="date">
+      }
+
+      // subject_id: string -> int (validate)
+      const subjectId = parseInt(formData.subject_id, 10);
+      if (!Number.isFinite(subjectId)) {
+        setError("subject_id", { message: "Matière invalide." });
+        toast.error("Veuillez sélectionner une matière.");
+        return;
+      }
+      formData.subject_id = subjectId;
 
       const { status, data } = await handleSubmit(formData);
       if (status === 200 || status === 201) {
@@ -121,17 +148,29 @@ export default function TeacherUpsertForm({ handleSubmit, values, onCancel }) {
         {/* identity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField control={form.control} name="firstname" render={({ field }) => (
-            <FormItem><FormLabel>Prénom</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Prénom</FormLabel>
+              <FormControl><Input {...field} autoComplete="given-name" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
           <FormField control={form.control} name="lastname" render={({ field }) => (
-            <FormItem><FormLabel>Nom</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Nom</FormLabel>
+              <FormControl><Input {...field} autoComplete="family-name" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
         </div>
 
         {/* date + gender + blood */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FormField control={form.control} name="date_of_birth" render={({ field }) => (
-            <FormItem><FormLabel>Date de naissance</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Date de naissance</FormLabel>
+              <FormControl><Input type="date" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
           <FormField control={form.control} name="gender" render={({ field }) => (
             <FormItem>
@@ -164,7 +203,11 @@ export default function TeacherUpsertForm({ handleSubmit, values, onCancel }) {
           <FormItem>
             <FormLabel>Matière</FormLabel>
             <Select disabled={subjectsLoading || isSubmitting} onValueChange={field.onChange} value={field.value}>
-              <FormControl><SelectTrigger><SelectValue placeholder={subjectsLoading ? "Chargement…" : "Sélectionner"}/></SelectTrigger></FormControl>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder={subjectsLoading ? "Chargement…" : "Sélectionner"} />
+                </SelectTrigger>
+              </FormControl>
               <SelectContent>
                 {subjectsLoading && <SelectItem value="loading" disabled>Chargement…</SelectItem>}
                 {!subjectsLoading && subjects.length === 0 && <SelectItem value="none" disabled>Aucune matière</SelectItem>}
@@ -180,25 +223,45 @@ export default function TeacherUpsertForm({ handleSubmit, values, onCancel }) {
         {/* contact */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField control={form.control} name="address" render={({ field }) => (
-            <FormItem><FormLabel>Adresse</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Adresse</FormLabel>
+              <FormControl><Input {...field} autoComplete="street-address" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
           <FormField control={form.control} name="phone" render={({ field }) => (
-            <FormItem><FormLabel>Téléphone</FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Téléphone</FormLabel>
+              <FormControl><Input type="tel" {...field} autoComplete="tel" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
         </div>
 
         {/* account */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField control={form.control} name="email" render={({ field }) => (
-            <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl><Input type="email" {...field} autoComplete="email" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
           {!isUpdate ? (
             <FormField control={form.control} name="password" render={({ field }) => (
-              <FormItem><FormLabel>Mot de passe</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem>
+                <FormLabel>Mot de passe</FormLabel>
+                <FormControl><Input type="password" {...field} autoComplete="new-password" /></FormControl>
+                <FormMessage />
+              </FormItem>
             )} />
           ) : (
             <FormField control={form.control} name="password" render={({ field }) => (
-              <FormItem><FormLabel>Nouveau mot de passe (optionnel)</FormLabel><FormControl><Input type="password" {...field} placeholder="Laisser vide" /></FormControl><FormMessage /></FormItem>
+              <FormItem>
+                <FormLabel>Nouveau mot de passe (optionnel)</FormLabel>
+                <FormControl><Input type="password" {...field} placeholder="Laisser vide" autoComplete="new-password" /></FormControl>
+                <FormMessage />
+              </FormItem>
             )} />
           )}
         </div>

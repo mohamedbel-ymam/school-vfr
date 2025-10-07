@@ -25,9 +25,14 @@ use App\Http\Controllers\Auth\MeController;
 |--------------------------------------------------------------------------
 | Public / unauthenticated
 |--------------------------------------------------------------------------
-| Expose a read-only list of degrees for UIs that don’t want to call admin endpoints.
+| Expose degrees + public events without any auth.
 */
 Route::get('/degrees', [DegreeController::class, 'index']);
+
+Route::prefix('evenements')->group(function () {
+    Route::get('/',       [PublicEventController::class, 'index']);
+    Route::get('/{event}',[PublicEventController::class, 'show']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -40,16 +45,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', MeController::class);
     Route::put('/me/password', [AccountController::class, 'updatePassword']);
 
-    // ---- Public events for any authenticated role
-    Route::middleware('role:student|teacher|parent|admin')->group(function () {
-        Route::get('evenements',         [PublicEventController::class, 'index']);
-        Route::get('evenements/{event}', [PublicEventController::class, 'show']);
-    });
-
-    // ---- Notifications (auth)
-    Route::get( 'notifications',           [NotificationController::class, 'index']);
-    Route::post('notifications/{id}/read', [NotificationController::class, 'markRead']);
-    Route::post('notifications/read-all',  [NotificationController::class, 'markAllRead']);
+    // ---- Notifications (per-user)
+    Route::get( 'notifications',            [NotificationController::class, 'index']);
+    Route::post('notifications/{id}/read',  [NotificationController::class, 'markRead']);
+    Route::post('notifications/read-all',   [NotificationController::class, 'markAllRead']);
 
     /*
     |--------------------------------------------------------------------------
@@ -57,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::middleware('role:admin')->prefix('admin')->group(function () {
+        // NOTE: if you use route:cache in prod, avoid closures. Replace with a controller if needed.
         Route::get('ping', fn () => response()->json(['ok' => true]));
 
         // Users CRUD (+ ?role=student|teacher|parent|admin)
@@ -68,7 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/admins/{user}/assign', [AdminUserController::class, 'assign']);
         Route::post('/admins/{user}/revoke', [AdminUserController::class, 'revoke']);
 
-        // Dedicated admin account CRUD (avoid conflict with /admin/users)
+        // Dedicated admin account CRUD (distinct from /admin/users)
         Route::post('/admin-users',       [AdminUserCrudController::class, 'store']);
         Route::put('/admin-users/{user}', [AdminUserCrudController::class, 'update']);
 
@@ -78,16 +78,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('rooms',    RoomController::class)->only(['index','store','show','update','destroy']);
 
         // Timetables
-        Route::get(   'timetables',                 [TimetableController::class, 'adminList']);
-        Route::post(  'timetables',                 [TimetableController::class, 'store']);
+        Route::get(   'timetables',                     [TimetableController::class, 'adminList']);
+        Route::post(  'timetables',                     [TimetableController::class, 'store']);
         Route::match(['put','patch'], 'timetables/{timetable}', [TimetableController::class, 'update']);
-        Route::delete('timetables/{timetable}',     [TimetableController::class, 'destroy']);
+        Route::delete('timetables/{timetable}',         [TimetableController::class, 'destroy']);
 
         // Monthly plans
-        Route::get(   'monthly-plans',          [MonthlySubjectPlanController::class, 'index']);
-        Route::post(  'monthly-plans',          [MonthlySubjectPlanController::class, 'store']);
-        Route::patch( 'monthly-plans/{plan}',   [MonthlySubjectPlanController::class, 'update']);
-        Route::delete('monthly-plans/{plan}',   [MonthlySubjectPlanController::class, 'destroy']);
+        Route::get(   'monthly-plans',        [MonthlySubjectPlanController::class, 'index']);
+        Route::post(  'monthly-plans',        [MonthlySubjectPlanController::class, 'store']);
+        Route::patch( 'monthly-plans/{plan}', [MonthlySubjectPlanController::class, 'update']);
+        Route::delete('monthly-plans/{plan}', [MonthlySubjectPlanController::class, 'destroy']);
 
         // Admin events
         Route::get(   'evenements',           [AdminEventController::class, 'index']);
@@ -117,13 +117,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('emploi-du-temps', [TimetableController::class, 'teacher']);
         Route::get('monthly-plans',   [MonthlyPlanViewController::class, 'teacher']);
 
-        Route::get(   'documents',  [DocumentController::class, 'teacherIndex']);
-        Route::post(  'documents',  [DocumentController::class, 'store']);
-        Route::delete('documents/{doc}', [DocumentController::class, 'destroy'])->whereNumber('doc');
+        Route::get(   'documents',            [DocumentController::class, 'teacherIndex']);
+        Route::post(  'documents',            [DocumentController::class, 'store']);
+        Route::delete('documents/{doc}',      [DocumentController::class, 'destroy'])->whereNumber('doc');
 
-        Route::get('devoirs',              [HomeworkController::class, 'teacherIndex']);
-        Route::post('devoirs',             [HomeworkController::class, 'store']);
-        Route::delete('devoirs/{homework}',[HomeworkController::class, 'destroy']);
+        Route::get('devoirs',                 [HomeworkController::class, 'teacherIndex']);
+        Route::post('devoirs',                [HomeworkController::class, 'store']);
+        Route::delete('devoirs/{homework}',   [HomeworkController::class, 'destroy']);
     });
 
     /*
@@ -151,6 +151,4 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('documents',       [DocumentController::class, 'parentIndex']);
         Route::get('devoirs',         [HomeworkController::class, 'parentIndex']);
     });
-
-    // ⚠️ REMOVE duplicated public degrees route inside auth group (keep only the public one above)
 });

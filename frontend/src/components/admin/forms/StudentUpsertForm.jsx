@@ -20,7 +20,7 @@ const BLOOD_TYPES = ["O-","O+","A+","A-","B+","B-","AB+","AB-"];
 const formSchema = z.object({
   firstname: z.string().min(2).max(50),
   lastname: z.string().min(2).max(50),
-  date_of_birth: z.string().optional().nullable(),
+  date_of_birth: z.string().optional().nullable(), // will be normalized on submit
   gender: z.enum(["m","f"]),
   blood_type: z.string(),
   student_parent_id: z.string().min(1, "Please select a parent."),
@@ -41,46 +41,33 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
 
   // ---- Load parents
   useEffect(() => {
+    let cancelled = false;
     setParentsLoading(true);
     UserApi.parents()
-      .then((resp) => setParents(resp?.data?.data || []))
-      .catch(() => setParents([]))
-      .finally(() => setParentsLoading(false));
-  }, []);
-
-  // ---- Load canonical degrees (try /degrees then /admin/degrees)
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchDegrees() {
-      setDegreesLoading(true);
-      try {
-        const try1 = await axiosClient.get("/admin/degrees");
-        const payload1 = try1?.data?.data ?? try1?.data ?? [];
-        if (!cancelled && Array.isArray(payload1) && payload1.length) {
-          setDegrees(payload1);
-          return;
-        }
-        throw new Error("empty");
-      } catch {
-        try {
-          const try2 = await axiosClient.get("/admin/degrees", { params: { per_page: 1000 } });
-          const payload2 = try2?.data?.data ?? try2?.data ?? [];
-          if (!cancelled) setDegrees(Array.isArray(payload2) ? payload2 : []);
-        } catch {
-          if (!cancelled) setDegrees([]);
-        } finally {
-          if (!cancelled) setDegreesLoading(false);
-        }
-        return;
-      } finally {
-        if (!cancelled) setDegreesLoading(false);
-      }
-    }
-    fetchDegrees();
+      .then((resp) => {
+        if (!cancelled) setParents(resp?.data?.data || []);
+      })
+      .catch(() => { if (!cancelled) setParents([]); })
+      .finally(() => { if (!cancelled) setParentsLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
-  // Map id -> slug for sending both
+  // ---- Load degrees (admin endpoint, high per_page)
+  useEffect(() => {
+    let cancelled = false;
+    setDegreesLoading(true);
+    axiosClient
+      .get("/admin/degrees", { params: { per_page: 1000 } })
+      .then((res) => {
+        const payload = res?.data?.data ?? res?.data ?? [];
+        if (!cancelled) setDegrees(Array.isArray(payload) ? payload : []);
+      })
+      .catch(() => { if (!cancelled) setDegrees([]); })
+      .finally(() => { if (!cancelled) setDegreesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Map id -> degree object (for slug)
   const degreeById = useMemo(() => {
     const m = new Map();
     for (const d of degrees) m.set(String(d.id), d);
@@ -136,12 +123,39 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
       if (isUpdate && !formData.password) delete formData.password;
       if (isUpdate) formData.id = values.id;
 
-      // IDs come as strings
+      // ---- Trim scalar strings
+      ["firstname","lastname","email","address","phone"].forEach((k) => {
+        if (typeof formData[k] === "string") formData[k] = formData[k].trim();
+      });
+
+      // ---- Normalize date: "" or "0000-00-00" -> remove
+      const dob = (formData.date_of_birth ?? "").trim();
+      if (!dob || dob === "0000-00-00") {
+        delete formData.date_of_birth; // backend treats missing as null
+      } else {
+        formData.date_of_birth = dob; // already YYYY-MM-DD from <input type="date">
+      }
+
+      // ---- IDs come as strings → numbers
       const degreeIdStr = formData.degree_id;
       const parentIdStr = formData.student_parent_id;
 
-      formData.degree_id = parseInt(degreeIdStr, 10);
-      formData.student_parent_id = parseInt(parentIdStr, 10);
+      const degreeId = parseInt(degreeIdStr, 10);
+      const parentId = parseInt(parentIdStr, 10);
+
+      if (!Number.isFinite(degreeId)) {
+        setError("degree_id", { message: "Niveau invalide." });
+        toast.error("Veuillez sélectionner un niveau.");
+        return;
+      }
+      if (!Number.isFinite(parentId)) {
+        setError("student_parent_id", { message: "Parent invalide." });
+        toast.error("Veuillez sélectionner un parent.");
+        return;
+      }
+
+      formData.degree_id = degreeId;
+      formData.student_parent_id = parentId;
 
       // Also send degree slug for resolver (future-proof)
       const d = degreeById.get(String(degreeIdStr));

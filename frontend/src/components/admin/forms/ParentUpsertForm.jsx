@@ -2,6 +2,7 @@ import * as z from "zod";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage
 } from "../../ui/form.js";
@@ -18,7 +19,7 @@ const BLOOD_TYPES = ["O-","O+","A+","A-","B+","B-","AB+","AB-"];
 const formSchema = z.object({
   firstname: z.string().min(2, "Prénom requis").max(50),
   lastname: z.string().min(2, "Nom requis").max(50),
-  date_of_birth: z.string().optional().nullable(),
+  date_of_birth: z.string().optional().nullable(), // normalized on submit
   gender: z.enum(["m","f"]).default("m"),
   blood_type: z.string(),
   address: z.string().min(3, "Adresse requise"),
@@ -71,6 +72,19 @@ export default function ParentUpsertForm({ handleSubmit, values, onCancel }) {
       if (isUpdate && !formData.password) delete formData.password;
       if (isUpdate) formData.id = values.id;
 
+      // Trim scalar strings
+      ["firstname","lastname","email","address","phone"].forEach((k) => {
+        if (typeof formData[k] === "string") formData[k] = formData[k].trim();
+      });
+
+      // Normalize date: "" or "0000-00-00" -> remove (backend treats missing as null)
+      const dob = (formData.date_of_birth ?? "").trim();
+      if (!dob || dob === "0000-00-00") {
+        delete formData.date_of_birth;
+      } else {
+        formData.date_of_birth = dob; // YYYY-MM-DD from <input type="date">
+      }
+
       const { status, data } = await handleSubmit(formData);
       if (status === 200 || status === 201) {
         toast.success(data?.message || "Enregistré !");
@@ -97,17 +111,29 @@ export default function ParentUpsertForm({ handleSubmit, values, onCancel }) {
         {/* identity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField control={form.control} name="firstname" render={({ field }) => (
-            <FormItem><FormLabel>Prénom</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Prénom</FormLabel>
+              <FormControl><Input {...field} autoComplete="given-name" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
           <FormField control={form.control} name="lastname" render={({ field }) => (
-            <FormItem><FormLabel>Nom</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Nom</FormLabel>
+              <FormControl><Input {...field} autoComplete="family-name" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
         </div>
 
         {/* date + gender + blood */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FormField control={form.control} name="date_of_birth" render={({ field }) => (
-            <FormItem><FormLabel>Date de naissance</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Date de naissance</FormLabel>
+              <FormControl><Input type="date" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
           <FormField control={form.control} name="gender" render={({ field }) => (
             <FormItem>
@@ -137,31 +163,51 @@ export default function ParentUpsertForm({ handleSubmit, values, onCancel }) {
 
         {/* contact */}
         <FormField control={form.control} name="address" render={({ field }) => (
-          <FormItem><FormLabel>Adresse</FormLabel><FormControl><Textarea rows={3} {...field} /></FormControl><FormMessage /></FormItem>
+          <FormItem>
+            <FormLabel>Adresse</FormLabel>
+            <FormControl><Textarea rows={3} {...field} autoComplete="street-address" /></FormControl>
+            <FormMessage />
+          </FormItem>
         )} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField control={form.control} name="phone" render={({ field }) => (
-            <FormItem><FormLabel>Téléphone</FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Téléphone</FormLabel>
+              <FormControl><Input type="tel" {...field} autoComplete="tel" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
           <FormField control={form.control} name="email" render={({ field }) => (
-            <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl><Input type="email" {...field} autoComplete="email" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
         </div>
 
         {/* password */}
         {!isUpdate ? (
           <FormField control={form.control} name="password" render={({ field }) => (
-            <FormItem><FormLabel>Mot de passe</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Mot de passe</FormLabel>
+              <FormControl><Input type="password" {...field} autoComplete="new-password" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
         ) : (
           <FormField control={form.control} name="password" render={({ field }) => (
-            <FormItem><FormLabel>Nouveau mot de passe (optionnel)</FormLabel><FormControl><Input type="password" {...field} placeholder="Laisser vide" /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+              <FormLabel>Nouveau mot de passe (optionnel)</FormLabel>
+              <FormControl><Input type="password" {...field} placeholder="Laisser vide" autoComplete="new-password" /></FormControl>
+              <FormMessage />
+            </FormItem>
           )} />
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" className="mt-2" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting && <Loader className="mr-2 animate-spin" />}
+          <Button type="submit" className="mt-2" disabled={isSubmitting}>
+            {isSubmitting && <Loader className="mr-2 animate-spin" />}
             {isUpdate ? "Mettre à jour" : "Créer"}
           </Button>
           {isUpdate && onCancel && (
