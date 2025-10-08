@@ -1,11 +1,12 @@
+// services/api/HomeworkApi.js
 import { axiosClient } from "../../api/axios";
 
 const HomeworkApi = {
   // lists
-  listAdmin:   (params={}) => axiosClient.get("/admin/devoirs", { params }),
-  listTeacher: (params={}) => axiosClient.get("/enseignant/devoirs", { params }),
-  listStudent: (params={}) => axiosClient.get("/eleve/devoirs", { params }),
-  listParent:  (params={}) => axiosClient.get("/parent/devoirs", { params }),
+  listAdmin:   (params = {}) => axiosClient.get("/admin/devoirs", { params }),
+  listTeacher: (params = {}) => axiosClient.get("/enseignant/devoirs", { params }),
+  listStudent: (params = {}) => axiosClient.get("/eleve/devoirs", { params }),
+  listParent:  (params = {}) => axiosClient.get("/parent/devoirs", { params }),
 
   // Upload (teacher)
   upload: ({ title, description, degree_id, due_at, file }) => {
@@ -24,8 +25,8 @@ const HomeworkApi = {
   deleteAsAdmin:   (id) => axiosClient.delete(`/admin/devoirs/${id}`),
   deleteAsTeacher: (id) => axiosClient.delete(`/enseignant/devoirs/${id}`),
 
-  // degrees for select (reuse same public endpoint you already have)
-  degrees: () => axiosClient.get("/degrees-public"),
+  // degrees for select — use the existing public endpoint
+  degrees: () => axiosClient.get("/degrees", { params: { per_page: 1000 } }),
 };
 
 export default HomeworkApi;
