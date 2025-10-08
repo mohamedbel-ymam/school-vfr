@@ -15,8 +15,7 @@ class DocumentController extends Controller
     // Admin: list all (+filters)
     public function adminIndex(Request $r)
     {
-        $q = Document::query()->latest('id');
-
+        $q = Document::query()->latest('id')->with(['degree']);
         if ($r->filled('degree_id')) $q->where('degree_id', $r->integer('degree_id'));
         if ($r->filled('teacher_id')) $q->where('teacher_id', $r->integer('teacher_id'));
         if ($s = trim((string)$r->query('search',''))) {

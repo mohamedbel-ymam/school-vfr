@@ -24,7 +24,6 @@ const DocumentApi = {
   deleteAsTeacher:(id) => axiosClient.delete(`/enseignant/documents/${id}`),
 
   // degrees for select
-  degrees: () => axiosClient.get("/degrees-public"),
-};
+degrees: () => axiosClient.get("/degrees", { params: { per_page: 1000 } }),};
 
 export default DocumentApi;

@@ -46,18 +46,25 @@ export default function TeacherDevoirs() {
   useEffect(() => { loadAll(); }, []);
 
   async function onSubmit(e) {
-    e.preventDefault();
-    if (!file) return alert("Choisissez un fichier");
+  e.preventDefault();
+  if (!degreeId) return alert("Choisissez un niveau");
+  if (!file) return alert("Choisissez un fichier");
+
+  try {
     await HomeworkApi.upload({
       title,
       description,
-      degree_id: degreeId ? Number(degreeId) : null,
-      due_at: dueAt || null,
+      degree_id: Number(degreeId),
+      due_at: dueAt || null,   // normalization happens in API wrapper
       file,
     });
     setTitle(""); setDescription(""); setDegreeId(""); setDueAt(""); setFile(null);
     await loadAll();
+  } catch (err) {
+    const msg = err?.response?.data?.message || "Erreur lors de l’envoi du devoir.";
+    alert(msg); // or a toast
   }
+}
 
   async function removeItem(id) {
     if (!confirm("Supprimer ce devoir ?")) return;
