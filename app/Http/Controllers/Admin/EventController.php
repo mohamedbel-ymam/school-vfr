@@ -24,17 +24,17 @@ class EventController extends Controller
         return $v;
     }
 
+    /** GET /admin/evenements */
     public function index(Request $r)
     {
         $q = Event::query();
 
         if ($r->filled('template')) {
-            $q->where('template', (string)$r->query('template'));
+            $q->where('template', (string) $r->query('template'));
         }
 
-        // Optional search term
         if ($r->filled('q')) {
-            $term = trim((string)$r->query('q'));
+            $term = trim((string) $r->query('q'));
             $q->where(function ($s) use ($term) {
                 $s->where('title', 'like', "%{$term}%")
                   ->orWhere('description', 'like', "%{$term}%")
@@ -42,7 +42,6 @@ class EventController extends Controller
             });
         }
 
-        // Optional date range (same filters as public)
         if ($r->filled('from')) {
             $q->where('starts_at', '>=', $this->normalizeDate($r->query('from')));
         }
@@ -68,23 +67,29 @@ class EventController extends Controller
         ]);
     }
 
+    /** POST /admin/evenements */
     public function store(Request $r)
     {
-        // Normalize date inputs *before* validation
+        // Normalize date inputs before validation
         $r->merge([
             'starts_at' => $this->normalizeDate($r->input('starts_at')),
             'ends_at'   => $this->normalizeDate($r->input('ends_at')),
         ]);
 
         $data = $r->validate([
-            'title'       => ['required','string','max:255'],
+            'title'       => ['required', 'string', 'max:255'],
             'template'    => ['required', Rule::in(['GENERAL','EXAM','MEETING','HOLIDAY','WORKSHOP','ANNOUNCEMENT','EMERGENCY'])],
-            'starts_at'   => ['required','date'],
-            'ends_at'     => ['nullable','date','after_or_equal:starts_at'],
-            'location'    => ['nullable','string','max:255'],
-            'description' => ['nullable','string'],
-            'data'        => ['nullable'], // may be array or JSON string
-            'image'       => ['nullable','image','mimes:jpg,jpeg,png,webp,gif','max:4096'],
+            'starts_at'   => ['required', 'date'],
+            'ends_at'     => ['nullable', 'date', 'after_or_equal:starts_at'],
+            'location'    => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'data'        => ['nullable'], // array or JSON string (multipart)
+            'image'       => [
+                'nullable',
+                'file',
+                'mimetypes:image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif',
+                'max:7168', // ~7MB
+            ],
         ]);
 
         // Decode JSON string for 'data' when multipart sends it as text
@@ -98,7 +103,7 @@ class EventController extends Controller
         $data['created_by'] = (int) $r->user()->id;
 
         if ($r->hasFile('image')) {
-            // Use ASCII-only directory name
+            // Use ASCII directory name
             $data['image_path'] = $r->file('image')->store('events', 'public');
         }
 
@@ -107,29 +112,36 @@ class EventController extends Controller
         return response()->json(['data' => $event], 201);
     }
 
+    /** GET /admin/evenements/{event} */
     public function show(Event $event)
     {
         return response()->json(['data' => $event]);
     }
 
+    /** PUT /admin/evenements/{event} */
     public function update(Request $r, Event $event)
     {
-        // Normalize date inputs *before* validation
+        // Normalize date inputs before validation
         $r->merge([
             'starts_at' => $this->normalizeDate($r->input('starts_at')),
             'ends_at'   => $this->normalizeDate($r->input('ends_at')),
         ]);
 
         $data = $r->validate([
-            'title'        => ['sometimes','string','max:255'],
+            'title'        => ['sometimes', 'string', 'max:255'],
             'template'     => ['sometimes', Rule::in(['GENERAL','EXAM','MEETING','HOLIDAY','WORKSHOP','ANNOUNCEMENT','EMERGENCY'])],
-            'starts_at'    => ['sometimes','date'],
-            'ends_at'      => ['nullable','date','after_or_equal:starts_at'],
-            'location'     => ['nullable','string','max:255'],
-            'description'  => ['nullable','string'],
+            'starts_at'    => ['sometimes', 'date'],
+            'ends_at'      => ['nullable', 'date', 'after_or_equal:starts_at'],
+            'location'     => ['nullable', 'string', 'max:255'],
+            'description'  => ['nullable', 'string'],
             'data'         => ['nullable'],
-            'image'        => ['nullable','image','mimes:jpg,jpeg,png,webp,gif','max:4096'],
-            'remove_image' => ['nullable','boolean'],
+            'image'        => [
+                'nullable',
+                'file',
+                'mimetypes:image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif',
+                'max:7168',
+            ],
+            'remove_image' => ['nullable', 'boolean'],
         ]);
 
         if (is_string($data['data'] ?? null)) {
@@ -147,8 +159,8 @@ class EventController extends Controller
             $data['image_path'] = $r->file('image')->store('events', 'public');
         }
 
-        // Explicit remove current image
-        if (!empty($data['remove_image']) && $event->image_path) {
+        // Explicitly remove current image (truthy only)
+        if ($r->boolean('remove_image') && $event->image_path) {
             Storage::disk('public')->delete($event->image_path);
             $data['image_path'] = null;
         }
@@ -159,6 +171,7 @@ class EventController extends Controller
         return response()->json(['data' => $event]);
     }
 
+    /** DELETE /admin/evenements/{event} */
     public function destroy(Event $event)
     {
         if ($event->image_path) {

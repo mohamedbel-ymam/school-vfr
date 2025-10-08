@@ -251,7 +251,7 @@ export default function EventUpsertForm({ initial, onDone }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif,.avif"
               className="hidden"
               onChange={(e) => onDropFiles(e.target.files)}
             />
