@@ -10,32 +10,38 @@ function asArray(resp) {
 }
 
 const UserApi = {
-  // Generic
+  // --- Basic CRUD (admin) ---
   list(params = {}) {
     // GET /api/admin/users
     return axiosClient.get("/admin/users", { params });
   },
 
   create(payload) {
-    // POST /api/admin/users  (UserController@store)
+    // POST /api/admin/users
     return axiosClient.post("/admin/users", payload);
   },
 
   update(id, payload) {
-    // PUT /api/admin/users/{id} (UserController@update)
+    // PUT /api/admin/users/{id}
     return axiosClient.put(`/admin/users/${id}`, payload);
   },
 
   show(id) {
+    // GET /api/admin/users/{id}
     return axiosClient.get(`/admin/users/${id}`);
   },
 
-  // Role-scoped helpers (server accepts FR/EN; we send EN canonical)
+  // ✅ shim used by SendNotification.jsx
+  // fetch a big page of users (the component will unwrap data?.data || data)
+  all() {
+    return axiosClient.get("/admin/users", { params: { per_page: 1000 } });
+  },
+
+  // --- Role-scoped helpers (optional convenience) ---
   async students({ q = "", per_page = 1000 } = {}) {
     const resp = await axiosClient.get("/admin/users", {
       params: { role: "student", per_page, ...(q ? { q } : {}) },
     });
-    // keep original response for callers that need status/data
     resp.list = asArray(resp);
     return resp;
   },
@@ -58,3 +64,4 @@ const UserApi = {
 };
 
 export default UserApi;
+export { UserApi };
