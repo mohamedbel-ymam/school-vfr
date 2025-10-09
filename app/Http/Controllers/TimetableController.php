@@ -298,29 +298,31 @@ class TimetableController extends Controller
     }
 
     protected function applyTimeOrdering($q)
-    {
-        if (Schema::hasColumn('timetables', 'day_of_week')) {
-            $q->orderBy('day_of_week');
+        {
+            // day_of_week first if present
+            if (Schema::hasColumn('timetables', 'day_of_week')) {
+                $q->orderBy('day_of_week');
+            }
+        
+            $hasStartTime = Schema::hasColumn('timetables', 'start_time'); // TIME
+            $hasStartsAt  = Schema::hasColumn('timetables', 'starts_at');  // TIME or DATETIME
+        
+            // ✅ Do NOT COALESCE across different types; pick one branch that exists.
+            if ($hasStartTime) {
+                // push NULLs to bottom, then order by start_time
+                $q->orderByRaw('CASE WHEN start_time IS NULL OR start_time = "" THEN 1 ELSE 0 END');
+                $q->orderBy('start_time');
+            } elseif ($hasStartsAt) {
+                $q->orderByRaw('CASE WHEN starts_at IS NULL THEN 1 ELSE 0 END');
+                $q->orderBy('starts_at');
+            }
+        
+            // If you have a string 'period' column, this lexicographic order is harmless;
+            // we only apply it when the column actually exists.
+            if (Schema::hasColumn('timetables', 'period')) {
+                $q->orderBy('period');
+            }
+        
+            return $q;
         }
-
-        $hasStartTime = Schema::hasColumn('timetables', 'start_time');
-        $hasStartsAt  = Schema::hasColumn('timetables', 'starts_at');
-
-        if ($hasStartTime && $hasStartsAt) {
-            $q->orderByRaw('CASE WHEN COALESCE(starts_at, start_time) IS NULL THEN 1 ELSE 0 END');
-            $q->orderByRaw('COALESCE(starts_at, start_time)');
-        } elseif ($hasStartsAt) {
-            $q->orderByRaw('CASE WHEN starts_at IS NULL THEN 1 ELSE 0 END');
-            $q->orderBy('starts_at');
-        } elseif ($hasStartTime) {
-            $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END');
-            $q->orderBy('start_time');
-        }
-
-        if (Schema::hasColumn('timetables', 'period')) {
-            $q->orderBy('period');
-        }
-
-        return $q;
-    }
 }
