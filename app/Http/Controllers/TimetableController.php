@@ -17,59 +17,42 @@ class TimetableController extends Controller
 {
     /** Admin listing with optional filters. */
     public function adminList(Request $req)
-    {
-        $q = Timetable::with([
-            'subject:id,name',
-            'degree:id,name',
-            'room:id,name',
-            'teacher:id,firstname,lastname',
-        ]);
+{
+    $q = Timetable::with([
+        'subject:id,name',
+        'degree:id,name',
+        'room:id,name',
+        'teacher:id,firstname,lastname',
+    ]);
 
-        if ($t = $req->query('teacher_id')) $q->where('teacher_id', $t);
-        if ($d = $req->query('degree_id'))  $q->where('degree_id', $d);
+    if ($t = $req->query('teacher_id')) $q->where('teacher_id', $t);
+    if ($d = $req->query('degree_id'))  $q->where('degree_id', $d);
 
-        $perPage = max(1, min((int)$req->query('per_page', 100), 1000));
+    $perPage = max(1, min((int)$req->query('per_page', 100), 1000));
 
-        // ✅ Never order by a column that might not exist; delegate to helper.
-        $q->orderBy('degree_id');
-        $q = $this->applyTimeOrdering($q);
+    $q->orderBy('degree_id');
+    $q = $this->applyTimeOrdering($q);
 
-        $page = $q->paginate($perPage);
+    // If you want, temporarily log which columns exist:
+    // logger()->info('TT columns', [
+    //   'day_of_week' => Schema::hasColumn('timetables','day_of_week'),
+    //   'start_time'  => Schema::hasColumn('timetables','start_time'),
+    //   'starts_at'   => Schema::hasColumn('timetables','starts_at'),
+    //   'period'      => Schema::hasColumn('timetables','period'),
+    // ]);
 
-        return response()->json([
-            'data' => $page->items(),
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'last_page'    => $page->lastPage(),
-                'per_page'     => $page->perPage(),
-                'total'        => $page->total(),
-            ],
-        ]);
-    }
+    $page = $q->paginate($perPage);
 
-    /** Student → lessons for the authenticated student (optional ?degree_id=...) */
-    public function student(Request $request)
-    {
-        $user = $request->user(); // role: student
-        $degreeId = $request->query('degree_id') ?: $this->resolveStudentDegreeId($user->id);
-
-        if (!$degreeId) {
-            return response()->json([
-                'message' => "Aucun niveau trouvé pour cet élève. Passez ?degree_id=… si nécessaire."
-            ], 422);
-        }
-
-        $lessons = $this->applyTimeOrdering(
-            Timetable::with([
-                'subject:id,name',
-                'degree:id,name',
-                'room:id,name',
-                'teacher:id,firstname,lastname',
-            ])->where('degree_id', $degreeId)
-        )->get();
-
-        return response()->json(['data' => ['lessons' => $lessons]]);
-    }
+    return response()->json([
+        'data' => $page->items(),
+        'meta' => [
+            'current_page' => $page->currentPage(),
+            'last_page'    => $page->lastPage(),
+            'per_page'     => $page->perPage(),
+            'total'        => $page->total(),
+        ],
+    ]);
+}
 
     /** Teacher → lessons for the authenticated teacher (optional ?degree_id=...) */
     public function teacher(Request $request)
