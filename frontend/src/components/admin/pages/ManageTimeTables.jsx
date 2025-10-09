@@ -128,7 +128,7 @@ export default function ManageTimetables() {
       try {
         const [degRes, tchRes, subRes] = await Promise.all([
           axiosClient.get("/admin/degrees",  { params: { per_page: 200 } }),
-          axiosClient.get("/admin/users",    { params: { role: "enseignant", per_page: 200 } }),
+          axiosClient.get("/admin/users", { params: { role: "teacher", per_page: 200 } }),
           axiosClient.get("/admin/subjects", { params: { per_page: 200 } }),
         ]);
         setDegrees(unwrap(degRes));

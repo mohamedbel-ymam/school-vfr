@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 
+
+
 class TimetableController extends Controller
 {
     /** Admin listing with optional filters. */
@@ -20,23 +22,29 @@ class TimetableController extends Controller
             'subject:id,name',
             'degree:id,name',
             'room:id,name',
-            // keep relation identifiers in EN in your models. If your Timetable model relation is `teacher()`, use 'teacher' here.
             'teacher:id,firstname,lastname',
         ]);
 
         if ($t = $req->query('teacher_id')) $q->where('teacher_id', $t);
         if ($d = $req->query('degree_id'))  $q->where('degree_id', $d);
-        
-        $q = $this->applyTimeOrdering(
-            $q->orderBy('degree_id')
-        );
 
-        return $q->orderBy('degree_id')
-                 ->orderBy('day_of_week')
-                 ->orderByRaw("CASE WHEN period IS NOT NULL AND period <> '' THEN 0 ELSE 1 END")
-                 ->orderBy('period')
-                 ->orderBy('start_time')
-                 ->paginate((int)$req->query('per_page', 100));
+        $perPage = max(1, min((int)$req->query('per_page', 100), 1000));
+
+        // ✅ Never order by a column that might not exist; delegate to helper.
+        $q->orderBy('degree_id');
+        $q = $this->applyTimeOrdering($q);
+
+        $page = $q->paginate($perPage);
+
+        return response()->json([
+            'data' => $page->items(),
+            'meta' => [
+                'current_page' => $page->currentPage(),
+                'last_page'    => $page->lastPage(),
+                'per_page'     => $page->perPage(),
+                'total'        => $page->total(),
+            ],
+        ]);
     }
 
     /** Student → lessons for the authenticated student (optional ?degree_id=...) */
@@ -142,8 +150,39 @@ class TimetableController extends Controller
         // (Avoid accented table names in schema; keep identifiers ASCII)
         return null;
     }
+        private function mapTimeColumns(array $data): array
+    {
+        $hasStartTime = Schema::hasColumn('timetables', 'start_time');
+        $hasStartsAt  = Schema::hasColumn('timetables', 'starts_at');
 
-    public function store(Request $request)
+        // If the table only has starts_at/ends_at, move start_time/end_time into those.
+        if (!$hasStartTime && $hasStartsAt) {
+            if (array_key_exists('start_time', $data)) {
+                $data['starts_at'] = $data['start_time'];
+                unset($data['start_time']);
+            }
+            if (array_key_exists('end_time', $data)) {
+                $data['ends_at'] = $data['end_time'];
+                unset($data['end_time']);
+            }
+        }
+
+        // If the table only has start_time/end_time, move starts_at/ends_at into those.
+        if ($hasStartTime && !$hasStartsAt) {
+            if (array_key_exists('starts_at', $data)) {
+                $data['start_time'] = $data['starts_at'];
+                unset($data['starts_at']);
+            }
+            if (array_key_exists('ends_at', $data)) {
+                $data['end_time'] = $data['ends_at'];
+                unset($data['ends_at']);
+            }
+        }
+
+        return $data;
+    }
+    
+           public function store(Request $request)
     {
         // normalize keys from FE
         $request->merge([
@@ -157,11 +196,9 @@ class TimetableController extends Controller
             'teacher_id'  => ['required','exists:users,id'],
             'room_id'     => ['nullable','exists:rooms,id'],
             'day_of_week' => ['required','integer', Rule::in([1,2,3,4,5,6,7])],
-
             'period'      => ['nullable','string','max:50','required_without_all:start_time,end_time'],
             'start_time'  => ['nullable','date_format:H:i','required_without:period'],
             'end_time'    => ['nullable','date_format:H:i','required_with:start_time','after:start_time'],
-
             'title'       => ['sometimes','string','max:255'],
         ]);
 
@@ -169,11 +206,11 @@ class TimetableController extends Controller
             $data['title'] = $this->composeTitle($data);
         }
 
+        // ✅ ensure correct column names for your schema
+        $data = $this->mapTimeColumns($data);
+
         $row = Timetable::create($data)->load([
-            'subject:id,name',
-            'degree:id,name',
-            'room:id,name',
-            'teacher:id,firstname,lastname',
+            'subject:id,name','degree:id,name','room:id,name','teacher:id,firstname,lastname',
         ]);
 
         return response()->json(['data' => $row], 201);
@@ -200,8 +237,8 @@ class TimetableController extends Controller
 
         // Invariant: at least a period or a time range
         $period     = array_key_exists('period', $data)     ? $data['period']     : $timetable->period;
-        $start_time = array_key_exists('start_time', $data) ? $data['start_time'] : $timetable->start_time;
-        $end_time   = array_key_exists('end_time', $data)   ? $data['end_time']   : $timetable->end_time;
+        $start_time = array_key_exists('start_time', $data) ? $data['start_time'] : $timetable->start_time ?? $timetable->starts_at;
+        $end_time   = array_key_exists('end_time', $data)   ? $data['end_time']   : $timetable->end_time   ?? $timetable->ends_at;
 
         if (empty($period) && (empty($start_time) || empty($end_time))) {
             return response()->json([
@@ -209,13 +246,15 @@ class TimetableController extends Controller
             ], 422);
         }
 
-        // Recompose title if not explicitly provided
         if (!array_key_exists('title', $data)) {
             $dirtyPreview = array_merge($timetable->only([
-                'subject_id','teacher_id','day_of_week','period','start_time','end_time'
+                'subject_id','teacher_id','day_of_week','period','start_time','end_time','starts_at','ends_at'
             ]), $data);
             $data['title'] = $this->composeTitle($dirtyPreview);
         }
+
+        // ✅ ensure correct column names
+        $data = $this->mapTimeColumns($data);
 
         $timetable->update($data);
 
@@ -225,13 +264,11 @@ class TimetableController extends Controller
             ]),
         ]);
     }
-
-    public function destroy(Timetable $timetable)
+       public function destroy(Timetable $timetable)
     {
         $timetable->delete();
         return response()->noContent();
     }
-
     /** ---------- helpers ---------- */
 
     private function composeTitle(array $d): string
