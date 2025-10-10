@@ -15,7 +15,7 @@ export default function Bac1SEDashboard() {
   return (
     <DashboardScaffold
       title="1er année Bac (SE) — Tableau de bord"
-      images={["/images/bac1-se/1.jpg","/images/bac1-se/2.jpg","/images/bac1-se/3.jpg"]}
+      images={["./images/bac1-se/1.jpg","./images/bac1-se/2.jpg","/images/bac1-se/3.jpg"]}
       stats={stats}
       shortcuts={shortcuts}
       onBack={()=>{ setSelectedDegree?.(null); nav("/élève/select-degree"); }}

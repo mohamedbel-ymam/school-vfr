@@ -15,7 +15,7 @@ export default function TroncCommunDashboard() {
   return (
     <DashboardScaffold
       title="Tronc Commun — Tableau de bord"
-      images={["/images/bac1-se/1.jpg","/images/bac1-se/2.jpg","/images/bac1-se/3.jpg"]}
+      images={["./images/bac1-se/1.jpg","./images/bac1-se/2.jpg","./images/bac1-se/3.jpg"]}
       stats={stats}
       shortcuts={shortcuts}
       onBack={()=>{ setSelectedDegree?.(null); nav("/élève/select-degree"); }}
