@@ -1,6 +1,6 @@
 import { axiosClient } from "../../../api/axios";
 
-const TimetableApi = {
+const TimeTableApi = {
   adminList: (params)         => axiosClient.get("/admin/timetables", { params }),
   create:    (data)           => axiosClient.post("/admin/timetables", data),
   update:    (id, data)       => axiosClient.put(`/admin/timetables/${id}`, data),

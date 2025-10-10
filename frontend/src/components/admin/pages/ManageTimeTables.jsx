@@ -1,6 +1,6 @@
 // src/components/Admin/Pages/ManageTimeTables.jsx
 import { useEffect, useMemo, useState } from "react";
-import TimetableApi from "../../../services/api/admin/TimeTableApi";
+import TimeTableApi from "../../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../../api/axios";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -28,7 +28,7 @@ const HUES = [210, 260, 330, 0, 30, 120, 160];
 const subjectHue = (id) => HUES[(Number(id ?? 0) + 7) % HUES.length];
 
 const fetchAdminTimetables = (params) => {
-  const fn = TimetableApi.adminList ?? TimetableApi.list;
+  const fn = TimeTableApi.adminList ?? TimeTableApi.list;
   return fn(params);
 };
 
@@ -733,7 +733,7 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
         ...(payload.room_id ? { room_id: Number(payload.room_id) } : {}),
       };
 
-      const res = await TimetableApi.create(rowPayload);
+      const res = await TimeTableApi.create(rowPayload);
       const created = res?.data?.data ?? res?.data;
 
       if (monthlyMonth && monthlyDay) {

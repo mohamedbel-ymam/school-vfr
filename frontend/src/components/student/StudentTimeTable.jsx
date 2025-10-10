@@ -1,6 +1,6 @@
 // src/components/student/StudentTimeTable.jsx
 import { useEffect, useMemo, useState } from "react";
-import TimetableApi from "../../services/api/admin/TimeTableApi";
+import TimeTableApi from "../../services/api/admin/TimeTableApi";
 
 /* --------------------------------- Constantes --------------------------------- */
 const DAYS = [
@@ -197,7 +197,7 @@ export default function StudentTimeTable() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await TimetableApi.student(); // GET timetable élève
+        const res = await TimeTableApi.student(); // GET timetable élève
         const payload = unwrap(res);
 
         const raw = Array.isArray(payload)

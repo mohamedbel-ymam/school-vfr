@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import TimetableApi from "../../services/api/admin/TimeTableApi";
+import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../api/axios";
 
 /* ---------------- helpers ---------------- */
@@ -124,7 +124,7 @@ export default function ParentTimetable() {
     (async () => {
       setLoadingChild(true);
       try {
-        const res = await TimetableApi.parent?.({ child_id: childId }) ?? TimetableApi.student?.({ child_id: childId });
+        const res = await TimeTableApi.parent?.({ child_id: childId }) ?? TimeTableApi.student?.({ child_id: childId });
         const payload = unwrapPayload(res);
         if (Array.isArray(payload)) {
           setLessons(payload);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import TimetableApi from "../../services/api/admin/TimeTableApi";
+import TimeTableApi from "../../services/api/admin/TimeTableApi";
 
 /* ---------------- helpers & constants ---------------- */
 
@@ -111,8 +111,7 @@ export default function TeacherTimetable() {
   useEffect(() => {
     (async () => {
       try {
-        // Optionally pass a degree filter: TimetableApi.teacher({ degree_id })
-        const res = await TimetableApi.teacher();
+        const res = await TimeTableApi.teacher();
         setLessons(unwrapLessons(res) ?? []);
       } catch (e) {
         console.error(e);

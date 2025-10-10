@@ -36,8 +36,8 @@ public function definition(): array
         'phone' => fake()->phoneNumber(),
         'email' => fake()->unique()->safeEmail(),
         'password' => static::$password ??= Hash::make('password'),
-        'role' => UserRole::élève->value,
-        'degree_id' => Niveau::inRandomOrder()->value('id'),        'email_verified_at' => now(),
+        'role' => UserRole::STUDENT->value,
+        'degree_id' => Degree::inRandomOrder()->value('id'),        'email_verified_at' => now(),
         'remember_token' => Str::random(10),
     ];
 }
