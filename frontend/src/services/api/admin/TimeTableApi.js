@@ -14,4 +14,4 @@ const TimeTableApi = {
   unwrap:    (r)              => r?.data?.data ?? r?.data ?? [],
 };
 
-export default TimetableApi;
+export default TimeTableApi;
