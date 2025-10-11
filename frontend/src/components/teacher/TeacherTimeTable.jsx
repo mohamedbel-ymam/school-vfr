@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+// src/components/teacher/TeacherTimetable.jsx
+import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 
 /* ---------------- helpers & constants ---------------- */
@@ -6,32 +7,47 @@ import TimeTableApi from "../../services/api/admin/TimeTableApi";
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
 
-const getStart = (l) => l?.start_time ?? l?.starts_at ?? null; // "HH:mm"
-const getEnd   = (l) => l?.end_time   ?? l?.ends_at   ?? null;  // "HH:mm"
+const getStartRaw = (l) => l?.start_time ?? l?.starts_at ?? null;
+const getEndRaw   = (l) => l?.end_time   ?? l?.ends_at   ?? null;
 
 const DAYS = [
-  { label: "Lun", full: "Monday",    val: 1 },
-  { label: "Mar", full: "Tuesday",   val: 2 },
-  { label: "Mer", full: "Wednesday", val: 3 },
-  { label: "Jeu", full: "Thursday",  val: 4 },
-  { label: "Ven", full: "Friday",    val: 5 },
-  { label: "Sam", full: "Saturday",  val: 6 },
-  { label: "Dim", full: "Sunday",    val: 7 },
+  { label: "Lun", full: "Lundi",     val: 1 },
+  { label: "Mar", full: "Mardi",     val: 2 },
+  { label: "Mer", full: "Mercredi",  val: 3 },
+  { label: "Jeu", full: "Jeudi",     val: 4 },
+  { label: "Ven", full: "Vendredi",  val: 5 },
+  { label: "Sam", full: "Samedi",    val: 6 },
+  { label: "Dim", full: "Dimanche",  val: 7 },
 ];
 
 const pad = (n) => String(n).padStart(2, "0");
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+/** 09, 9:30, 09:30:00, 9h30, 9.30 → "HH:MM" */
+const parseTimeLike = (v) => {
+  if (!v && v !== 0) return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
+  if (m) return `${pad(+m[1])}:${pad(+(m[2] ?? 0))}`;
+  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
+  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  m = s.match(/^(\d{1,2})$/);
+  if (m) return `${pad(+m[1])}:00`;
+  return null;
+};
 const toMins = (hhmm) => {
-  if (!hhmm) return null;
-  const [h, m] = String(hhmm).split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const s = parseTimeLike(hhmm);
+  if (!s) return null;
+  const [h, m] = s.split(":").map(Number);
   return h * 60 + m;
 };
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 const startOfWeekMonday = (base = new Date()) => {
   const d = new Date(base);
-  const js = d.getDay(); // 0 Sun..6 Sat
-  const delta = js === 0 ? -6 : 1 - js; // move to Mon
+  const js = d.getDay(); // 0..6
+  const delta = js === 0 ? -6 : 1 - js;
   d.setDate(d.getDate() + delta);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -47,17 +63,17 @@ const isSameDayIndex = (date, dow1to7) => {
   return ours === dow1to7;
 };
 
-/* pleasant/stable color set for subjects */
-const HUES = [210, 260, 330, 0, 30, 120, 160];
-const subjectHue = (id) => HUES[(Number(id ?? 0) + 7) % HUES.length];
-const subjectColors = (id, mode = "block") => {
-  const hue = subjectHue(id);
+/* unique, stable subject colors (golden-angle) */
+const subjectKey = (l) => l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
+const hueForSubject = (key) => (Number(key || 0) * 137) % 360;
+const subjectColors = (key, mode = "block") => {
+  const hue = hueForSubject(key);
   if (mode === "chip") {
     return {
-      bg: `hsl(${hue}, 85%, 45%)`,
+      bg: `hsl(${hue}, 70%, 45%)`,
       soft: `hsla(${hue},85%,45%,0.12)`,
-      text: "#fff",
       border: `hsl(${hue}, 65%, 40%)`,
+      text: "#fff",
     };
   }
   return {
@@ -67,9 +83,44 @@ const subjectColors = (id, mode = "block") => {
   };
 };
 
-/* fixed vertical range (same as student so grids line up) */
+/* fixed vertical range (aligns with student grid) */
 const SCHOOL_START_MINS = 9 * 60;   // 09:00
 const SCHOOL_END_MINS   = 22 * 60;  // 22:00
+const PERIOD_DURATION_MINS = 90;    // fallback when only "period" is present
+
+/* If only "period" is given, accept either "1", "P1", or "08:00-09:30" */
+const parsePeriodToMins = (period) => {
+  if (!period) return null;
+  const s = String(period).trim();
+
+  // "08:00-09:30" / "08h00–09h30"
+  let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
+  if (m) {
+    const sm = toMins(m[1]);
+    const em = toMins(m[2]);
+    if (sm != null && em != null && em > sm) return [sm, em];
+  }
+
+  // numeric label (P1, 1, 1ère…)
+  m = s.match(/(\d{1,2})/);
+  if (m) {
+    const idx = Math.max(1, Math.min(20, parseInt(m[1], 10)));
+    const start = SCHOOL_START_MINS + (idx - 1) * PERIOD_DURATION_MINS;
+    const end = start + PERIOD_DURATION_MINS;
+    return [start, end];
+  }
+  return null;
+};
+
+/** Choose minutes to display for a lesson */
+const resolveStartEndMins = (l) => {
+  const s = toMins(getStartRaw(l));
+  const e = toMins(getEndRaw(l));
+  if (s != null && e != null && e > s) return [s, e];
+  const p = parsePeriodToMins(l?.period);
+  if (p) return p;
+  return null;
+};
 
 /* ---------------- ICS export ---------------- */
 const toIcsDate = (d) =>
@@ -107,6 +158,20 @@ export default function TeacherTimetable() {
   ); // "grid" | "agenda"
   const [subjectFilter, setSubjectFilter] = useState("");
   const [degreeFilter, setDegreeFilter]   = useState("");
+  const [nowTopPct, setNowTopPct] = useState(0);
+
+  // live "now" position
+  useEffect(() => {
+    const min = SCHOOL_START_MINS, range = SCHOOL_END_MINS - SCHOOL_START_MINS;
+    const tick = () => {
+      const n = new Date();
+      const mins = n.getHours() * 60 + n.getMinutes();
+      setNowTopPct(clamp((mins - min) / range, 0, 1) * 100);
+    };
+    tick();
+    const t = setInterval(tick, 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -115,7 +180,7 @@ export default function TeacherTimetable() {
         setLessons(unwrapLessons(res) ?? []);
       } catch (e) {
         console.error(e);
-        setErr(e?.response?.data?.message || "Failed to load emploi du temps");
+        setErr(e?.response?.data?.message || "Échec du chargement de l’emploi du temps");
       } finally {
         setLoading(false);
       }
@@ -126,20 +191,20 @@ export default function TeacherTimetable() {
   const subjects = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
-      const id = l.subject?.id ?? l.subject_id;
+      const id = subjectKey(l);
       const name = l.subject?.name ?? "Matière";
-      if (id) m.set(id, name);
+      m.set(id, name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
-  // degree list (teacher specific)
+  // degree list
   const degrees = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
       const d = l.timetable?.degree ?? l.degree ?? null;
       const id = d?.id ?? l.degree_id;
-      const name = d?.name ?? (l.degree_name ?? "Niveau");
+      const name = d?.name ?? l.degree_name ?? "Niveau";
       if (id) m.set(id, name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
@@ -148,9 +213,7 @@ export default function TeacherTimetable() {
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
     if (subjectFilter) {
-      arr = arr.filter(
-        (l) => String(l.subject?.id ?? l.subject_id) === String(subjectFilter)
-      );
+      arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
     }
     if (degreeFilter) {
       arr = arr.filter(
@@ -162,16 +225,16 @@ export default function TeacherTimetable() {
     return arr;
   }, [lessons, subjectFilter, degreeFilter]);
 
-  if (loading) return <div className="p-4 text-center">Loading…</div>;
+  if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
-  if (!lessons?.length) return <div className="p-4 text-center">No lessons yet.</div>;
+  if (!lessons?.length) return <div className="p-4 text-center">Aucun cours pour l’instant.</div>;
 
   return (
     <div className="p-4 space-y-4">
       {/* Header / Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <div className="text-xl font-semibold">My Teaching Week</div>
+          <div className="text-xl font-semibold">Mes cours (semaine)</div>
           <ToolbarSubtitle weekOffset={weekOffset} />
         </div>
 
@@ -181,40 +244,30 @@ export default function TeacherTimetable() {
             onToday={() => setWeekOffset(0)}
             onNext={() => setWeekOffset((w) => w + 1)}
           />
-          {/* Degree first (more relevant for teachers) */}
           <Select
             value={degreeFilter}
             onChange={setDegreeFilter}
-            options={[
-              { value: "", label: "All degrees" },
-              ...degrees.map((d) => ({ value: d.id, label: d.name })),
-            ]}
+            options={[{ value: "", label: "Tous les niveaux" }, ...degrees.map((d) => ({ value: d.id, label: d.name }))]}
           />
           <Select
             value={subjectFilter}
             onChange={setSubjectFilter}
-            options={[
-              { value: "", label: "All subjects" },
-              ...subjects.map((s) => ({ value: s.id, label: s.name })),
-            ]}
+            options={[{ value: "", label: "Toutes les matières" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]}
           />
           <ViewToggle value={view} onChange={setView} />
           <IcsButton lessons={filtered} weekOffset={weekOffset} />
-          <button
-            onClick={() => window.print()}
-            className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
-          >
-            Print
+          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">
+            Imprimer
           </button>
         </div>
       </div>
 
-      {/* Legends */}
+      {/* Legend */}
       <Legend subjects={subjects} />
 
       {/* Content */}
       {view === "grid" ? (
-        <WeekGrid lessons={filtered} weekOffset={weekOffset} />
+        <WeekGrid lessons={filtered} weekOffset={weekOffset} nowTopPct={nowTopPct} />
       ) : (
         <AgendaList lessons={filtered} weekOffset={weekOffset} />
       )}
@@ -227,11 +280,10 @@ export default function TeacherTimetable() {
 function ToolbarSubtitle({ weekOffset }) {
   const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
   const sunday = addDays(monday, 6);
-  const fmt = (d) =>
-    d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return (
     <div className="text-sm text-muted-foreground">
-      Week of {fmt(monday)} – {fmt(sunday)}
+      Semaine du {fmt(monday)} – {fmt(sunday)}
     </div>
   );
 }
@@ -240,7 +292,7 @@ function WeekToolbar({ onPrev, onToday, onNext }) {
   return (
     <div className="inline-flex rounded-md border overflow-hidden">
       <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">←</button>
-      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Today</button>
+      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Aujourd’hui</button>
       <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">→</button>
     </div>
   );
@@ -254,7 +306,7 @@ function Select({ value, onChange, options }) {
       onChange={(e) => onChange(e.target.value)}
     >
       {options.map((o) => (
-        <option key={o.value ?? "all"} value={o.value}>
+        <option key={String(o.value)} value={o.value}>
           {o.label}
         </option>
       ))}
@@ -269,7 +321,7 @@ function ViewToggle({ value, onChange }) {
         className={`px-3 py-1.5 text-sm ${value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"}`}
         onClick={() => onChange("grid")}
       >
-        Grid
+        Grille
       </button>
       <button
         className={`px-3 py-1.5 text-sm border-l ${value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"}`}
@@ -304,11 +356,8 @@ function Legend({ subjects }) {
 
 /* ===================== VIEW: GRID ===================== */
 
-function WeekGrid({ lessons, weekOffset }) {
-  const monday = useMemo(
-    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
-    [weekOffset]
-  );
+function WeekGrid({ lessons, weekOffset, nowTopPct }) {
+  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
   // group by day
   const byDay = useMemo(() => {
@@ -318,35 +367,31 @@ function WeekGrid({ lessons, weekOffset }) {
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
-    for (const [k, arr] of m) {
+    for (const [, arr] of m) {
       arr.sort((a, b) => {
-        const sa = toMins(getStart(a)) ?? 0;
-        const sb = toMins(getStart(b)) ?? 0;
-        if (sa !== sb) return sa - sb;
-        const ea = toMins(getEnd(a)) ?? 0;
-        const eb = toMins(getEnd(b)) ?? 0;
-        return ea - eb;
+        const A = resolveStartEndMins(a)?.[0] ?? 0;
+        const B = resolveStartEndMins(b)?.[0] ?? 0;
+        return A - B;
       });
     }
     return m;
   }, [lessons]);
 
-  // bounds (fixed like student grid)
-  const minMins = SCHOOL_START_MINS;
-  const maxMins = SCHOOL_END_MINS;
-  const rangeMins = maxMins - minMins;
+  const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
 
-  // overlap lanes + mark conflicts (teacher can’t be in two places)
+  // overlap lanes
   const lanesByDay = useMemo(() => {
     const out = new Map();
     for (const d of DAYS) {
-      const items = (byDay.get(d.val) ?? []).map((l) => ({
-        l,
-        s: toMins(getStart(l)) ?? 0,
-        e: toMins(getEnd(l)) ?? 0,
-      }));
+      const items = (byDay.get(d.val) ?? []).map((l) => {
+        const mins = resolveStartEndMins(l);
+        return { l, s: mins?.[0] ?? null, e: mins?.[1] ?? null };
+      });
+      const timed = items.filter((it) => it.s != null && it.e != null && it.e > it.s);
+      timed.sort((a, b) => a.s - b.s || a.e - b.e);
+
       const lanes = [];
-      for (const it of items) {
+      for (const it of timed) {
         let placed = false;
         for (const lane of lanes) {
           const last = lane[lane.length - 1];
@@ -358,43 +403,28 @@ function WeekGrid({ lessons, weekOffset }) {
         }
         if (!placed) lanes.push([it]);
       }
-      // mark conflicts if more than 1 lane on that day
-      const conflict = lanes.length > 1;
-      out.set(d.val, { lanes, conflict });
+      out.set(d.val, { lanes });
     }
     return out;
   }, [byDay]);
 
-  // "now" marker
-  const nowRef = useRef(null);
-  useEffect(() => {
-    const update = () => {
-      if (!nowRef.current) return;
-      const now = new Date();
-      const mins = now.getHours() * 60 + now.getMinutes();
-      const pct = (mins - minMins) / rangeMins;
-      nowRef.current.style.top = `${clamp(pct, 0, 1) * 100}%`;
-    };
-    update();
-    const t = setInterval(update, 60 * 1000);
-    return () => clearInterval(t);
-  }, [minMins, rangeMins]);
-
-  // hour marks
+  // hour & half-hour marks
   const hourMarks = useMemo(() => {
     const arr = [];
-    for (let m = minMins; m <= maxMins; m += 60) {
-      const h = Math.floor(m / 60);
-      arr.push({ h, m });
-    }
+    for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
     return arr;
-  }, [minMins, maxMins]);
+  }, []);
+  const halfHourMarks = useMemo(() => {
+    const arr = [];
+    for (let m = minM + 30; m < maxM; m += 60) arr.push(m);
+    return arr;
+  }, []);
 
   return (
     <div className="rounded-xl border overflow-hidden">
       {/* headers */}
-      <div className="grid grid-cols-8 bg-muted/50 text-xs sm:text-sm">
-        <div className="px-2 py-2 text-muted-foreground">Time</div>
+      <div className="grid grid-cols-8 bg-muted/50 text-xs sm:text-sm sticky top-0 z-20">
+        <div className="px-2 py-2 text-muted-foreground">Heure</div>
         {DAYS.map((d, idx) => {
           const date = addDays(monday, idx);
           const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
@@ -402,7 +432,7 @@ function WeekGrid({ lessons, weekOffset }) {
             <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
               <div className="hidden sm:block">{d.full}</div>
               <div className="sm:hidden">{d.label}</div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-[11px] sm:text-xs text-muted-foreground">
                 {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </div>
             </div>
@@ -415,91 +445,96 @@ function WeekGrid({ lessons, weekOffset }) {
         {/* time rail */}
         <div className="relative border-r bg-background">
           {hourMarks.map(({ h, m }) => {
-            const pct = ((m - minMins) / rangeMins) * 100;
+            const pct = ((m - minM) / range) * 100;
             return (
               <div key={m} className="absolute left-0 right-0" style={{ top: `${pct}%`, transform: "translateY(-50%)" }}>
-                <div className="text-xs text-muted-foreground px-2">{pad(h)}:00</div>
+                <div className="text-[11px] sm:text-xs text-muted-foreground px-2">{pad(h)}:00</div>
                 <div className="h-px bg-border/70" />
               </div>
             );
           })}
-          <div style={{ paddingTop: `${rangeMins}px` }} className="opacity-0">.</div>
+          <div style={{ paddingTop: `${range}px` }} className="opacity-0">.</div>
         </div>
 
         {/* day columns */}
-        {DAYS.map((d, dayIdx) => {
-          const lanePack = lanesByDay.get(d.val) ?? { lanes: [], conflict: false };
+        {DAYS.map((d) => {
+          const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
           const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
 
           return (
             <div key={d.val} className="relative border-l bg-background/50">
               {/* hour lines */}
               {hourMarks.map(({ m }) => {
-                const pct = ((m - minMins) / rangeMins) * 100;
-                return <div key={m} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
+                const pct = ((m - minM) / range) * 100;
+                return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
+              })}
+              {/* half-hour lines */}
+              {halfHourMarks.map((m) => {
+                const pct = ((m - minM) / range) * 100;
+                return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
               })}
 
               {/* NOW line */}
               {isToday && (
                 <div
-                  ref={dayIdx === 0 ? nowRef : null}
                   className="absolute left-0 right-0 h-[2px] bg-primary/70 shadow-[0_0_10px_rgba(99,102,241,0.6)]"
+                  style={{ top: `${nowTopPct}%` }}
                 />
               )}
 
               {/* lessons */}
-              {lanePack.lanes.map((lane, laneIndex) =>
+              {lanes.map((lane, laneIndex) =>
                 lane.map(({ l, s, e }, i) => {
-                  const s2 = clamp(s, minMins, maxMins);
-                  const e2 = clamp(e, minMins, maxMins);
-                  if (e2 <= minMins || s2 >= maxMins) return null;
+                  const s2 = clamp(s, minM, maxM);
+                  const e2 = clamp(e, minM, maxM);
+                  if (e2 <= minM || s2 >= maxM) return null;
 
-                  const topPct = ((s2 - minMins) / rangeMins) * 100;
-                  const heightPct = Math.max(((e2 - s2) / rangeMins) * 100, 0.8);
-                  const widthPct = Math.max(100 / lanePack.lanes.length, 25);
-                  const leftPct = laneIndex * (100 / lanePack.lanes.length);
+                  const topPct = ((s2 - minM) / range) * 100;
+                  const heightPct = Math.max(((e2 - s2) / range) * 100, 0.8);
+                  const widthPct = Math.max(100 / lanes.length, 25);
+                  const leftPct = laneIndex * (100 / lanes.length);
 
                   const subj = l.subject?.name ?? "Matière";
-                  const c = subjectColors(l.subject?.id ?? l.subject_id, "block");
+                  const c = subjectColors(subjectKey(l), "block");
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
                   const room = l.room?.name ?? l.room ?? "";
-
-                  const conflict = lanePack.lanes.length > 1; // overlapping day
-                  const borderColor = conflict ? "#ef4444" : c.border;
-                  const accent = conflict ? "#ef4444" : c.accent;
 
                   return (
                     <div
                       key={`${l.id ?? `${d.val}-${i}`}`}
-                      className="absolute rounded-lg border text-xs sm:text-sm overflow-hidden"
-                      title={`${subj} ${getStart(l)}–${getEnd(l)}${degree ? ` • ${degree}` : ""}${room ? ` • ${room}` : ""}${conflict ? " • CONFLICT" : ""}`}
+                      className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
+                      title={`${subj} ${parseTimeLike(getStartRaw(l)) ?? ""}${
+                        getEndRaw(l) ? `–${parseTimeLike(getEndRaw(l))}` : ""
+                      }${degree ? ` • ${degree}` : ""}${room ? ` • ${room}` : ""}`}
                       style={{
                         top: `${topPct}%`,
                         height: `${heightPct}%`,
                         left: `calc(${leftPct}% + 4px)`,
                         width: `calc(${widthPct}% - 8px)`,
                         backgroundColor: c.bg,
-                        borderColor,
-                        boxShadow: `0 6px 16px ${accent}33`,
+                        borderColor: c.border,
+                        boxShadow: `0 6px 16px ${c.accent}33`,
                       }}
                     >
                       <div className="px-2 py-1 flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
+                        <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
                         <span className="font-medium text-foreground truncate">{subj}</span>
                       </div>
-                      <div className="px-2 pb-1 text-[11px] text-muted-foreground truncate">
-                        {getStart(l)}–{getEnd(l)}
+                      <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">
+                        {parseTimeLike(getStartRaw(l)) && parseTimeLike(getEndRaw(l))
+                          ? `${parseTimeLike(getStartRaw(l))}–${parseTimeLike(getEndRaw(l))}`
+                          : l.period
+                          ? `Créneau ${l.period}`
+                          : ""}
                         {degree ? ` • ${degree}` : ""}
                         {room ? ` • ${room}` : ""}
-                        {conflict ? " • conflict" : ""}
                       </div>
                     </div>
                   );
                 })
               )}
 
-              {/* filler for height */}
-              <div style={{ height: `${rangeMins}px` }} />
+              <div style={{ height: `${range}px` }} />
             </div>
           );
         })}
@@ -511,10 +546,7 @@ function WeekGrid({ lessons, weekOffset }) {
 /* ===================== VIEW: AGENDA ===================== */
 
 function AgendaList({ lessons, weekOffset }) {
-  const monday = useMemo(
-    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
-    [weekOffset]
-  );
+  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
@@ -524,7 +556,12 @@ function AgendaList({ lessons, weekOffset }) {
       m.get(day).push(l);
     }
     for (const [k, arr] of m) {
-      arr.sort((a, b) => (toMins(getStart(a)) ?? 0) - (toMins(getStart(b)) ?? 0));
+      arr.sort((a, b) => {
+        const A = resolveStartEndMins(a)?.[0] ?? 0;
+        const B = resolveStartEndMins(b)?.[0] ?? 0;
+        return A - B;
+      });
+      m.set(k, arr);
     }
     return m;
   }, [lessons]);
@@ -542,32 +579,29 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const c = subjectColors(l.subject?.id ?? l.subject_id, "chip");
+                  const c = subjectColors(subjectKey(l), "chip");
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
                   const room = l.room?.name ?? l.room ?? "";
+                  const mins = resolveStartEndMins(l);
+                  const timeStr = mins
+                    ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
+                    : l.period
+                    ? `• Créneau ${l.period}`
+                    : "";
+
                   return (
                     <div
                       key={l.id ?? `${d.val}-${i}`}
                       className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors"
                     >
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        {l.subject?.id || l.subject_id ? (
-                          <span
-                            className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-                            style={{ background: c.bg, color: "#fff", border: `1px solid ${c.border}` }}
-                          >
-                            {l.subject?.name ?? "Matière"}
-                          </span>
-                        ) : (
-                          l.subject?.name ?? "—"
-                        )}
-                        <span className="text-muted-foreground">
-                          {getStart(l) && getEnd(l)
-                            ? `(${getStart(l)}–${getEnd(l)})`
-                            : l.period
-                            ? `• Period ${l.period}`
-                            : ""}
+                        <span
+                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
+                          style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+                        >
+                          {l.subject?.name ?? "Matière"}
                         </span>
+                        <span className="text-muted-foreground">{timeStr}</span>
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {degree ? degree : ""}{room ? ` • ${room}` : ""}
@@ -593,22 +627,25 @@ function IcsButton({ lessons, weekOffset }) {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
-      const dow = Number(l.day_of_week); // 1..7
+      const dow = Number(l.day_of_week);
       if (!dow) continue;
-      const dayIdx = dow === 7 ? 6 : dow - 1;
-      const date = addDays(monday, dayIdx);
-      const [sh, sm] = String(getStart(l) ?? "00:00").split(":").map(Number);
-      const [eh, em] = String(getEnd(l)   ?? "00:00").split(":").map(Number);
-      const start = new Date(date); start.setHours(sh || 0, sm || 0, 0, 0);
-      const end   = new Date(date); end.setHours(eh || 0, em || 0, 0, 0);
+      const date = addDays(monday, dow - 1);
+      const mins = resolveStartEndMins(l);
+      if (!mins) continue; // skip undated items
 
+      const start = new Date(date);
+      const end = new Date(date);
+      start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
+      end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
+
+      const subj = l.subject?.name ?? "Cours";
       const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
-      const subj = l.subject?.name ?? "Lesson";
       const room = l.room?.name ?? l.room ?? "";
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
-        start, end,
+        start,
+        end,
         title: degree ? `${subj} • ${degree}` : subj,
         location: room,
         desc: degree ? `Niveau: ${degree}` : "",
@@ -619,7 +656,7 @@ function IcsButton({ lessons, weekOffset }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "enseignant-emploi du temps.ics";
+    a.download = "enseignant-emploi-du-temps.ics";
     a.click();
     URL.revokeObjectURL(url);
   };

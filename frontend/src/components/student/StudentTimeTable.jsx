@@ -13,9 +13,9 @@ const DAYS = [
   { label: "Dim", full: "Dimanche",  val: 7 },
 ];
 
-const SCHOOL_START_MINS    = 9 * 60;   // 09:00 — adaptez si besoin
+const SCHOOL_START_MINS    = 9 * 60;   // 09:00
 const SCHOOL_END_MINS      = 22 * 60;  // 22:00
-const PERIOD_DURATION_MINS = 60;       // fallback quand seule "period" est fournie
+const PERIOD_DURATION_MINS = 90;       // 1h30 fallback when only "period" is given
 
 /* ---------------------------------- Helpers ----------------------------------- */
 const unwrap = (r) => r?.data?.data ?? r?.data ?? null;
@@ -29,16 +29,12 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const parseTimeLike = (v) => {
   if (!v && v !== 0) return null;
   const s = String(v).trim();
-  // 09:00:00 / 9:00 / 9:0
   let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
   if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
-  // 09h00 / 9h
   m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
   if (m) return `${pad(+m[1])}:${pad(+(m[2] ?? 0))}`;
-  // 9.30
   m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
   if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
-  // 9 → HH:00
   m = s.match(/^(\d{1,2})$/);
   if (m) return `${pad(+m[1])}:00`;
   return null;
@@ -70,19 +66,14 @@ const isSameDayIndex = (date, dow1to7) => {
   return ours === dow1to7;
 };
 
-// Couleurs par matière (clé stable)
-const HUES = [210, 260, 330, 0, 30, 120, 160];
-const hashStr = (s) => Array.from(String(s)).reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
+/* ------- Unique colors per subject (golden angle for stable distinct hues) ---- */
 const subjectKey = (l) => l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
-const subjectHue = (key) => {
-  const n = typeof key === "number" ? key : Math.abs(hashStr(key));
-  return HUES[(n + 7) % HUES.length];
-};
+const hueForSubject = (idOrKey) => ((Number(idOrKey || 0) * 137) % 360);
 const subjectColors = (key, variant = "block") => {
-  const hue = subjectHue(key);
+  const hue = hueForSubject(key);
   if (variant === "chip") {
     return {
-      bg: `hsl(${hue}, 85%, 45%)`,
+      bg: `hsl(${hue}, 70%, 45%)`,
       text: "#fff",
       border: `hsl(${hue}, 65%, 40%)`,
       softBg: `hsla(${hue}, 85%, 45%, 0.12)`,
@@ -103,7 +94,7 @@ const parsePeriodToMins = (period) => {
   if (!period) return null;
   const s = String(period).trim();
 
-  // "08:00-09:00" / "08h00–09h00"
+  // "08:00-09:30" / "08h00–09h30"
   let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
   if (m) {
     const sm = toMins(m[1]);
@@ -111,7 +102,7 @@ const parsePeriodToMins = (period) => {
     if (sm != null && em != null && em > sm) return [sm, em];
   }
 
-  // Étiquette numérique: "P1", "1", "1ère"
+  // Numeric label: "P1", "1", "1ère"
   m = s.match(/(\d{1,2})/);
   if (m) {
     const idx = Math.max(1, Math.min(20, parseInt(m[1], 10))); // 1..20
@@ -123,7 +114,7 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-// Choisir les minutes pour une ligne
+// Choose minutes to display for a row
 const resolveStartEndMins = (row) => {
   const s = toMins(getStartRaw(row));
   const e = toMins(getEndRaw(row));
@@ -132,7 +123,7 @@ const resolveStartEndMins = (row) => {
   const p = parsePeriodToMins(row?.period);
   if (p) return p;
 
-  return null; // rien à afficher sur la grille
+  return null; // nothing timed
 };
 
 /* ----------------------------------- ICS ------------------------------------- */
@@ -181,8 +172,7 @@ export default function StudentTimeTable() {
 
   // position de la ligne "maintenant"
   useEffect(() => {
-    const minM = SCHOOL_START_MINS,
-      range = SCHOOL_END_MINS - SCHOOL_START_MINS;
+    const minM = SCHOOL_START_MINS, range = SCHOOL_END_MINS - SCHOOL_START_MINS;
     const tick = () => {
       const now = new Date();
       const mins = now.getHours() * 60 + now.getMinutes();
@@ -200,9 +190,7 @@ export default function StudentTimeTable() {
         const res = await TimeTableApi.student(); // GET timetable élève
         const payload = unwrap(res);
 
-        const raw = Array.isArray(payload)
-          ? payload
-          : payload?.lessons ?? payload?.data ?? [];
+        const raw = Array.isArray(payload) ? payload : payload?.lessons ?? payload?.data ?? [];
 
         const normalized = (raw ?? []).map((l) => ({
           ...l,
@@ -329,9 +317,9 @@ function ToolbarSubtitle({ weekOffset }) {
 function WeekToolbar({ onPrev, onToday, onNext }) {
   return (
     <div className="inline-flex rounded-md border overflow-hidden">
-        <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">←</button>
-        <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Aujourd’hui</button>
-        <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">→</button>
+      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">←</button>
+      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Aujourd’hui</button>
+      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">→</button>
     </div>
   );
 }
@@ -410,9 +398,7 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
     return m;
   }, [lessons]);
 
-  const minM = SCHOOL_START_MINS,
-    maxM = SCHOOL_END_MINS,
-    range = maxM - minM;
+  const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
 
   // Empilement par "voies" pour éviter les collisions
   const lanesByDay = useMemo(() => {
@@ -445,10 +431,12 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
 
   const hourMarks = useMemo(() => {
     const arr = [];
-    for (let m = minM; m <= maxM; m += 60) {
-      const h = Math.floor(m / 60);
-      arr.push({ h, m });
-    }
+    for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
+    return arr;
+  }, []);
+  const halfHourMarks = useMemo(() => {
+    const arr = [];
+    for (let m = minM + 30; m < maxM; m += 60) arr.push(m);
     return arr;
   }, []);
 
@@ -496,10 +484,15 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
               const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
               return (
                 <div key={d.val} className="relative border-l bg-background/50">
-                  {/* lignes d’heures */}
+                  {/* lignes heures */}
                   {hourMarks.map(({ m }) => {
                     const pct = ((m - minM) / range) * 100;
-                    return <div key={m} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
+                    return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
+                  })}
+                  {/* demi-heures (lignes plus légères) */}
+                  {halfHourMarks.map((m) => {
+                    const pct = ((m - minM) / range) * 100;
+                    return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
                   })}
 
                   {/* ligne "maintenant" */}
@@ -659,10 +652,9 @@ function IcsButton({ lessons, weekOffset }) {
     for (const l of lessons ?? []) {
       const dow = Number(l.day_of_week);
       if (!dow) continue;
-      const date = addDays(monday, dow - 1); // 1→0, …, 7→6
+      const date = addDays(monday, dow - 1); // 1→0 … 7→6
       const mins = resolveStartEndMins(l);
-      const start = new Date(date),
-        end = new Date(date);
+      const start = new Date(date), end = new Date(date);
       if (mins) {
         start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
         end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
@@ -673,8 +665,7 @@ function IcsButton({ lessons, weekOffset }) {
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
-        start,
-        end,
+        start, end,
         title: subj,
         location: room,
         desc: teacher ? `Par ${teacher}` : "",

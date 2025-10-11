@@ -10,9 +10,9 @@ class RoomSeeder extends Seeder
     public function run(): void
     {
         $names = [
-            'Room 01','Room 02','Room 03','Room 04',
-            'Room 05','Room 06','Room 07','Room 07',
-            'Informatique','Room 08','Librairie',"Salle de preparation",
+            'Salle 01','Salle 02','Salle 03','Salle 04',
+            'Salle 05','Salle 06','Salle 07','Salle 08',
+            'Salle Informatique','Salle 09','Librairie',"Salle de preparation",
         ];
         foreach ($names as $n) {
             Room::firstOrCreate(['name' => $n], ['capacity' => null]);
