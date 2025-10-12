@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { LOGIN_ROUTE } from "../../router/index.jsx";
 
 // Icons
-import { House, Settings, CalendarDays, LogOut } from "lucide-react";
+import { House, Settings, CalendarDays, CalendarClock, LogOut } from "lucide-react";
 
 /**
  * ParentAdministrationSidebar
@@ -15,7 +15,7 @@ import { House, Settings, CalendarDays, LogOut } from "lucide-react";
  *
  * Props:
  *  - className?: string
- *  - activeKey?: "paramètres" | "événements" | "tableau de bord" | string
+ *  - activeKey?: "paramètres" | "événements" | "emploi du temps" | "tableau de bord" | string
  *  - onSelect?: (key: string) => void
  *  - collapsed?: boolean  // icons only
  */
@@ -25,8 +25,9 @@ export function ParentAdministrationSidebar({ className, activeKey, onSelect, co
 
   const items = [
     { key: "tableau de bord", label: "Tableau de bord", icon: House },
-    { key: "paramètres",      label: "Paramètres",      icon: Settings },
+    { key: "emploi du temps", label: "Emploi du temps", icon: CalendarClock }, // NEW
     { key: "événements",      label: "Événements",      icon: CalendarDays },
+    { key: "paramètres",      label: "Paramètres",      icon: Settings },
   ];
 
   const handleLogout = async () => {

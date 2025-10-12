@@ -18,7 +18,9 @@ import ParentDashboardLayout   from "@/layouts/ParentDashboardLayout.jsx";
 
 /* Parent */
 import ParentDashboard from "@/components/parent/ParentDashboard.jsx";     // folder 'Parent' has capital P
-import ParentOverview  from "@/components/parent/ParentOveriew.jsx";       // filename is 'ParentOveriew.jsx'
+import ParentOverview  from "@/components/parent/ParentOveriew.jsx";  
+import ParentTimetable from "../components/parent/ParentTimeTable";
+// filename is 'ParentOveriew.jsx'
 
 /* Student */
 import StudentDashboard from "@/components/student/StudentDashboard.jsx";
@@ -286,6 +288,7 @@ export const router = createBrowserRouter([
       { path: "tableau de bord", element: <ParentDashboard /> },
       { path: "événements",      element: <ParentEvents /> },
       { path: "paramètres",      element: <AccountSettings /> },
+      {path: "emploi du temps",  element:<ParentTimetable/>}
     ],
   },
 ]);
