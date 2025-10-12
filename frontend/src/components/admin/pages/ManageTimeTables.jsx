@@ -497,11 +497,7 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
                         <span className="text-xs text-muted-foreground">{getStart(l) && getEnd(l) ? `(${fmtHHMM(getStart(l))}–${fmtHHMM(getEnd(l))})` : ""}</span>
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5">
-                        {l.teacher ? (
-                          <>
-                            Par {l.teacher.firstname} {l.teacher.lastname}
-                          </>
-                        ) : null}
+                        {l.teacher ? <>Par {l.teacher.firstname} {l.teacher.lastname}</> : null}
                         {l.room?.name ? <> • {l.room.name}</> : null}
                       </div>
                     </div>
@@ -596,11 +592,7 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
                           {getStart(l) && getEnd(l) ? `(${fmtHHMM(getStart(l))}–${fmtHHMM(getEnd(l))})` : ""}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {l.teacher ? (
-                            <>
-                              By {l.teacher.firstname} {l.teacher.lastname}
-                            </>
-                          ) : null}
+                          {l.teacher ? <>By {l.teacher.firstname} {l.teacher.lastname}</> : null}
                           {l.degree?.name ? <> • {l.degree.name}</> : null}
                           {l.room?.name ? <> • {l.room.name}</> : null}
                         </div>
@@ -966,7 +958,7 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
               const cellsOut = [];
               let idx = 0;
               for (let i = 0; i < leadBlanks; i++) {
-                cellsOut.push(<div key={`b-${i}`} className="min-h:[84px] md:min-h-[110px]" />);
+                cellsOut.push(<div key={`b-${i}`} className="min-h-[84px] md:min-h-[110px]" />);
                 idx++;
               }
               for (let d = 1; d <= totalDays; d++, idx++) {
@@ -987,7 +979,7 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
                 );
               }
               while (idx % 7 !== 0) {
-                cellsOut.push(<div key={`t-${idx}`} className="min-h:[84px] md:min-h-[110px]" />);
+                cellsOut.push(<div key={`t-${idx}`} className="min-h-[84px] md:min-h-[110px]" />);
                 idx++;
               }
               return cellsOut;

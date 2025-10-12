@@ -210,6 +210,8 @@ export default function StudentTimeTable() {
           timetable: l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
           start_time: getStartRaw(l),
           end_time: getEndRaw(l),
+          /** mark items coming from monthly plan so we never try to place them on the time grid */
+          is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
         }));
 
         setLessons(normalized);
@@ -381,9 +383,13 @@ function Legend({ subjects }) {
 function WeekGrid({ lessons, weekOffset, nowTopPct }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
+  // group by day — only timed lessons (skip monthly plans & untimed so no phantom lines)
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
+      if (l.is_plan) continue;            // ⟵ never draw plans on the grid
+      const mins = resolveStartEndMins(l);
+      if (!mins) continue;                // skip untimed
       const day = Number(l.day_of_week);
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
@@ -489,7 +495,7 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                     const pct = ((m - minM) / range) * 100;
                     return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
                   })}
-                  {/* demi-heures (lignes plus légères) */}
+                  {/* demi-heures */}
                   {halfHourMarks.map((m) => {
                     const pct = ((m - minM) / range) * 100;
                     return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
@@ -503,7 +509,7 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                     />
                   )}
 
-                  {/* séances */}
+                  {/* séances (timed only) */}
                   {lanes.map((lane, laneIndex) =>
                     lane.map(({ l, s, e }, i) => {
                       const s2 = clamp(s, minM, maxM);
@@ -523,9 +529,7 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                         <div
                           key={`${l.id ?? `${d.val}-${i}`}`}
                           className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                          title={`${subjName} ${parseTimeLike(getStartRaw(l)) ?? ""}${
-                            getEndRaw(l) ? `–${parseTimeLike(getEndRaw(l))}` : ""
-                          }${rName ? ` • ${rName}` : ""}${tName ? ` • ${tName}` : ""}`}
+                          title={`${subjName} ${parseTimeLike(getStartRaw(l)) ?? ""}${getEndRaw(l) ? `–${parseTimeLike(getEndRaw(l))}` : ""}${rName ? ` • ${rName}` : ""}${tName ? ` • ${tName}` : ""}`}
                           style={{
                             top: `${topPct}%`,
                             height: `${heightPct}%`,
@@ -543,8 +547,6 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">
                             {parseTimeLike(getStartRaw(l)) && parseTimeLike(getEndRaw(l))
                               ? `${parseTimeLike(getStartRaw(l))}–${parseTimeLike(getEndRaw(l))}`
-                              : l.period
-                              ? `Créneau ${l.period}`
                               : ""}
                             {tName ? ` • ${tName}` : ""}
                             {rName ? ` • ${rName}` : ""}
@@ -604,12 +606,10 @@ function AgendaList({ lessons, weekOffset }) {
                   const tName = teacherName(l.teacher, l.teacher_id);
                   const rName = l.room?.name ?? l.room ?? (l.room_id ? `Salle #${l.room_id}` : "");
                   const times = resolveStartEndMins(l);
-                  const timeStr = times
-                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(
-                        times[1] % 60
-                      )})`
-                    : l.period
-                    ? `• Créneau ${l.period}`
+
+                  // For monthly plans (or untimed), show info only (subject + room), no faux time/period.
+                  const timeStr = !l.is_plan && times
+                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
                     : "";
 
                   return (
@@ -624,7 +624,7 @@ function AgendaList({ lessons, weekOffset }) {
                         >
                           {l?.subject?.name ?? l?.subject_name ?? "Matière"}
                         </span>
-                        <span className="text-muted-foreground">{timeStr}</span>
+                        {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
                       <div className="text-black dark:text-white">
                         {tName ? `Par ${tName}` : ""}
@@ -650,15 +650,16 @@ function IcsButton({ lessons, weekOffset }) {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
+      if (l.is_plan) continue; // skip monthly plans in calendar export
       const dow = Number(l.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1); // 1→0 … 7→6
       const mins = resolveStartEndMins(l);
+      if (!mins) continue; // only export timed lessons
       const start = new Date(date), end = new Date(date);
-      if (mins) {
-        start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
-        end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
-      }
+      start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
+      end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
+
       const subj = l?.subject?.name ?? l?.subject_name ?? "Séance";
       const room = l.room?.name ?? l.room ?? (l.room_id ? `Salle #${l.room_id}` : "");
       const teacher = teacherName(l.teacher, l.teacher_id);

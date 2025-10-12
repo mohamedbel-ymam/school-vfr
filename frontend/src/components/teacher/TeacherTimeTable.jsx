@@ -63,14 +63,25 @@ const isSameDayIndex = (date, dow1to7) => {
   return ours === dow1to7;
 };
 
-/* unique, stable subject colors (golden-angle) */
-const subjectKey = (l) => l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
-const hueForSubject = (key) => (Number(key || 0) * 137) % 360;
-const subjectColors = (key, mode = "block") => {
-  const hue = hueForSubject(key);
+/* ---------- DEGREE colors (5-slot palette, stable mapping) ---------- */
+const DEGREE_HUES = [210, 0, 30, 120, 260]; // 5 distinct hues (adjust if you want)
+const hashStr = (s) => Array.from(String(s)).reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
+const degreeKey = (l) =>
+  l?.timetable?.degree?.id ??
+  l?.degree?.id ??
+  l?.degree_id ??
+  l?.timetable?.degree?.name ??
+  l?.degree?.name ??
+  "degree";
+const degreeHue = (key) => {
+  const n = typeof key === "number" ? key : Math.abs(hashStr(String(key)));
+  return DEGREE_HUES[n % DEGREE_HUES.length];
+};
+const degreeColors = (key, mode = "block") => {
+  const hue = degreeHue(key);
   if (mode === "chip") {
     return {
-      bg: `hsl(${hue}, 70%, 45%)`,
+      bg: `hsl(${hue}, 85%, 45%)`,
       soft: `hsla(${hue},85%,45%,0.12)`,
       border: `hsl(${hue}, 65%, 40%)`,
       text: "#fff",
@@ -177,7 +188,15 @@ export default function TeacherTimetable() {
     (async () => {
       try {
         const res = await TimeTableApi.teacher();
-        setLessons(unwrapLessons(res) ?? []);
+        const raw = unwrapLessons(res) ?? [];
+        // normalize & tag monthly plans so they never render as timed blocks
+        const normalized = raw.map((l) => ({
+          ...l,
+          start_time: getStartRaw(l),
+          end_time: getEndRaw(l),
+          is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
+        }));
+        setLessons(normalized);
       } catch (e) {
         console.error(e);
         setErr(e?.response?.data?.message || "Échec du chargement de l’emploi du temps");
@@ -187,25 +206,25 @@ export default function TeacherTimetable() {
     })();
   }, []);
 
-  // subject list
+  // subject list (still useful as a filter)
   const subjects = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
-      const id = subjectKey(l);
+      const id = l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
       const name = l.subject?.name ?? "Matière";
       m.set(id, name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
-  // degree list
+  // degree list (legend + filter + colors)
   const degrees = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
       const d = l.timetable?.degree ?? l.degree ?? null;
-      const id = d?.id ?? l.degree_id;
+      const id = d?.id ?? l.degree_id ?? d?.name ?? "degree";
       const name = d?.name ?? l.degree_name ?? "Niveau";
-      if (id) m.set(id, name);
+      m.set(id, name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
@@ -213,12 +232,14 @@ export default function TeacherTimetable() {
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
     if (subjectFilter) {
-      arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
+      arr = arr.filter(
+        (l) => String(l?.subject?.id ?? l?.subject_id ?? l?.subject?.name) === String(subjectFilter)
+      );
     }
     if (degreeFilter) {
       arr = arr.filter(
         (l) =>
-          String(l.timetable?.degree?.id ?? l.degree?.id ?? l.degree_id) ===
+          String(l.timetable?.degree?.id ?? l.degree?.id ?? l.degree_id ?? l.timetable?.degree?.name ?? l.degree?.name) ===
           String(degreeFilter)
       );
     }
@@ -262,8 +283,8 @@ export default function TeacherTimetable() {
         </div>
       </div>
 
-      {/* Legend */}
-      <Legend subjects={subjects} />
+      {/* Degree Legend (colors by degree) */}
+      <DegreeLegend degrees={degrees} />
 
       {/* Content */}
       {view === "grid" ? (
@@ -333,20 +354,20 @@ function ViewToggle({ value, onChange }) {
   );
 }
 
-function Legend({ subjects }) {
-  if (!subjects?.length) return null;
+function DegreeLegend({ degrees }) {
+  if (!degrees?.length) return null;
   return (
     <div className="flex flex-wrap gap-2 text-xs">
-      {subjects.map((s) => {
-        const c = subjectColors(s.id, "chip");
+      {degrees.map((d) => {
+        const c = degreeColors(d.id, "chip");
         return (
           <span
-            key={s.id}
+            key={d.id}
             className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-2 py-0.5 border"
             style={{ borderColor: c.border, background: c.soft }}
           >
             <span className="h-3 w-3 rounded-full" style={{ background: c.bg }} />
-            <span className="text-foreground/80">{s.name}</span>
+            <span className="text-foreground/80">{d.name}</span>
           </span>
         );
       })}
@@ -359,10 +380,13 @@ function Legend({ subjects }) {
 function WeekGrid({ lessons, weekOffset, nowTopPct }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
-  // group by day
+  // group by day — only TIMED lessons (skip monthly plans)
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
+      if (l.is_plan) continue;                 // <-- never draw plans on the grid
+      const mins = resolveStartEndMins(l);
+      if (!mins) continue;                     // skip untimed
       const day = Number(l.day_of_week);
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
@@ -494,18 +518,18 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                   const widthPct = Math.max(100 / lanes.length, 25);
                   const leftPct = laneIndex * (100 / lanes.length);
 
-                  const subj = l.subject?.name ?? "Matière";
-                  const c = subjectColors(subjectKey(l), "block");
-                  const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
+                  const degKey = degreeKey(l);
+                  const c = degreeColors(degKey, "block");
+                  const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = l.room?.name ?? l.room ?? "";
+                  const startS = parseTimeLike(getStartRaw(l));
+                  const endS   = parseTimeLike(getEndRaw(l));
 
                   return (
                     <div
                       key={`${l.id ?? `${d.val}-${i}`}`}
                       className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                      title={`${subj} ${parseTimeLike(getStartRaw(l)) ?? ""}${
-                        getEndRaw(l) ? `–${parseTimeLike(getEndRaw(l))}` : ""
-                      }${degree ? ` • ${degree}` : ""}${room ? ` • ${room}` : ""}`}
+                      title={`${degree} ${startS ?? ""}${endS ? `–${endS}` : ""}${room ? ` • ${room}` : ""}`}
                       style={{
                         top: `${topPct}%`,
                         height: `${heightPct}%`,
@@ -518,15 +542,10 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                     >
                       <div className="px-2 py-1 flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
-                        <span className="font-medium text-foreground truncate">{subj}</span>
+                        <span className="font-medium text-foreground truncate">{degree}</span>
                       </div>
                       <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">
-                        {parseTimeLike(getStartRaw(l)) && parseTimeLike(getEndRaw(l))
-                          ? `${parseTimeLike(getStartRaw(l))}–${parseTimeLike(getEndRaw(l))}`
-                          : l.period
-                          ? `Créneau ${l.period}`
-                          : ""}
-                        {degree ? ` • ${degree}` : ""}
+                        {startS && endS ? `${startS}–${endS}` : l.period ? `Créneau ${l.period}` : ""}
                         {room ? ` • ${room}` : ""}
                       </div>
                     </div>
@@ -579,14 +598,13 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const c = subjectColors(subjectKey(l), "chip");
-                  const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
+                  const degKey = degreeKey(l);
+                  const c = degreeColors(degKey, "chip");
+                  const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = l.room?.name ?? l.room ?? "";
                   const mins = resolveStartEndMins(l);
-                  const timeStr = mins
+                  const timeStr = !l.is_plan && mins
                     ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
-                    : l.period
-                    ? `• Créneau ${l.period}`
                     : "";
 
                   return (
@@ -599,12 +617,12 @@ function AgendaList({ lessons, weekOffset }) {
                           className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
                           style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
                         >
-                          {l.subject?.name ?? "Matière"}
+                          {degree}
                         </span>
-                        <span className="text-muted-foreground">{timeStr}</span>
+                        {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {degree ? degree : ""}{room ? ` • ${room}` : ""}
+                        {room ? room : ""}
                       </div>
                     </div>
                   );
@@ -627,26 +645,27 @@ function IcsButton({ lessons, weekOffset }) {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
+      if (l.is_plan) continue; // skip monthly plans
       const dow = Number(l.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1);
       const mins = resolveStartEndMins(l);
-      if (!mins) continue; // skip undated items
+      if (!mins) continue; // only timed lessons
 
       const start = new Date(date);
       const end = new Date(date);
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
-      const subj = l.subject?.name ?? "Cours";
       const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
+      const subj = l.subject?.name ?? "Cours";
       const room = l.room?.name ?? l.room ?? "";
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
         start,
         end,
-        title: degree ? `${subj} • ${degree}` : subj,
+        title: degree ? `${degree} • ${subj}` : subj,
         location: room,
         desc: degree ? `Niveau: ${degree}` : "",
       });

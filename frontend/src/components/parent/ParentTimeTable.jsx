@@ -1,3 +1,4 @@
+// src/components/parent/ParentTimetable.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../api/axios";
@@ -9,12 +10,13 @@ const unwrapChildren = (r) =>
 
 const unwrapPayload = (r) => r?.data?.data ?? r?.data ?? null;
 
-const getStart = (l) => l?.start_time ?? l?.starts_at ?? null; // "HH:mm"
-const getEnd   = (l) => l?.end_time   ?? l?.ends_at   ?? null;
+const getStartRaw = (l) => l?.start_time ?? l?.starts_at ?? null;
+const getEndRaw   = (l) => l?.end_time   ?? l?.ends_at   ?? null;
 
 const teacherName = (t) =>
   t ? `${t.firstname ?? ""} ${t.lastname ?? ""}`.trim() : "";
 
+/* Days (Mon-first) */
 const DAYS = [
   { label: "Lun", full: "Monday",    val: 1 },
   { label: "Mar", full: "Tuesday",   val: 2 },
@@ -25,24 +27,79 @@ const DAYS = [
   { label: "Dim", full: "Sunday",    val: 7 },
 ];
 
-const HUES = [210, 260, 330, 0, 30, 120, 160];
-const subjectHue = (id) => HUES[(Number(id ?? 0) + 7) % HUES.length];
+const pad = (n) => String(n).padStart(2, "0");
 
-const subjectColors = (id) => {
-  const hue = subjectHue(id);
+/** Accepts: "19", "19:30", "19:30:00", "19h30", "19.30" → "HH:MM" */
+const parseTimeLike = (v) => {
+  if (!v && v !== 0) return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
+  if (m) return `${pad(+m[1])}:${pad(+(m[2] ?? 0))}`;
+  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
+  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  m = s.match(/^(\d{1,2})$/);
+  if (m) return `${pad(+m[1])}:00`;
+  return null;
+};
+const toMins = (hhmm) => {
+  const s = parseTimeLike(hhmm);
+  if (!s) return null;
+  const [h, m] = s.split(":").map(Number);
+  return h * 60 + m;
+};
+
+/* Golden-angle color per subject (stable & distinct) */
+const subjectKey = (l) =>
+  l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
+const hueForSubject = (key) => (Number(key || 0) * 137) % 360;
+const subjectColors = (key, variant = "chip") => {
+  const hue = hueForSubject(key);
+  if (variant === "chip") {
+    return {
+      bg: `hsl(${hue}, 70%, 45%)`,
+      text: "#fff",
+      border: `hsl(${hue}, 65%, 40%)`,
+      softBg: `hsla(${hue}, 85%, 45%, 0.12)`,
+    };
+  }
   return {
-    bg: `hsl(${hue}, 85%, 45%)`,
-    text: "#fff",
-    border: `hsl(${hue}, 65%, 40%)`,
+    bg: `hsla(${hue}, 85%, 45%, 0.18)`,
+    border: `hsl(${hue}, 65%, 45%)`,
+    accent: `hsl(${hue}, 85%, 45%)`,
   };
 };
 
-const pad = (n) => String(n).padStart(2, "0");
-const toMins = (hhmm) => {
-  if (!hhmm) return null;
-  const [h, m] = String(hhmm).split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
+/* Period fallback (when only "period" is given) */
+const SCHOOL_START_MINS = 9 * 60; // 09:00
+const PERIOD_DURATION_MINS = 90;  // 1h30
+// Accept "1", "P1", "08:00-09:30", "08h00–09h30"
+const parsePeriodToMins = (period) => {
+  if (!period) return null;
+  const s = String(period).trim();
+  let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
+  if (m) {
+    const sm = toMins(m[1]);
+    const em = toMins(m[2]);
+    if (sm != null && em != null && em > sm) return [sm, em];
+  }
+  m = s.match(/(\d{1,2})/);
+  if (m) {
+    const idx = Math.max(1, Math.min(20, parseInt(m[1], 10)));
+    const start = SCHOOL_START_MINS + (idx - 1) * PERIOD_DURATION_MINS;
+    const end = start + PERIOD_DURATION_MINS;
+    return [start, end];
+  }
+  return null;
+};
+const resolveStartEndMins = (row) => {
+  const s = toMins(getStartRaw(row));
+  const e = toMins(getEndRaw(row));
+  if (s != null && e != null && e > s) return [s, e];
+  const p = parsePeriodToMins(row?.period);
+  if (p) return p;
+  return null;
 };
 
 const startOfWeekMonday = (base = new Date()) => {
@@ -68,7 +125,7 @@ const buildIcs = (events) => {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Takwa Etablissement//parent Emploi du temps//EN",
+    "PRODID:-//Takwa Etablissement//Parent Emploi du temps//EN",
   ];
   for (const ev of events) {
     lines.push(
@@ -84,7 +141,7 @@ const buildIcs = (events) => {
     );
   }
   lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
+  return lines.filter(Boolean).join("\r\n");
 };
 
 /* ================= Parent Timetable (Agenda only) ================= */
@@ -96,7 +153,7 @@ export default function ParentTimetable() {
   const [lessons, setLessons]     = useState([]);
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const [loading, setLoading]         = useState(true);
+  const [loading, setLoading]           = useState(true);
   const [loadingChild, setLoadingChild] = useState(false);
   const [err, setErr] = useState("");
 
@@ -104,7 +161,7 @@ export default function ParentTimetable() {
   useEffect(() => {
     (async () => {
       try {
-        // adjust endpoint if your backend differs (e.g., /parent/students)
+        // Adjust endpoint if your backend differs
         const res = await axiosClient.get("/parent/children", { params: { per_page: 200 } });
         const kids = unwrapChildren(res);
         setChildren(kids);
@@ -124,13 +181,16 @@ export default function ParentTimetable() {
     (async () => {
       setLoadingChild(true);
       try {
-        const res = await TimeTableApi.parent?.({ child_id: childId }) ?? TimeTableApi.student?.({ child_id: childId });
+        const res =
+          (TimeTableApi.parent && (await TimeTableApi.parent({ child_id: childId }))) ||
+          (TimeTableApi.student && (await TimeTableApi.student({ child_id: childId })));
         const payload = unwrapPayload(res);
+
         if (Array.isArray(payload)) {
           setLessons(payload);
           setTimetable(payload[0]?.timetable ?? null);
         } else {
-          setLessons(payload?.lessons ?? (payload?.data ?? []));
+          setLessons(payload?.lessons ?? payload?.data ?? []);
           setTimetable(payload?.timetable ?? null);
         }
       } catch (e) {
@@ -142,12 +202,20 @@ export default function ParentTimetable() {
     })();
   }, [childId]);
 
+  const currentChild = useMemo(
+    () => children.find((c) => String(c.id) === String(childId)) || null,
+    [children, childId]
+  );
+  const childLabel = (c) =>
+    c ? `${c.firstname ?? ""} ${c.lastname ?? ""}`.trim() || c.name || `#${c.id}` : "";
+
+  // Legend subjects (for chips)
   const subjects = useMemo(() => {
     const s = new Map();
     for (const l of lessons ?? []) {
-      const id = l.subject?.id ?? l.subject_id;
-      const name = l.subject?.name ?? "Matière";
-      if (id) s.set(id, name);
+      const key = subjectKey(l);
+      const name = l?.subject?.name ?? "Matière";
+      s.set(String(key), name);
     }
     return [...s.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
@@ -162,13 +230,13 @@ export default function ParentTimetable() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="text-xl font-semibold">
-            {timetable?.title ? `${emploidutemps.title}` : "Enfant Emploi du temps"}
+            {timetable?.title ? timetable.title : `Emploi du temps de ${childLabel(currentChild)}`}
           </div>
           <ToolbarSubtitle weekOffset={weekOffset} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm font-medium">Select child:</label>
+          <label className="text-sm font-medium">Choisir l’enfant :</label>
           <select
             className="border rounded px-2 py-1.5 text-sm bg-background text-foreground"
             value={childId}
@@ -176,7 +244,7 @@ export default function ParentTimetable() {
           >
             {children.map((c) => (
               <option key={c.id} value={String(c.id)}>
-                {(c.firstname && c.lastname) ? `${c.firstname} ${c.lastname}` : (c.name ?? `#${c.id}`)}
+                {childLabel(c)}
               </option>
             ))}
           </select>
@@ -187,32 +255,33 @@ export default function ParentTimetable() {
             onNext={() => setWeekOffset((w) => w + 1)}
           />
 
-          <IcsButton childName={(() => {
-            const c = children.find(x => String(x.id) === String(childId));
-            return c ? `${c.firstname ?? ""} ${c.lastname ?? ""}`.trim() || c.name || `#${c.id}` : "";
-          })()} lessons={lessons} weekOffset={weekOffset} />
+          <IcsButton
+            childName={childLabel(currentChild)}
+            lessons={lessons}
+            weekOffset={weekOffset}
+          />
 
           <button
             onClick={() => window.print()}
             className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
           >
-            Print
+            Imprimer
           </button>
 
-          {loadingChild && <span className="text-xs text-muted-foreground">Loading timetable…</span>}
+          {loadingChild && <span className="text-xs text-muted-foreground">Chargement…</span>}
         </div>
       </div>
 
-      {/* Legend */}
+      {/* Legend (subjects) */}
       {!!subjects.length && (
         <div className="flex flex-wrap gap-2 text-xs">
           {subjects.map((s) => {
-            const c = subjectColors(s.id);
+            const c = subjectColors(s.id, "chip");
             return (
               <span
                 key={s.id}
                 className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-2 py-0.5 border"
-                style={{ borderColor: c.border, background: `${c.bg}20` }}
+                style={{ borderColor: c.border, background: c.softBg }}
               >
                 <span className="h-3 w-3 rounded-full" style={{ background: c.bg }} />
                 <span className="text-foreground/80">{s.name}</span>
@@ -222,7 +291,7 @@ export default function ParentTimetable() {
         </div>
       )}
 
-      {/* Agenda (only view) */}
+      {/* Agenda (Subject + Teacher + Room) */}
       <AgendaList lessons={lessons} weekOffset={weekOffset} />
     </div>
   );
@@ -268,7 +337,7 @@ function AgendaList({ lessons, weekOffset }) {
       m.get(day).push(l);
     }
     for (const [k, arr] of m) {
-      arr.sort((a, b) => (toMins(getStart(a)) ?? 0) - (toMins(getEnd(b)) ?? 0));
+      arr.sort((a, b) => (toMins(getStartRaw(a)) ?? 0) - (toMins(getStartRaw(b)) ?? 0));
     }
     return m;
   }, [lessons]);
@@ -287,34 +356,35 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const c = subjectColors(l.subject?.id ?? l.subject_id);
-                  const subjectName = l.subject?.name ?? "Matière";
-                  const teacher = teacherName(l.teacher);
-                  const room = l.room?.name ?? l.room ?? "";
+                  const key = subjectKey(l);
+                  const col = subjectColors(key, "chip");
+                  const subj = l.subject?.name ?? l.subject_name ?? "Matière";
+                  const tName = teacherName(l.teacher);
+                  const room = l.room?.name ?? l.room ?? (l.room_id ? `Salle #${l.room_id}` : "");
+
+                  const mins = resolveStartEndMins(l);
+                  const timeStr = mins
+                    ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
+                    : l.period
+                    ? `• Créneau ${l.period}`
+                    : "";
+
                   return (
                     <div
                       key={l.id ?? `${d.val}-${i}`}
                       className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors"
                     >
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        {l.subject?.id || l.subject_id ? (
-                          <span
-                            className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-                            style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
-                          >
-                            {subjectName}
-                          </span>
-                        ) : subjectName}
-                        <span className="text-muted-foreground">
-                          {getStart(l) && getEnd(l)
-                            ? `(${getStart(l)}–${getEnd(l)})`
-                            : l.period
-                            ? `• Period ${l.period}`
-                            : ""}
+                        <span
+                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
+                          style={{ background: col.bg, color: col.text, border: `1px solid ${col.border}` }}
+                        >
+                          {subj}
                         </span>
+                        <span className="text-muted-foreground">{timeStr}</span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {teacher ? `By ${enseignant}` : ""}{room ? ` • ${room}` : ""}
+                        {tName ? `Par ${tName}` : ""}{room ? ` • ${room}` : ""}
                       </div>
                     </div>
                   );
@@ -340,17 +410,19 @@ function IcsButton({ childName, lessons, weekOffset }) {
     for (const l of lessons ?? []) {
       const dow = Number(l.day_of_week); // 1..7
       if (!dow) continue;
-      const dayIdx = dow === 7 ? 6 : dow - 1;
-      const date = addDays(monday, dayIdx);
+      const date = addDays(monday, dow - 1);
 
-      const [sh, sm] = String(getStart(l) ?? "00:00").split(":").map(Number);
-      const [eh, em] = String(getEnd(l)   ?? "00:00").split(":").map(Number);
-      const start = new Date(date); start.setHours(sh || 0, sm || 0, 0, 0);
-      const end   = new Date(date); end.setHours(eh || 0, em || 0, 0, 0);
+      const mins = resolveStartEndMins(l);
+      if (!mins) continue;
 
-      const subj = l.subject?.name ?? "Lesson";
+      const start = new Date(date);
+      const end   = new Date(date);
+      start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
+      end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
+
+      const subj = l.subject?.name ?? l.subject_name ?? "Séance";
+      const tName = teacherName(l.teacher);
       const room = l.room?.name ?? l.room ?? "";
-      const teacher = teacherName(l.teacher);
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
@@ -358,7 +430,7 @@ function IcsButton({ childName, lessons, weekOffset }) {
         end,
         title: childName ? `${childName} • ${subj}` : subj,
         location: room,
-        desc: teacher ? `By ${enseignant}` : "",
+        desc: [tName ? `Par ${tName}` : "", room ? `Salle: ${room}` : ""].filter(Boolean).join("\\n"),
       });
     }
 
