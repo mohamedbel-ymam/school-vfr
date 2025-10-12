@@ -8,11 +8,18 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from ".
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
+// ✅ NEW: fixed color map (import once created)
+import subjectColors from "../../../config/subjectColors";
+
 /* ========================= Helpers & Config ========================= */
 
 const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
-const getStart = (row) => row?.start_time ?? row?.starts_at ?? null;
-const getEnd   = (row) => row?.end_time   ?? row?.ends_at   ?? null;
+
+// ✅ Prefer normalized API fields from TimetableResource
+const getStartStr = (row) => row?.start ?? row?.start_time ?? row?.starts_at ?? null;
+const getEndStr   = (row) => row?.end   ?? row?.end_time   ?? row?.ends_at   ?? null;
+const getStartMin = (row) => (typeof row?.start_minutes === "number" ? row.start_minutes : toMins(getStartStr(row)));
+const getEndMin   = (row) => (typeof row?.end_minutes   === "number" ? row.end_minutes   : toMins(getEndStr(row)));
 
 const DAYS = [
   { label: "Lun", val: 1 },
@@ -24,8 +31,32 @@ const DAYS = [
   { label: "Dim", val: 7 },
 ];
 
-// stable unique color per subject (golden angle)
-const subjectColor = (id) => `hsl(${((Number(id || 0) * 137) % 360)}, 70%, 45%)`;
+// ✅ Stable subject color: use subject key/slug; fallback deterministic
+const slugify = (s = "") =>
+  s
+    .normalize?.("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+const hashInt = (str) => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+};
+const goldenHue = (k) => (hashInt(k) * 137.508) % 360;
+
+/** Returns a HEX color chosen by subject key with fallback deterministic HSL. */
+const subjectColorHexFromRow = (row) => {
+  const key =
+    row?.subject?.key ||
+    (row?.subject?.name ? slugify(row.subject.name) : row?.subject_key || slugify(row?.subject_name || ""));
+  if (key && subjectColors[key]) return subjectColors[key];
+  const hue = goldenHue(key || "subject");
+  // HSL → simple approx HEX; to keep things lean we use inline hsl() string directly
+  return `hsl(${hue} 70% 45%)`;
+};
 
 const fetchAdminTimetables = (params) => {
   const fn = TimeTableApi.adminList ?? TimeTableApi.list;
@@ -376,7 +407,9 @@ export default function ManageTimetables() {
       )}
 
       {/* Weekly rows */}
-      {view === "weekly" && <WeeklyGrid rows={rows} hidePast={hidePastWeekly} reload={loadWeekly} onBulkDelete={bulkDeleteRows} />}
+      {view === "weekly" && (
+        <WeeklyGrid rows={rows} hidePast={hidePastWeekly} reload={loadWeekly} onBulkDelete={bulkDeleteRows} />
+      )}
 
       {/* Monthly planner */}
       {view === "monthly" && (
@@ -442,7 +475,7 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
       if (hidePast) {
         if (dow < todayIdx) continue;
         if (dow === todayIdx) {
-          const end = toMins(getEnd(it));
+          const end = getEndMin(it);
           if (end != null && end <= nowMins) continue;
         }
       }
@@ -450,8 +483,8 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
     }
     for (const [k, arr] of m) {
       arr.sort((a, b) => {
-        const sa = toMins(getStart(a));
-        const sb = toMins(getStart(b));
+        const sa = getStartMin(a);
+        const sb = getStartMin(b);
         if (sa != null && sb != null) return sa - sb;
         if (sa != null) return -1;
         if (sb != null) return 1;
@@ -486,15 +519,17 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
               {rowsByDay.get(val)?.length ? (
                 rowsByDay.get(val).map((l) => {
                   const subjectName = l.subject?.name ?? "—";
+                  const color = subjectColorHexFromRow(l);
+                  const s = getStartStr(l), e = getEndStr(l);
                   return (
-                    <div key={l.id ?? `${val}-${l.degree_id ?? degree?.id ?? "x"}-${l.subject_id ?? "s"}-${getStart(l) ?? "t"}`} className="rounded-lg border p-2 bg-background">
+                    <div key={l.id ?? `${val}-${l.degree_id ?? degree?.id ?? "x"}-${l.subject_id ?? "s"}-${s ?? "t"}`} className="rounded-lg border p-2 bg-background">
                       <div className="text-sm font-medium flex flex-wrap items-center gap-2">
                         {(l.subject?.id || l.subject_id) && (
-                          <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: subjectColor(l.subject?.id ?? l.subject_id), color: "white" }}>
+                          <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: color, color: "white" }}>
                             {subjectName}
                           </span>
                         )}
-                        <span className="text-xs text-muted-foreground">{getStart(l) && getEnd(l) ? `(${fmtHHMM(getStart(l))}–${fmtHHMM(getEnd(l))})` : ""}</span>
+                        <span className="text-xs text-muted-foreground">{s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}</span>
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5">
                         {l.teacher ? <>Par {l.teacher.firstname} {l.teacher.lastname}</> : null}
@@ -527,7 +562,7 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
       if (hidePast) {
         if (dow < todayIdx) continue; // earlier day → hide
         if (dow === todayIdx) {
-          const end = toMins(getEnd(it));
+          const end = getEndMin(it);
           if (end != null && end <= nowMins) continue;
         }
       }
@@ -536,8 +571,8 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
     }
     for (const [k, arr] of m) {
       arr.sort((a, b) => {
-        const sa = toMins(getStart(a));
-        const sb = toMins(getStart(b));
+        const sa = getStartMin(a);
+        const sb = getStartMin(b);
         if (sa != null && sb != null) return sa - sb;
         if (sa != null) return -1;
         if (sb != null) return 1;
@@ -573,23 +608,25 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
                 <div className="space-y-2">
                   {rowsByDay.get(val)?.map((l) => {
                     const subjectName = l.subject?.name ?? "—";
+                    const color = subjectColorHexFromRow(l);
+                    const s = getStartStr(l), e = getEndStr(l);
                     return (
                       <div
-                        key={l.id ?? `${val}-${l.degree_id ?? degree?.id ?? "x"}-${l.subject_id ?? "s"}-${getStart(l) ?? "t"}`}
+                        key={l.id ?? `${val}-${l.degree_id ?? degree?.id ?? "x"}-${l.subject_id ?? "s"}-${s ?? "t"}`}
                         className="rounded-xl border p-2 bg-muted/40 hover:bg-muted/60 transition-colors"
                       >
                         <div className="font-medium text-foreground flex items-center gap-2">
                           {l.subject?.id || l.subject_id ? (
                             <span
                               className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-                              style={{ backgroundColor: subjectColor(l.subject?.id ?? l.subject_id), color: "white" }}
+                              style={{ backgroundColor: color, color: "white" }}
                             >
                               {subjectName}
                             </span>
                           ) : (
                             subjectName
                           )}{" "}
-                          {getStart(l) && getEnd(l) ? `(${fmtHHMM(getStart(l))}–${fmtHHMM(getEnd(l))})` : ""}
+                          {s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {l.teacher ? <>By {l.teacher.firstname} {l.teacher.lastname}</> : null}
@@ -958,7 +995,7 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
               const cellsOut = [];
               let idx = 0;
               for (let i = 0; i < leadBlanks; i++) {
-                cellsOut.push(<div key={`b-${i}`} className="min-h-[84px] md:min-h-[110px]" />);
+                cellsOut.push(<div key={`b-${i}`} className="min-h-[84px] md:min-h-[110px]"></div>);
                 idx++;
               }
               for (let d = 1; d <= totalDays; d++, idx++) {
@@ -979,7 +1016,7 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
                 );
               }
               while (idx % 7 !== 0) {
-                cellsOut.push(<div key={`t-${idx}`} className="min-h-[84px] md:min-h-[110px]" />);
+                cellsOut.push(<div key={`t-${idx}`} className="min-h-[84px] md:min-h-[110px]"></div>);
                 idx++;
               }
               return cellsOut;
@@ -998,6 +1035,7 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
   const [open, setOpen] = useState(false);
   const [mini, setMini] = useState({ subject_id: "", teacher_id: "", title: "" });
   const [saving, setSaving] = useState(false);
+
   return (
     <div
       className={`min-h-[84px] md:min-h-[110px] rounded-xl border p-2 md:p-3 transition-colors flex flex-col gap-2 ${
@@ -1014,22 +1052,23 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
       </div>
 
       <div className="flex flex-col gap-1">
-        {dayPlans.map((p) => (
-          <div key={p.id} className="inline-flex items-center gap-2 rounded-md px-2 py-1 bg-muted">
-            {p.subject?.name ? (
-              <span
-                className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium"
-                style={{ backgroundColor: subjectColor(p.subject?.id ?? p.subject_id), color: "white" }}
-              >
-                {p.subject.name}
-              </span>
-            ) : null}
-            <span className="text-xs text-foreground flex-1 truncate">{p.title || ""}</span>
-            <button className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-background/70" title="Supprimer plan" onClick={() => deletePlan(p.id)}>
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
+        {dayPlans.map((p) => {
+          const key = p?.subject?.key || (p?.subject?.name ? slugify(p.subject.name) : "");
+          const color = key ? (subjectColors[key] || `hsl(${goldenHue(key)} 70% 45%)`) : `hsl(${goldenHue("subject")} 70% 45%)`;
+          return (
+            <div key={p.id} className="inline-flex items-center gap-2 rounded-md px-2 py-1 bg-muted">
+              {p.subject?.name ? (
+                <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: color, color: "white" }}>
+                  {p.subject.name}
+                </span>
+              ) : null}
+              <span className="text-xs text-foreground flex-1 truncate">{p.title || ""}</span>
+              <button className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-background/70" title="Supprimer plan" onClick={() => deletePlan(p.id)}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        })}
         {!dayPlans.length && <span className="text-[11px] text-muted-foreground">—</span>}
       </div>
 

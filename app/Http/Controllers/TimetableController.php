@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\TimetableResource;
 use App\Models\Timetable;
 use App\Models\Subject;
 use App\Models\User;
@@ -28,25 +29,23 @@ class TimetableController extends Controller
 
         $perPage = max(1, min((int) $req->query('per_page', 100), 1000));
 
-        // Guarded ordering (all these columns exist in your schema dump, but guard is harmless)
-        if (Schema::hasColumn('timetables', 'degree_id'))  $q->orderBy('degree_id');
-        if (Schema::hasColumn('timetables', 'day_of_week'))$q->orderBy('day_of_week');
+        if (Schema::hasColumn('timetables', 'degree_id'))   $q->orderBy('degree_id');
+        if (Schema::hasColumn('timetables', 'day_of_week')) $q->orderBy('day_of_week');
 
-        // TIME ordering: strictly NULL-safe (no empty-string comparisons)
         if (Schema::hasColumn('timetables', 'start_time')) {
             $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END');
             $q->orderBy('start_time');
         }
 
-        // Period at the end (numeric tinyint in your early migration)
         if (Schema::hasColumn('timetables', 'period')) {
             $q->orderBy('period');
         }
 
         $page = $q->paginate($perPage);
 
+        // Keep your meta, but emit normalized lessons
         return response()->json([
-            'data' => $page->items(),
+            'data' => TimetableResource::collection($page->items()),
             'meta' => [
                 'current_page' => $page->currentPage(),
                 'last_page'    => $page->lastPage(),
@@ -78,7 +77,11 @@ class TimetableController extends Controller
             ->when(Schema::hasColumn('timetables', 'period'), fn($q) => $q->orderBy('period'))
             ->get();
 
-        return response()->json(['data' => ['lessons' => $lessons]]);
+        return response()->json([
+            'data' => [
+                'lessons' => TimetableResource::collection($lessons),
+            ],
+        ]);
     }
 
     /** Parent → lessons for a selected child (?child_id=…) */
@@ -110,20 +113,22 @@ class TimetableController extends Controller
             ->when(Schema::hasColumn('timetables', 'period'), fn($q) => $q->orderBy('period'))
             ->get();
 
-        return response()->json(['data' => ['lessons' => $lessons]]);
+        return response()->json([
+            'data' => [
+                'lessons' => TimetableResource::collection($lessons),
+            ],
+        ]);
     }
 
     /** Create */
     public function store(Request $request)
     {
-        // You only have start_time/end_time in schema (not starts_at/ends_at)
         $data = $request->validate([
             'degree_id'   => ['required','exists:degrees,id'],
             'subject_id'  => ['required','exists:subjects,id'],
             'teacher_id'  => ['required','exists:users,id'],
             'room_id'     => ['nullable','exists:rooms,id'],
             'day_of_week' => ['required','integer', Rule::in([1,2,3,4,5,6,7])],
-            // keep period numeric to match earliest migration (unsigned tinyint)
             'period'      => ['nullable','integer','min:1','max:50','required_without_all:start_time,end_time'],
             'start_time'  => ['nullable','date_format:H:i','required_without:period'],
             'end_time'    => ['nullable','date_format:H:i','required_with:start_time','after:start_time'],
@@ -139,7 +144,7 @@ class TimetableController extends Controller
             'subject:id,name','degree:id,name','room:id,name','teacher:id,firstname,lastname',
         ]);
 
-        return response()->json(['data' => $row], 201);
+        return response()->json(['data' => new TimetableResource($row)], 201);
     }
 
     /** Update */
@@ -158,7 +163,7 @@ class TimetableController extends Controller
             'week_start'  => ['sometimes','nullable','date'],
         ]);
 
-        // Invariant: we must have either period or a time range
+        // Invariant: either period or a time range
         $period     = array_key_exists('period', $data) ? $data['period'] : $timetable->period;
         $start_time = array_key_exists('start_time', $data) ? $data['start_time'] : $timetable->start_time;
         $end_time   = array_key_exists('end_time', $data) ? $data['end_time'] : $timetable->end_time;
@@ -178,11 +183,11 @@ class TimetableController extends Controller
 
         $timetable->update($data);
 
-        return response()->json([
-            'data' => $timetable->fresh()->load([
-                'subject:id,name','degree:id,name','room:id,name','teacher:id,firstname,lastname'
-            ]),
+        $fresh = $timetable->fresh()->load([
+            'subject:id,name','degree:id,name','room:id,name','teacher:id,firstname,lastname'
         ]);
+
+        return response()->json(['data' => new TimetableResource($fresh)]);
     }
 
     public function destroy(Timetable $timetable)

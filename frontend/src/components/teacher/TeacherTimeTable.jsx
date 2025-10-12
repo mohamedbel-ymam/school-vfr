@@ -7,8 +7,13 @@ import TimeTableApi from "../../services/api/admin/TimeTableApi";
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
 
-const getStartRaw = (l) => l?.start_time ?? l?.starts_at ?? null;
-const getEndRaw   = (l) => l?.end_time   ?? l?.ends_at   ?? null;
+// ✅ Prefer normalized resource fields first, keep graceful fallback
+const getStartStr = (l) => l?.start ?? l?.start_time ?? l?.starts_at ?? null;
+const getEndStr   = (l) => l?.end   ?? l?.end_time   ?? l?.ends_at   ?? null;
+const getStartMin = (l) =>
+  typeof l?.start_minutes === "number" ? l.start_minutes : toMins(getStartStr(l));
+const getEndMin   = (l) =>
+  typeof l?.end_minutes === "number" ? l.end_minutes : toMins(getEndStr(l));
 
 const DAYS = [
   { label: "Lun", full: "Lundi",     val: 1 },
@@ -64,7 +69,7 @@ const isSameDayIndex = (date, dow1to7) => {
 };
 
 /* ---------- DEGREE colors (5-slot palette, stable mapping) ---------- */
-const DEGREE_HUES = [210, 0, 30, 120, 260]; // 5 distinct hues (adjust if you want)
+const DEGREE_HUES = [210, 0, 30, 120, 260]; // 5 distinct hues
 const hashStr = (s) => Array.from(String(s)).reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
 const degreeKey = (l) =>
   l?.timetable?.degree?.id ??
@@ -94,7 +99,7 @@ const degreeColors = (key, mode = "block") => {
   };
 };
 
-/* fixed vertical range (aligns with student grid) */
+/* fixed vertical range */
 const SCHOOL_START_MINS = 9 * 60;   // 09:00
 const SCHOOL_END_MINS   = 22 * 60;  // 22:00
 const PERIOD_DURATION_MINS = 90;    // fallback when only "period" is present
@@ -123,10 +128,10 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-/** Choose minutes to display for a lesson */
+/** ✅ Choose minutes to display for a lesson using normalized fields first */
 const resolveStartEndMins = (l) => {
-  const s = toMins(getStartRaw(l));
-  const e = toMins(getEndRaw(l));
+  const s = getStartMin(l);
+  const e = getEndMin(l);
   if (s != null && e != null && e > s) return [s, e];
   const p = parsePeriodToMins(l?.period);
   if (p) return p;
@@ -189,11 +194,11 @@ export default function TeacherTimetable() {
       try {
         const res = await TimeTableApi.teacher();
         const raw = unwrapLessons(res) ?? [];
-        // normalize & tag monthly plans so they never render as timed blocks
+        // No monthly plans are expected here, but keep the flag harmlessly
         const normalized = raw.map((l) => ({
           ...l,
-          start_time: getStartRaw(l),
-          end_time: getEndRaw(l),
+          start_time: getStartStr(l),
+          end_time: getEndStr(l),
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
         }));
         setLessons(normalized);
@@ -206,7 +211,7 @@ export default function TeacherTimetable() {
     })();
   }, []);
 
-  // subject list (still useful as a filter)
+  // subject list (filter)
   const subjects = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
@@ -380,11 +385,11 @@ function DegreeLegend({ degrees }) {
 function WeekGrid({ lessons, weekOffset, nowTopPct }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
-  // group by day — only TIMED lessons (skip monthly plans)
+  // group by day — only TIMED lessons
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue;                 // <-- never draw plans on the grid
+      if (l.is_plan) continue;                 // safety: never draw plans on the grid
       const mins = resolveStartEndMins(l);
       if (!mins) continue;                     // skip untimed
       const day = Number(l.day_of_week);
@@ -522,14 +527,15 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                   const c = degreeColors(degKey, "block");
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = l.room?.name ?? l.room ?? "";
-                  const startS = parseTimeLike(getStartRaw(l));
-                  const endS   = parseTimeLike(getEndRaw(l));
+                  const startS = parseTimeLike(getStartStr(l));
+                  const endS   = parseTimeLike(getEndStr(l));
 
+                  // ✅ TEACHER LABEL: Degree — Room (line 1) + exact time (line 2)
                   return (
                     <div
                       key={`${l.id ?? `${d.val}-${i}`}`}
                       className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                      title={`${degree} ${startS ?? ""}${endS ? `–${endS}` : ""}${room ? ` • ${room}` : ""}`}
+                      title={`${degree}${room ? ` • ${room}` : ""}${startS ? ` • ${startS}${endS ? `–${endS}` : ""}` : ""}`}
                       style={{
                         top: `${topPct}%`,
                         height: `${heightPct}%`,
@@ -542,11 +548,12 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                     >
                       <div className="px-2 py-1 flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
-                        <span className="font-medium text-foreground truncate">{degree}</span>
+                        <span className="font-medium text-foreground truncate">
+                          {degree}{room ? ` — ${room}` : ""}
+                        </span>
                       </div>
                       <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">
                         {startS && endS ? `${startS}–${endS}` : l.period ? `Créneau ${l.period}` : ""}
-                        {room ? ` • ${room}` : ""}
                       </div>
                     </div>
                   );
@@ -607,6 +614,7 @@ function AgendaList({ lessons, weekOffset }) {
                     ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
                     : "";
 
+                  // ✅ TEACHER AGENDA: Degree — Room + exact time
                   return (
                     <div
                       key={l.id ?? `${d.val}-${i}`}
@@ -617,12 +625,9 @@ function AgendaList({ lessons, weekOffset }) {
                           className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
                           style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
                         >
-                          {degree}
+                          {degree}{room ? ` — ${room}` : ""}
                         </span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {room ? room : ""}
                       </div>
                     </div>
                   );
@@ -645,7 +650,7 @@ function IcsButton({ lessons, weekOffset }) {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue; // skip monthly plans
+      if (l.is_plan) continue; // safety
       const dow = Number(l.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1);
@@ -667,7 +672,7 @@ function IcsButton({ lessons, weekOffset }) {
         end,
         title: degree ? `${degree} • ${subj}` : subj,
         location: room,
-        desc: degree ? `Niveau: ${degree}` : "",
+        desc: degree ? `Niveau: ${degree}${room ? ` — ${room}` : ""}` : (room || ""),
       });
     }
     const ics = buildIcs(events);

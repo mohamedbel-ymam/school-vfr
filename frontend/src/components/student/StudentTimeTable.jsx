@@ -1,6 +1,7 @@
 // src/components/student/StudentTimeTable.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
+import subjectColorMap from "../../config/subjectColors";
 
 /* --------------------------------- Constantes --------------------------------- */
 const DAYS = [
@@ -20,8 +21,11 @@ const PERIOD_DURATION_MINS = 90;       // 1h30 fallback when only "period" is gi
 /* ---------------------------------- Helpers ----------------------------------- */
 const unwrap = (r) => r?.data?.data ?? r?.data ?? null;
 
-const getStartRaw = (l) => l?.start_time ?? l?.starts_at ?? null;
-const getEndRaw   = (l) => l?.end_time   ?? l?.ends_at   ?? null;
+// ✅ Prefer normalized resource fields first, keep graceful fallback
+const getStartStr = (l) => l?.start ?? l?.start_time ?? l?.starts_at ?? null;
+const getEndStr   = (l) => l?.end   ?? l?.end_time   ?? l?.ends_at   ?? null;
+const getStartMin = (l) => (typeof l?.start_minutes === "number" ? l.start_minutes : toMins(getStartStr(l)));
+const getEndMin   = (l) => (typeof l?.end_minutes   === "number" ? l.end_minutes   : toMins(getEndStr(l)));
 
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -66,23 +70,48 @@ const isSameDayIndex = (date, dow1to7) => {
   return ours === dow1to7;
 };
 
-/* ------- Unique colors per subject (golden angle for stable distinct hues) ---- */
-const subjectKey = (l) => l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
-const hueForSubject = (idOrKey) => ((Number(idOrKey || 0) * 137) % 360);
-const subjectColors = (key, variant = "block") => {
-  const hue = hueForSubject(key);
-  if (variant === "chip") {
-    return {
-      bg: `hsl(${hue}, 70%, 45%)`,
-      text: "#fff",
-      border: `hsl(${hue}, 65%, 40%)`,
-      softBg: `hsla(${hue}, 85%, 45%, 0.12)`,
-    };
-  }
+/* ------- Fixed subject colors (map first, then deterministic fallback) -------- */
+const slugify = (s = "") =>
+  s
+    .normalize?.("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+const subjectKeyFromRow = (l) =>
+  l?.subject?.key ||
+  (l?.subject?.name ? slugify(l.subject.name) : l?.subject_key || slugify(l?.subject_name || ""));
+
+const hueFromString = (str) => {
+  let h = 0;
+  const s = String(str || "subject");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return (h * 137.508) % 360;
+};
+
+const subjectColorChip = (l) => {
+  const key = subjectKeyFromRow(l);
+  const hex = key && subjectColorMap[key];
+  if (hex) return { bg: hex, text: "#fff", border: "transparent", soft: `${hex}1f` }; // soft=~12% alpha
+  const hue = hueFromString(key);
   return {
-    bg: `hsla(${hue}, 85%, 45%, 0.18)`,
-    border: `hsl(${hue}, 65%, 45%)`,
-    accent: `hsl(${hue}, 85%, 45%)`,
+    bg: `hsl(${hue} 70% 45%)`,
+    text: "#fff",
+    border: `hsl(${hue} 65% 35%)`,
+    soft: `hsl(${hue} 85% 90% / 0.12)`,
+  };
+};
+
+const subjectColorBlock = (l) => {
+  const key = subjectKeyFromRow(l);
+  const hex = key && subjectColorMap[key];
+  if (hex) return { bg: `${hex}2a`, border: `${hex}`, accent: hex }; // ~16% alpha
+  const hue = hueFromString(key);
+  return {
+    bg: `hsl(${hue} 85% 45% / 0.18)`,
+    border: `hsl(${hue} 65% 45%)`,
+    accent: `hsl(${hue} 85% 45%)`,
   };
 };
 
@@ -114,10 +143,10 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-// Choose minutes to display for a row
+// Choose minutes to display for a row (normalized first)
 const resolveStartEndMins = (row) => {
-  const s = toMins(getStartRaw(row));
-  const e = toMins(getEndRaw(row));
+  const s = getStartMin(row);
+  const e = getEndMin(row);
   if (s != null && e != null && e > s) return [s, e];
 
   const p = parsePeriodToMins(row?.period);
@@ -200,6 +229,7 @@ export default function StudentTimeTable() {
               ? {
                   id: l.subject?.id ?? l.subject_id,
                   name: l.subject?.name ?? l.subject_name ?? "Matière",
+                  key: l.subject?.key ?? undefined,
                 }
               : l?.subject?.name
               ? { id: null, name: l.subject.name }
@@ -208,10 +238,12 @@ export default function StudentTimeTable() {
           room: l?.room ?? (l?.room_id ? null : undefined),
           timetable_id: l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
           timetable: l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
-          start_time: getStartRaw(l),
-          end_time: getEndRaw(l),
-          /** mark items coming from monthly plan so we never try to place them on the time grid */
+          start: getStartStr(l),
+          end: getEndStr(l),
+          // mark items coming from monthly plan so we never try to place them on the time grid
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
+          start_minutes: typeof l?.start_minutes === "number" ? l.start_minutes : undefined,
+          end_minutes: typeof l?.end_minutes === "number" ? l.end_minutes : undefined,
         }));
 
         setLessons(normalized);
@@ -229,7 +261,7 @@ export default function StudentTimeTable() {
   const subjects = useMemo(() => {
     const s = new Map();
     for (const l of lessons) {
-      const key = subjectKey(l);
+      const key = subjectKeyFromRow(l) || String(l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject");
       const name = l?.subject?.name ?? l?.subject_name ?? "Matière";
       s.set(String(key), name);
     }
@@ -247,7 +279,8 @@ export default function StudentTimeTable() {
 
   const shownLessons = useMemo(() => {
     return lessons.filter((l) => {
-      const okSubject = !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
+      const key = subjectKeyFromRow(l) || String(l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject");
+      const okSubject = !subjectFilter || String(key) === String(subjectFilter);
       const okPlan = planFilter === "all" || String(l?.timetable_id) === String(planFilter);
       return okSubject && okPlan;
     });
@@ -363,12 +396,14 @@ function Legend({ subjects }) {
   return (
     <div className="flex flex-wrap gap-2 text-xs">
       {subjects.map((s) => {
-        const c = subjectColors(s.id, "chip");
+        // s.id is our subject key (slug); use a dummy row to compute colors
+        const dummy = { subject: { name: s.name, key: s.id } };
+        const c = subjectColorChip(dummy);
         return (
           <span
             key={s.id}
             className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-2 py-0.5 border"
-            style={{ borderColor: c.border, background: c.softBg }}
+            style={{ borderColor: c.border, background: c.soft }}
           >
             <span className="h-3 w-3 rounded-full" style={{ background: c.bg }} />
             <span className="text-foreground/80">{s.name}</span>
@@ -387,7 +422,7 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue;            // ⟵ never draw plans on the grid
+      if (l.is_plan) continue;            // never draw plans on the time grid
       const mins = resolveStartEndMins(l);
       if (!mins) continue;                // skip untimed
       const day = Number(l.day_of_week);
@@ -521,15 +556,17 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                       const leftPct = laneIndex * (100 / lanes.length);
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Matière";
-                      const c = subjectColors(subjectKey(l), "block");
-                      const tName = teacherName(l.teacher, l.teacher_id);
+                      const c = subjectColorBlock(l);
                       const rName = l.room?.name ?? l.room ?? (l.room_id ? `Salle #${l.room_id}` : "");
+                      const startS = parseTimeLike(getStartStr(l));
+                      const endS   = parseTimeLike(getEndStr(l));
 
+                      // ✅ STUDENT LABEL: Subject — Room (line 1) + exact time from admin (line 2)
                       return (
                         <div
                           key={`${l.id ?? `${d.val}-${i}`}`}
                           className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                          title={`${subjName} ${parseTimeLike(getStartRaw(l)) ?? ""}${getEndRaw(l) ? `–${parseTimeLike(getEndRaw(l))}` : ""}${rName ? ` • ${rName}` : ""}${tName ? ` • ${tName}` : ""}`}
+                          title={`${subjName}${rName ? ` • ${rName}` : ""}${startS ? ` • ${startS}${endS ? `–${endS}` : ""}` : ""}`}
                           style={{
                             top: `${topPct}%`,
                             height: `${heightPct}%`,
@@ -542,14 +579,12 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                         >
                           <div className="px-2 py-1 flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
-                            <span className="font-medium text-foreground truncate">{subjName}</span>
+                            <span className="font-medium text-foreground truncate">
+                              {subjName}{rName ? ` — ${rName}` : ""}
+                            </span>
                           </div>
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">
-                            {parseTimeLike(getStartRaw(l)) && parseTimeLike(getEndRaw(l))
-                              ? `${parseTimeLike(getStartRaw(l))}–${parseTimeLike(getEndRaw(l))}`
-                              : ""}
-                            {tName ? ` • ${tName}` : ""}
-                            {rName ? ` • ${rName}` : ""}
+                            {startS && endS ? `${startS}–${endS}` : l.period ? `Créneau ${l.period}` : ""}
                           </div>
                         </div>
                       );
@@ -602,12 +637,12 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const c = subjectColors(subjectKey(l), "chip");
-                  const tName = teacherName(l.teacher, l.teacher_id);
+                  const chip = subjectColorChip(l);
+                  const subjName = l?.subject?.name ?? l?.subject_name ?? "Matière";
                   const rName = l.room?.name ?? l.room ?? (l.room_id ? `Salle #${l.room_id}` : "");
                   const times = resolveStartEndMins(l);
 
-                  // For monthly plans (or untimed), show info only (subject + room), no faux time/period.
+                  // Plans/untimed: Subject — Room only; Timed: add exact time
                   const timeStr = !l.is_plan && times
                     ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
                     : "";
@@ -619,16 +654,12 @@ function AgendaList({ lessons, weekOffset }) {
                     >
                       <div className="font-medium text-foreground flex items-center gap-2">
                         <span
-                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xl font-medium"
-                          style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
+                          style={{ background: chip.bg, color: chip.text, border: `1px solid ${chip.border}` }}
                         >
-                          {l?.subject?.name ?? l?.subject_name ?? "Matière"}
+                          {subjName}{rName ? ` — ${rName}` : ""}
                         </span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
-                      </div>
-                      <div className="text-black dark:text-white">
-                        {tName ? `Par ${tName}` : ""}
-                        {rName ? ` • ${rName}` : ""}
                       </div>
                     </div>
                   );
@@ -662,14 +693,13 @@ function IcsButton({ lessons, weekOffset }) {
 
       const subj = l?.subject?.name ?? l?.subject_name ?? "Séance";
       const room = l.room?.name ?? l.room ?? (l.room_id ? `Salle #${l.room_id}` : "");
-      const teacher = teacherName(l.teacher, l.teacher_id);
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
         start, end,
-        title: subj,
+        title: `${subj}${room ? ` — ${room}` : ""}`,
         location: room,
-        desc: teacher ? `Par ${teacher}` : "",
+        desc: "",
       });
     }
     const ics = buildIcs(events);
