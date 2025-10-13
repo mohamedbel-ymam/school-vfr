@@ -119,7 +119,7 @@ const Hero = () => (
               Enseigner les collégiens & lycéens, gratuitement — avec exigence
             </h1>
             <p className="mt-4 text-slate-600 dark:text-slate-300 text-base sm:text-lg max-w-2xl">
-              Notre établissement offre des cours d'appui sélectifs pour améliorer nettement les notes en <strong>sciences</strong>, <strong>mathématiques</strong>, <strong>langues</strong> et <strong>informatique</strong>. L'accès est <strong>gratuit</strong>, mais la sélection et les seuils d'assiduité sont stricts. Les meilleurs élèves (Top 5 après le baccalauréat ) reçoivent une <strong>bourse d'excellence</strong>.
+              Notre établissement offre des cours d'appui sélectifs pour améliorer nettement les notes en <strong>sciences</strong>, <strong>mathématiques</strong>, <strong>langues</strong> et <strong>informatique</strong>. L'accès est <strong>gratuit</strong>, mais la sélection et les seuils d'assiduité sont stricts. Les meilleurs élèves (Top 3 après le baccalauréat ) reçoivent une <strong>bourse d'excellence</strong>.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <ButtonLink href="/#plateforme">Voir la plateforme</ButtonLink>
@@ -152,7 +152,7 @@ const Programmes = () => (
         <ProgCard title="Sciences" points={["Physique • Chimie", "TP, raisonnement et résolution"]} />
         <ProgCard title="Langues" points={["Français • Anglais •Arabe ","Expression, compréhension & étude"]} />
         <ProgCard title="Informatique" points={["Algorithmique • Python", "Web & culture numérique"]} />
-        <ProgCard title="Sciences humaines" points={["Education Islamic  ", "Histoire Geographie"]} />
+        <ProgCard title="Sciences humaines" points={["Education Islamique  ", "Histoire Geographie"]} />
 
       </div>
     </Container>
@@ -243,7 +243,7 @@ const Parcours = () => (
       <div className="mt-10 grid gap-6 md:grid-cols-3">
         <Step no="01" title="Candidature" desc="Dossier + test d'entrée. Sélection selon potentiel et motivation." />
         <Step no="02" title="Engagement" desc="Assiduité minimale et respect des seuils. Suivi personnalisé." />
-        <Step no="03" title="Excellence" desc="Préparation Bac FR. Coaching et méthodes pour viser haut." />
+        <Step no="03" title="Excellence" desc="Préparation Bac. Coaching et méthodes pour viser haut." />
       </div>
     </Container>
   </Section>
@@ -269,14 +269,14 @@ const GratuitBourse = () => (
           <Card>
             <div className="text-lg font-semibold">Gratuité</div>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Aucun frais d'inscription ni de scolarité. En contrepartie : présence, rigueur et progression mesurable.</p>
-            <div className="mt-6 text-lg font-semibold">Bourse Top 5</div>
+            <div className="mt-6 text-lg font-semibold">Bourse Top 3</div>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Après le baccalauréat , les 5 meilleurs obtiennent une <strong>bourse d'excellence</strong> pour leurs études universitaires.</p>
           </Card>
         </div>
         <div className="md:col-span-2 order-1 md:order-2">
           <motion.figure initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="relative overflow-hidden rounded-2xl ring-1 ring-white/15 shadow-xl h-full">
             <img src={imgs.bourse} alt="Remise de bourses d'excellence" className="h-full w-full object-cover" loading="lazy" />
-            <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent px-4 py-3 text-sm text-white">Bourse d'excellence — Top 5</figcaption>
+            <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent px-4 py-3 text-sm text-white">Bourse d'excellence — Top 3</figcaption>
           </motion.figure>
         </div>
       </div>
@@ -364,7 +364,7 @@ const FAQ = () => (
         <FaqItem q="Est‑ce mobile ?" a="Oui. L'interface est responsive et s'adapte au téléphone, à la tablette et au bureau." />
         <FaqItem q="Qui peut s'inscrire ?" a="Collégiens et lycéens motivés. La sélection se fait sur dossier et test d'entrée." />
         <FaqItem q="Les cours sont‑ils vraiment gratuits ?" a="Oui, à condition de respecter l'assiduité et les objectifs de progression." />
-        <FaqItem q="Comment fonctionne la bourse ?" a="Après le Bac FR, les 5 meilleurs obtiennent une bourse d'excellence pour l'université." />
+        <FaqItem q="Comment fonctionne la bourse ?" a="Après le Bac, les 3 meilleurs obtiennent une bourse d'excellence pour l'université." />
       </div>
     </Container>
   </Section>

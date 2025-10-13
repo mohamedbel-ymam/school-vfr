@@ -1,19 +1,14 @@
-// src/components/teacher/TeacherTimetable.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
+import subjectColors from "../../config/subjectColors";
 
 /* ---------------- helpers & constants ---------------- */
 
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
 
-// ✅ Prefer normalized resource fields first, keep graceful fallback
-const getStartStr = (l) => l?.start ?? l?.start_time ?? l?.starts_at ?? null;
-const getEndStr   = (l) => l?.end   ?? l?.end_time   ?? l?.ends_at   ?? null;
-const getStartMin = (l) =>
-  typeof l?.start_minutes === "number" ? l.start_minutes : toMins(getStartStr(l));
-const getEndMin   = (l) =>
-  typeof l?.end_minutes === "number" ? l.end_minutes : toMins(getEndStr(l));
+const getStartRaw = (l) => l?.start_time ?? l?.starts_at ?? null;
+const getEndRaw   = (l) => l?.end_time   ?? l?.ends_at   ?? null;
 
 const DAYS = [
   { label: "Lun", full: "Lundi",     val: 1 },
@@ -68,38 +63,40 @@ const isSameDayIndex = (date, dow1to7) => {
   return ours === dow1to7;
 };
 
-/* ---------- DEGREE colors (5-slot palette, stable mapping) ---------- */
-const DEGREE_HUES = [210, 0, 30, 120, 260]; // 5 distinct hues
-const hashStr = (s) => Array.from(String(s)).reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
-const degreeKey = (l) =>
-  l?.timetable?.degree?.id ??
-  l?.degree?.id ??
-  l?.degree_id ??
-  l?.timetable?.degree?.name ??
-  l?.degree?.name ??
-  "degree";
-const degreeHue = (key) => {
-  const n = typeof key === "number" ? key : Math.abs(hashStr(String(key)));
-  return DEGREE_HUES[n % DEGREE_HUES.length];
+/* ---------- SUBJECT colors (stable mapping) ---------- */
+const slugify = (s = "") =>
+  s.normalize?.("NFD")?.replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+const hashInt = (str) => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
 };
-const degreeColors = (key, mode = "block") => {
-  const hue = degreeHue(key);
-  if (mode === "chip") {
-    return {
-      bg: `hsl(${hue}, 85%, 45%)`,
-      soft: `hsla(${hue},85%,45%,0.12)`,
-      border: `hsl(${hue}, 65%, 40%)`,
-      text: "#fff",
-    };
+const goldenHue = (k) => (hashInt(k) * 137.508) % 360;
+
+const subjectKey = (l) =>
+  l?.subject?.key ??
+  (l?.subject?.name ? slugify(l.subject.name) : null) ??
+  (l?.subject?.id ?? l?.subject_id ?? "subject");
+
+const subjectBlockColors = (l) => {
+  const key = String(subjectKey(l) ?? "subject");
+  const fixed = subjectColors?.[key];
+  if (fixed) {
+    return { bg: `${fixed}22`, border: fixed, accent: fixed, chip: fixed, chipText: "#fff" };
   }
+  const hue = goldenHue(key);
   return {
-    bg: `hsla(${hue}, 85%, 45%, 0.18)`,
-    border: `hsl(${hue}, 65%, 45%)`,
-    accent: `hsl(${hue}, 85%, 45%)`,
+    bg:     `hsla(${hue},85%,45%,0.20)`,
+    border: `hsl(${hue},65%,45%)`,
+    accent: `hsl(${hue},85%,45%)`,
+    chip:   `hsl(${hue},70%,45%)`,
+    chipText: "#fff",
   };
 };
 
-/* fixed vertical range */
+/* fixed vertical range (aligns with student grid) */
 const SCHOOL_START_MINS = 9 * 60;   // 09:00
 const SCHOOL_END_MINS   = 22 * 60;  // 22:00
 const PERIOD_DURATION_MINS = 90;    // fallback when only "period" is present
@@ -128,10 +125,10 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-/** ✅ Choose minutes to display for a lesson using normalized fields first */
+/** Choose minutes to display for a lesson */
 const resolveStartEndMins = (l) => {
-  const s = getStartMin(l);
-  const e = getEndMin(l);
+  const s = toMins(getStartRaw(l));
+  const e = toMins(getEndRaw(l));
   if (s != null && e != null && e > s) return [s, e];
   const p = parsePeriodToMins(l?.period);
   if (p) return p;
@@ -174,31 +171,16 @@ export default function TeacherTimetable() {
   ); // "grid" | "agenda"
   const [subjectFilter, setSubjectFilter] = useState("");
   const [degreeFilter, setDegreeFilter]   = useState("");
-  const [nowTopPct, setNowTopPct] = useState(0);
-
-  // live "now" position
-  useEffect(() => {
-    const min = SCHOOL_START_MINS, range = SCHOOL_END_MINS - SCHOOL_START_MINS;
-    const tick = () => {
-      const n = new Date();
-      const mins = n.getHours() * 60 + n.getMinutes();
-      setNowTopPct(clamp((mins - min) / range, 0, 1) * 100);
-    };
-    tick();
-    const t = setInterval(tick, 60 * 1000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     (async () => {
       try {
         const res = await TimeTableApi.teacher();
         const raw = unwrapLessons(res) ?? [];
-        // No monthly plans are expected here, but keep the flag harmlessly
         const normalized = raw.map((l) => ({
           ...l,
-          start_time: getStartStr(l),
-          end_time: getEndStr(l),
+          start_time: getStartRaw(l),
+          end_time: getEndRaw(l),
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
         }));
         setLessons(normalized);
@@ -222,7 +204,7 @@ export default function TeacherTimetable() {
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
-  // degree list (legend + filter + colors)
+  // degree list (filter)
   const degrees = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
@@ -288,12 +270,9 @@ export default function TeacherTimetable() {
         </div>
       </div>
 
-      {/* Degree Legend (colors by degree) */}
-      <DegreeLegend degrees={degrees} />
-
       {/* Content */}
       {view === "grid" ? (
-        <WeekGrid lessons={filtered} weekOffset={weekOffset} nowTopPct={nowTopPct} />
+        <WeekGrid lessons={filtered} weekOffset={weekOffset} />
       ) : (
         <AgendaList lessons={filtered} weekOffset={weekOffset} />
       )}
@@ -359,39 +338,18 @@ function ViewToggle({ value, onChange }) {
   );
 }
 
-function DegreeLegend({ degrees }) {
-  if (!degrees?.length) return null;
-  return (
-    <div className="flex flex-wrap gap-2 text-xs">
-      {degrees.map((d) => {
-        const c = degreeColors(d.id, "chip");
-        return (
-          <span
-            key={d.id}
-            className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-2 py-0.5 border"
-            style={{ borderColor: c.border, background: c.soft }}
-          >
-            <span className="h-3 w-3 rounded-full" style={{ background: c.bg }} />
-            <span className="text-foreground/80">{d.name}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 /* ===================== VIEW: GRID ===================== */
 
-function WeekGrid({ lessons, weekOffset, nowTopPct }) {
+function WeekGrid({ lessons, weekOffset }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
-  // group by day — only TIMED lessons
+  // group by day — only TIMED lessons (skip monthly plans)
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue;                 // safety: never draw plans on the grid
+      if (l.is_plan) continue;
       const mins = resolveStartEndMins(l);
-      if (!mins) continue;                     // skip untimed
+      if (!mins) continue;
       const day = Number(l.day_of_week);
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
@@ -503,13 +461,7 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                 return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
               })}
 
-              {/* NOW line */}
-              {isToday && (
-                <div
-                  className="absolute left-0 right-0 h-[2px] bg-primary/70 shadow-[0_0_10px_rgba(99,102,241,0.6)]"
-                  style={{ top: `${nowTopPct}%` }}
-                />
-              )}
+              {/* NO “now” line anymore */}
 
               {/* lessons */}
               {lanes.map((lane, laneIndex) =>
@@ -523,19 +475,22 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                   const widthPct = Math.max(100 / lanes.length, 25);
                   const leftPct = laneIndex * (100 / lanes.length);
 
-                  const degKey = degreeKey(l);
-                  const c = degreeColors(degKey, "block");
+                  const c = subjectBlockColors(l);                  // subject color background
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = l.room?.name ?? l.room ?? "";
-                  const startS = parseTimeLike(getStartStr(l));
-                  const endS   = parseTimeLike(getEndStr(l));
+                  const startS = parseTimeLike(getStartRaw(l));
+                  const endS   = parseTimeLike(getEndRaw(l));
 
-                  // ✅ TEACHER LABEL: Degree — Room (line 1) + exact time (line 2)
+                  const info = [
+                    startS && endS ? `${startS}–${endS}` : (l.period ? `Créneau ${l.period}` : ""),
+                    room || ""
+                  ].filter(Boolean).join(" • ");
+
                   return (
                     <div
                       key={`${l.id ?? `${d.val}-${i}`}`}
                       className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                      title={`${degree}${room ? ` • ${room}` : ""}${startS ? ` • ${startS}${endS ? `–${endS}` : ""}` : ""}`}
+                      title={`${degree}${info ? ` • ${info}` : ""}`}
                       style={{
                         top: `${topPct}%`,
                         height: `${heightPct}%`,
@@ -548,12 +503,10 @@ function WeekGrid({ lessons, weekOffset, nowTopPct }) {
                     >
                       <div className="px-2 py-1 flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
-                        <span className="font-medium text-foreground truncate">
-                          {degree}{room ? ` — ${room}` : ""}
-                        </span>
+                        <span className="font-medium text-foreground truncate">{degree}</span>
                       </div>
                       <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">
-                        {startS && endS ? `${startS}–${endS}` : l.period ? `Créneau ${l.period}` : ""}
+                        {info}
                       </div>
                     </div>
                   );
@@ -605,8 +558,7 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const degKey = degreeKey(l);
-                  const c = degreeColors(degKey, "chip");
+                  const c = subjectBlockColors(l);
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = l.room?.name ?? l.room ?? "";
                   const mins = resolveStartEndMins(l);
@@ -614,20 +566,21 @@ function AgendaList({ lessons, weekOffset }) {
                     ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
                     : "";
 
-                  // ✅ TEACHER AGENDA: Degree — Room + exact time
                   return (
                     <div
                       key={l.id ?? `${d.val}-${i}`}
                       className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors"
+                      style={{ borderColor: c.border }}
                     >
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        <span
-                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-                          style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
-                        >
-                          {degree}{room ? ` — ${room}` : ""}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
+                              style={{ background: c.chip, color: c.chipText, border: `1px solid ${c.border}` }}>
+                          {degree}
                         </span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {room || ""}
                       </div>
                     </div>
                   );
@@ -650,12 +603,12 @@ function IcsButton({ lessons, weekOffset }) {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue; // safety
+      if (l.is_plan) continue; // skip monthly plans
       const dow = Number(l.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1);
       const mins = resolveStartEndMins(l);
-      if (!mins) continue; // only timed lessons
+      if (!mins) continue; // only timed
 
       const start = new Date(date);
       const end = new Date(date);
@@ -672,7 +625,7 @@ function IcsButton({ lessons, weekOffset }) {
         end,
         title: degree ? `${degree} • ${subj}` : subj,
         location: room,
-        desc: degree ? `Niveau: ${degree}${room ? ` — ${room}` : ""}` : (room || ""),
+        desc: degree ? `Niveau: ${degree}` : "",
       });
     }
     const ics = buildIcs(events);
