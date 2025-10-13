@@ -1,4 +1,4 @@
-// src/components/Admin/Pages/ManageTimeTables.jsx
+// src/components/Admin/Pages/ManageTimeTable.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../../api/axios";
@@ -8,18 +8,18 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from ".
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
-// ✅ NEW: fixed color map (import once created)
+// Fixed subject color map (create file if you want custom colors per subject key)
 import subjectColors from "../../../config/subjectColors";
 
 /* ========================= Helpers & Config ========================= */
 
 const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
 
-// ✅ Prefer normalized API fields from TimetableResource
+// Prefer backend-normalized fields (start/end, start_minutes/end_minutes)
 const getStartStr = (row) => row?.start ?? row?.start_time ?? row?.starts_at ?? null;
 const getEndStr   = (row) => row?.end   ?? row?.end_time   ?? row?.ends_at   ?? null;
-const getStartMin = (row) => (typeof row?.start_minutes === "number" ? row.start_minutes : toMins(getStartStr(row)));
-const getEndMin   = (row) => (typeof row?.end_minutes   === "number" ? row.end_minutes   : toMins(getEndStr(row)));
+const getStartMin = (row) => Number.isFinite(row?.start_minutes) ? row.start_minutes : toMins(getStartStr(row));
+const getEndMin   = (row) => Number.isFinite(row?.end_minutes)   ? row.end_minutes   : toMins(getEndStr(row));
 
 const DAYS = [
   { label: "Lun", val: 1 },
@@ -31,7 +31,7 @@ const DAYS = [
   { label: "Dim", val: 7 },
 ];
 
-// ✅ Stable subject color: use subject key/slug; fallback deterministic
+// Stable subject color (config key → hex). Fallback: deterministic HSL by subject name.
 const slugify = (s = "") =>
   s
     .normalize?.("NFD")
@@ -47,14 +47,12 @@ const hashInt = (str) => {
 };
 const goldenHue = (k) => (hashInt(k) * 137.508) % 360;
 
-/** Returns a HEX color chosen by subject key with fallback deterministic HSL. */
 const subjectColorHexFromRow = (row) => {
   const key =
     row?.subject?.key ||
     (row?.subject?.name ? slugify(row.subject.name) : row?.subject_key || slugify(row?.subject_name || ""));
   if (key && subjectColors[key]) return subjectColors[key];
   const hue = goldenHue(key || "subject");
-  // HSL → simple approx HEX; to keep things lean we use inline hsl() string directly
   return `hsl(${hue} 70% 45%)`;
 };
 
@@ -70,7 +68,7 @@ const monIndex = (jsDay) => (jsDay + 6) % 7;
 
 const startOfWeekMonday = (base = new Date()) => {
   const d = new Date(base);
-  const js = d.getDay(); // 0..6
+  const js = d.getDay();
   const delta = js === 0 ? -6 : 1 - js;
   d.setDate(d.getDate() + delta);
   d.setHours(0, 0, 0, 0);
@@ -109,7 +107,7 @@ const addMinutes = (hhmm, mins) => {
   return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
 };
 
-const DEFAULT_CLASS_MINS = 90; // 1h30
+const DEFAULT_CLASS_MINS = 90;
 
 function useMediaQuery(query) {
   const [matches, setMatches] = useState(() => (typeof window !== "undefined" ? window.matchMedia(query).matches : false));
@@ -254,8 +252,7 @@ export default function ManageTimetables() {
     try {
       const chunks = (arr, n) => arr.reduce((a, _, i) => (i % n ? a[a.length - 1].push(arr[i]) : a.push([arr[i]]), a), []);
       const parts = chunks(ids, 10);
-      let success = 0,
-        fail = 0;
+      let success = 0, fail = 0;
 
       for (const batch of parts) {
         const res = await Promise.allSettled(batch.map((id) => axiosClient.delete(`/admin/timetables/${id}`)));
@@ -289,7 +286,7 @@ export default function ManageTimetables() {
         </Button>
       </div>
 
-      {/* Filters (responsive) */}
+      {/* Filters */}
       <div className="flex flex-wrap gap-2 items-end p-3 rounded-xl bg-muted/40 border">
         <div className="min-w-[180px]">
           <Select value={degreeId} onValueChange={setDegreeId}>
@@ -325,7 +322,6 @@ export default function ManageTimetables() {
               </Select>
             </div>
 
-            {/* Hide past toggle */}
             <label className="inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border bg-background">
               <input type="checkbox" checked={hidePastWeekly} onChange={(e) => setHidePastWeekly(e.target.checked)} />
               masker les semaines (passées)
@@ -466,8 +462,8 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
   const { rowsByDay, idsForDegree } = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     const today = new Date();
-    const js = today.getDay(); // 0..6
-    const todayIdx = js === 0 ? 7 : js; // 1..7
+    const js = today.getDay();
+    const todayIdx = js === 0 ? 7 : js;
     const nowMins = today.getHours() * 60 + today.getMinutes();
 
     for (const it of items) {
@@ -553,14 +549,14 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
   const { rowsByDay, idsForDegree } = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     const today = new Date();
-    const js = today.getDay(); // 0..6
-    const todayIdx = js === 0 ? 7 : js; // 1..7
+    const js = today.getDay();
+    const todayIdx = js === 0 ? 7 : js;
     const nowMins = today.getHours() * 60 + today.getMinutes();
 
     for (const it of items) {
       const dow = Number(it.day_of_week);
       if (hidePast) {
-        if (dow < todayIdx) continue; // earlier day → hide
+        if (dow < todayIdx) continue;
         if (dow === todayIdx) {
           const end = getEndMin(it);
           if (end != null && end <= nowMins) continue;
@@ -598,7 +594,6 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
         </Button>
       </div>
 
-      {/* Responsive: horizontal scroll on phones */}
       <div className="overflow-x-auto">
         <div className="min-w-[900px] md:min-w-0">
           <div className="grid grid-cols-7 gap-3 text-sm">
@@ -661,12 +656,11 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
   });
 
   const [monthlyMonth, setMonthlyMonth] = useState(""); // "YYYY-MM"
-  const [monthlyDay, setMonthlyDay] = useState(""); // "1..31"
+  const [monthlyDay, setMonthlyDay] = useState("");     // "1..31"
   const [monthlyTitle, setMonthlyTitle] = useState("");
   const [monthlyAuto, setMonthlyAuto] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // auto month/day from DoW (current week) until user edits
   useEffect(() => {
     if (!monthlyAuto) return;
     const monday = startOfWeekMonday(new Date());
@@ -675,7 +669,8 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
     setMonthlyDay(String(d.getDate()));
   }, [form.day_of_week, monthlyAuto]);
 
-  const canSave = form.degree_id && form.subject_id && form.teacher_id && form.day_of_week && form.start_time && form.end_time;
+  const canSave =
+    form.degree_id && form.subject_id && form.teacher_id && form.day_of_week && form.start_time && form.end_time;
 
   const toYmdFromYm = (ym, dStr) => {
     const [y, m] = ym.split("-").map(Number);
@@ -699,7 +694,6 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
       const res = await TimeTableApi.create(payload);
       const created = res?.data?.data ?? res?.data;
 
-      // optional monthly plan
       if (monthlyMonth && monthlyDay) {
         const plan_date = toYmdFromYm(monthlyMonth, monthlyDay);
         try {
@@ -822,13 +816,15 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
             <SelectTrigger>
               <SelectValue placeholder="Room (optional)" />
             </SelectTrigger>
-            <SelectContent>{rooms.length ? rooms.map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>) : null}</SelectContent>
+            <SelectContent>
+              {rooms.length ? rooms.map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>) : null}
+            </SelectContent>
           </Select>
         </div>
       </div>
 
       <div className="rounded-xl border p-3 bg-muted/20 space-y-2">
-        <div className="text-sm font-medium">Créer aussi l'emploi du temps pour le mois(optionel)</div>
+        <div className="text-sm font-medium">Créer aussi l'emploi du temps pour le mois (optionel)</div>
         <div className="grid md:grid-cols-6 gap-3">
           <div>
             <Input type="month" value={monthlyMonth} onChange={(e) => { setMonthlyAuto(false); setMonthlyMonth(e.target.value); }} className="h-9" />
@@ -979,7 +975,6 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
         <div className="font-semibold text-foreground">Monthly Subject Plans {degreeId !== "__all__" ? "" : "(select a degree)"}</div>
       </div>
 
-      {/* Scroll container with sticky weekday header; narrower min-width for phones */}
       <div className="overflow-x-auto snap-x snap-mandatory">
         <div className="min-w-[560px] md:min-w-0">
           <div className="grid grid-cols-7 gap-2 text-[11px] md:text-xs font-medium text-muted-foreground mb-2 sticky top-[64px] bg-card z-10 px-1 py-1">
