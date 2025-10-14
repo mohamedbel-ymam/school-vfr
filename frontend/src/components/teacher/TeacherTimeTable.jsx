@@ -8,15 +8,14 @@ import subjectColors from "../../config/subjectColors";
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
 
-/** Extract "HH:MM" from ISO/SQL strings like "2025-01-01T09:00:00Z" or "2025-01-01 09:00:00". */
 // normalize 0..6 (Sun..Sat) → 1..7 (Mon..Sun)
 const normalizeDow = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
-  if (n === 0) return 7;       // Sunday → 7
+  if (n === 0) return 7;
   if (n < 0) return null;
-  if (n > 7) return ((n % 7) || 7);
-  return n;                    // 1..7 already
+  if (n > 7) return (n % 7) || 7;
+  return n;
 };
 
 // Extract HH:MM from "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"
@@ -27,10 +26,8 @@ const extractHHMM = (v) => {
   return m ? `${m[1]}:${m[2]}` : null;
 };
 
-// Use extractors for raw fields that may be full datetimes
 const getStartStr = (l) => l?.start_time ?? extractHHMM(l?.starts_at) ?? null;
 const getEndStr   = (l) => l?.end_time   ?? extractHHMM(l?.ends_at)   ?? null;
-
 
 const DAYS = [
   { label: "Lun", full: "Lundi",     val: 1 },
@@ -84,6 +81,13 @@ const isSameDayIndex = (date, dow1to7) => {
   const ours = js === 0 ? 7 : js;
   return ours === dow1to7;
 };
+const inWeek = (date, monday) => {
+  const start = new Date(monday);
+  const end = addDays(monday, 6);
+  start.setHours(0,0,0,0);
+  end.setHours(23,59,59,999);
+  return date >= start && date <= end;
+};
 
 /* ---------- SUBJECT colors (stable mapping) ---------- */
 const slugify = (s = "") =>
@@ -106,7 +110,6 @@ const subjectBlockColors = (l) => {
   const key = String(subjectKey(l) ?? "subject");
   const fixed = subjectColors?.[key];
   if (fixed) {
-    // If your palette is hex (#rrggbb), fixed + '22' yields a nice translucent bg.
     return { bg: `${fixed}22`, border: fixed, accent: fixed, chip: fixed, chipText: "#fff" };
   }
   const hue = goldenHue(key);
@@ -150,13 +153,13 @@ const parsePeriodToMins = (period) => {
 
 /** Choose minutes to display for a lesson (supports minutes or strings) */
 const resolveStartEndMins = (l) => {
-   const s = toMins(getStartStr(l));
-   const e = toMins(getEndStr(l));
-   if (s != null && e != null && e > s) return [s, e];
-   const p = parsePeriodToMins(l?.period);
-   if (p) return p;
-   return null;
- };
+  const s = toMins(getStartStr(l));
+  const e = toMins(getEndStr(l));
+  if (s != null && e != null && e > s) return [s, e];
+  const p = parsePeriodToMins(l?.period);
+  if (p) return p;
+  return null;
+};
 
 /* ---------------- ICS export ---------------- */
 const toIcsDate = (d) =>
@@ -201,12 +204,13 @@ export default function TeacherTimetable() {
         const res = await TimeTableApi.teacher();
         const raw = unwrapLessons(res) ?? [];
         const normalized = raw.map((l) => ({
-           ...l,
-           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
-           start_time: getStartStr(l),
-           end_time: getEndStr(l),
-           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
-         }));
+          ...l,
+          day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
+          start_time: getStartStr(l),
+          end_time: getEndStr(l),
+          is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
+          plan_date: l?.plan_date ?? l?.date ?? null, // <-- carry exact calendar date for plans
+        }));
         setLessons(normalized);
       } catch (e) {
         console.error(e);
@@ -371,10 +375,11 @@ function WeekGrid({ lessons, weekOffset }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue;
+      if (l.is_plan) continue;           // <-- plans never on grid
       const mins = resolveStartEndMins(l);
-      if (!mins) continue;
+      if (!mins) continue;               // only timed rows
       const day = normalizeDow(l?.day_of_week);
+      if (!day) continue;
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
@@ -470,7 +475,6 @@ function WeekGrid({ lessons, weekOffset }) {
         {/* day columns */}
         {DAYS.map((d) => {
           const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
-          const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
 
           return (
             <div key={d.val} className="relative border-l bg-background/50">
@@ -497,7 +501,7 @@ function WeekGrid({ lessons, weekOffset }) {
                   const widthPct = Math.max(100 / lanes.length, 25);
                   const leftPct = laneIndex * (100 / lanes.length);
 
-                  const c = subjectBlockColors(l);                  // subject color background
+                  const c = subjectBlockColors(l);
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = l.room?.name ?? l.room ?? "";
                   const startS = parseTimeLike(getStartStr(l));
@@ -549,13 +553,27 @@ function WeekGrid({ lessons, weekOffset }) {
 function AgendaList({ lessons, weekOffset }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
+  // Show weekly rows by day_of_week.
+  // Show MONTHLY PLANS only on their exact calendar date if it falls in this displayed week.
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
+
     for (const l of lessons ?? []) {
+      if (l.is_plan && l.plan_date) {
+        const date = new Date(`${l.plan_date}T00:00:00`);
+        if (!isNaN(date) && inWeek(date, monday)) {
+          const js = date.getDay();           // 0..6
+          const dow = js === 0 ? 7 : js;      // 1..7
+          m.get(dow)?.push(l);
+        }
+        continue;
+      }
+
       const day = normalizeDow(l?.day_of_week);
-      if (!m.has(day)) m.set(day, []);
-      m.get(day).push(l);
+      if (!day) continue;
+      m.get(day)?.push(l);
     }
+
     for (const [k, arr] of m) {
       arr.sort((a, b) => {
         const A = resolveStartEndMins(a)?.[0] ?? 0;
@@ -565,7 +583,7 @@ function AgendaList({ lessons, weekOffset }) {
       m.set(k, arr);
     }
     return m;
-  }, [lessons]);
+  }, [lessons, monday]);
 
   return (
     <div className="space-y-6">

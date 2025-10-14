@@ -84,6 +84,15 @@ const isSameDayIndex = (date, dow1to7) => {
   const ours = js === 0 ? 7 : js; // 1..7
   return ours === dow1to7;
 };
+const isSameDay = (a, b) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const inWeek = (date, monday) => {
+  const start = new Date(monday);
+  const end = addDays(monday, 6);
+  start.setHours(0,0,0,0);
+  end.setHours(23,59,59,999);
+  return date >= start && date <= end;
+};
 
 // ---- Subject colors (fixed-by-key with safe fallback) ----
 const slugify = (s = "") =>
@@ -236,8 +245,10 @@ export default function StudentTimeTable() {
 
         const normalized = (raw ?? []).map((l) => ({
           ...l,
+          // day-of-week (weekly rows)
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
 
+          // subject
           subject:
             l?.subject?.id || l?.subject_id
               ? {
@@ -259,8 +270,9 @@ export default function StudentTimeTable() {
           start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
           end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
 
-          // never place monthly plan as timed block
+          // monthly plan flag + date
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
+          plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD preferred
         }));
 
         setLessons(normalized);
@@ -442,6 +454,7 @@ function WeekGrid({ lessons, weekOffset }) {
       const mins = resolveStartEndMins(l);
       if (!mins) continue;                // skip untimed
       const day = normalizeDow(l?.day_of_week);
+      if (!day) continue;
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
@@ -538,7 +551,6 @@ function WeekGrid({ lessons, weekOffset }) {
             {/* colonnes jour */}
             {DAYS.map((d) => {
               const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
-              const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
               return (
                 <div key={d.val} className="relative border-l bg-background/50">
                   {/* lignes heures */}
@@ -609,13 +621,29 @@ function WeekGrid({ lessons, weekOffset }) {
 function AgendaList({ lessons, weekOffset }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
+  // IMPORTANT: show weekly rows by day_of_week, but
+  // show MONTHLY PLANS only on their exact calendar date within the selected week.
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
+
     for (const l of lessons ?? []) {
+      // monthly plan with plan_date → only include if it's in the displayed week; day is derived from plan_date
+      if (l.is_plan && l.plan_date) {
+        const date = new Date(`${l.plan_date}T00:00:00`);
+        if (!isNaN(date) && inWeek(date, monday)) {
+          const js = date.getDay();          // 0..6
+          const dow = js === 0 ? 7 : js;     // 1..7
+          m.get(dow)?.push(l);
+        }
+        continue;
+      }
+
+      // weekly row → use configured day_of_week
       const day = normalizeDow(l?.day_of_week);
-      if (!m.has(day)) m.set(day, []);
-      m.get(day).push(l);
+      if (!day) continue;
+      m.get(day)?.push(l);
     }
+
     for (const [k, arr] of m) {
       arr.sort((a, b) => {
         const A = resolveStartEndMins(a)?.[0] ?? 0;
@@ -625,7 +653,7 @@ function AgendaList({ lessons, weekOffset }) {
       m.set(k, arr);
     }
     return m;
-  }, [lessons]);
+  }, [lessons, monday]);
 
   return (
     <div className="space-y-6">
@@ -646,10 +674,7 @@ function AgendaList({ lessons, weekOffset }) {
                   const rName = roomName(l);
                   const times = resolveStartEndMins(l);
 
-                  // For monthly plans (or untimed), show info only (subject + room), no faux time/period.
-                  const timeStr = !l.is_plan && times
-                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
-                    : "";
+                  const timeStr = times ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})` : "";
 
                   return (
                     <div

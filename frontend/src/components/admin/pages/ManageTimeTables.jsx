@@ -15,9 +15,48 @@ import subjectColors from "../../../config/subjectColors";
 
 const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
 
+// --- time helpers ---
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** Extract "HH:MM" out of "YYYY-MM-DD HH:MM:SS" or "...THH:MM:SSZ" */
+const extractHHMM = (v) => {
+  if (!v) return null;
+  const s = String(v);
+  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
+  return m ? `${m[1]}:${m[2]}` : null;
+};
+
 // Prefer backend-normalized fields (start/end, start_minutes/end_minutes)
-const getStartStr = (row) => row?.start ?? row?.start_time ?? row?.starts_at ?? null;
-const getEndStr   = (row) => row?.end   ?? row?.end_time   ?? row?.ends_at   ?? null;
+const getStartStr = (row) => row?.start ?? row?.start_time ?? extractHHMM(row?.starts_at) ?? null;
+const getEndStr   = (row) => row?.end   ?? row?.end_time   ?? extractHHMM(row?.ends_at)   ?? null;
+
+const parseTimeLike = (v) => {
+  if (!v && v !== 0) return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
+  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
+  if (m) return `${pad2(+m[1])}:${pad2(+(m[2] ?? 0))}`;
+  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
+  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
+  m = s.match(/^(\d{1,2})$/);
+  if (m) return `${pad2(+m[1])}:00`;
+  return null;
+};
+const toMins = (hhmm) => {
+  const s = parseTimeLike(hhmm);
+  if (!s) return null;
+  const [h, m] = s.split(":").map(Number);
+  return h * 60 + m;
+};
+const fmtHHMM = (v) => parseTimeLike(v) ?? "";
+const addMinutes = (hhmm, mins) => {
+  const m = toMins(hhmm);
+  if (m == null) return "";
+  const total = (m + mins) % (24 * 60);
+  return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
+};
+
 const getStartMin = (row) => Number.isFinite(row?.start_minutes) ? row.start_minutes : toMins(getStartStr(row));
 const getEndMin   = (row) => Number.isFinite(row?.end_minutes)   ? row.end_minutes   : toMins(getEndStr(row));
 
@@ -30,6 +69,15 @@ const DAYS = [
   { label: "Sam", val: 6 },
   { label: "Dim", val: 7 },
 ];
+
+// normalize DoW to 1..7 (Mon..Sun); return null if invalid
+const normalizeDow = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 7;
+  if (n < 1 || n > 7) return ((n % 7) || 7);
+  return n;
+};
 
 // Stable subject color (config key → hex). Fallback: deterministic HSL by subject name.
 const slugify = (s = "") =>
@@ -61,7 +109,6 @@ const fetchAdminTimetables = (params) => {
   return fn(params);
 };
 
-const pad2 = (n) => String(n).padStart(2, "0");
 const fmtMonth = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 const daysInMonth = (y, m) => new Date(y, m, 0).getDate();
 const monIndex = (jsDay) => (jsDay + 6) % 7;
@@ -78,33 +125,6 @@ const addDays = (date, n) => {
   const d = new Date(date);
   d.setDate(d.getDate() + n);
   return d;
-};
-
-const parseTimeLike = (v) => {
-  if (!v && v !== 0) return null;
-  const s = String(v).trim();
-  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
-  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
-  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
-  if (m) return `${pad2(+m[1])}:${pad2(+(m[2] ?? 0))}`;
-  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
-  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
-  m = s.match(/^(\d{1,2})$/);
-  if (m) return `${pad2(+m[1])}:00`;
-  return null;
-};
-const toMins = (hhmm) => {
-  const s = parseTimeLike(hhmm);
-  if (!s) return null;
-  const [h, m] = s.split(":").map(Number);
-  return h * 60 + m;
-};
-const fmtHHMM = (v) => parseTimeLike(v) ?? "";
-const addMinutes = (hhmm, mins) => {
-  const m = toMins(hhmm);
-  if (m == null) return "";
-  const total = (m + mins) % (24 * 60);
-  return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
 };
 
 const DEFAULT_CLASS_MINS = 90;
@@ -467,7 +487,8 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
     const nowMins = today.getHours() * 60 + today.getMinutes();
 
     for (const it of items) {
-      const dow = Number(it.day_of_week);
+      const dow = normalizeDow(it?.day_of_week);
+      if (!dow) continue;
       if (hidePast) {
         if (dow < todayIdx) continue;
         if (dow === todayIdx) {
@@ -554,7 +575,8 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
     const nowMins = today.getHours() * 60 + today.getMinutes();
 
     for (const it of items) {
-      const dow = Number(it.day_of_week);
+      const dow = normalizeDow(it?.day_of_week);
+      if (!dow) continue;
       if (hidePast) {
         if (dow < todayIdx) continue;
         if (dow === todayIdx) {
@@ -881,7 +903,7 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
 function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, highlightDate, onClearHighlight }) {
   const NONE = "__none__";
   const [openDate, setOpenDate] = useState(null);
-  const [mini, setMini] = useState({ subject_id: "", teacher_id: "", title: "" });
+  // (Note: the per-cell form state lives inside DayCell now)
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
@@ -922,12 +944,13 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
 
   const ymd = (d) => (d ? `${y}-${pad2(m)}-${pad2(d)}` : null);
 
-  const quickAdd = async (dateStr) => {
+  // FIXED: accept the selected mini from DayCell instead of reading a stale local state
+  const quickAdd = async (dateStr, mini) => {
     if (degreeId === "__all__") {
       toast.error("Select a Niveau first.");
       return;
     }
-    const { subject_id, teacher_id, title } = mini;
+    const { subject_id, teacher_id, title } = mini || {};
     if (!subject_id) {
       toast.error("Matière is required");
       return;
@@ -938,11 +961,9 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
         plan_date: dateStr,
         degree_id: Number(degreeId),
         subject_id: Number(subject_id),
-        teacher_id: mini.teacher_id && mini.teacher_id !== NONE ? Number(teacher_id) : null,
+        teacher_id: teacher_id && teacher_id !== NONE ? Number(teacher_id) : null,
         title: title || null,
       });
-      setMini({ subject_id: "", teacher_id: "", title: "" });
-      setOpenDate(null);
       await reload();
       toast.success("Plan added");
     } catch (e) {
@@ -990,7 +1011,7 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
               const cellsOut = [];
               let idx = 0;
               for (let i = 0; i < leadBlanks; i++) {
-                cellsOut.push(<div key={`b-${i}`} className="min-h-[84px] md:min-h-[110px]"></div>);
+                cellsOut.push(<div key={`b-${i}`} className="min-h=[84px] md:min-h-[110px]"></div>);
                 idx++;
               }
               for (let d = 1; d <= totalDays; d++, idx++) {
@@ -1109,7 +1130,9 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
                     return;
                   }
                   setSaving(true);
-                  await quickAdd(dateStr);
+                  await quickAdd(dateStr, mini); // <-- pass the form values
+                  setMini({ subject_id: "", teacher_id: "", title: "" });
+                  setOpen(false);
                   setSaving(false);
                 }}
                 disabled={saving}
