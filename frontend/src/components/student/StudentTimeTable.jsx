@@ -27,6 +27,15 @@ const unwrap = (r) => r?.data?.data ?? r?.data ?? null;
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
+const normalizeDow = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 7;
+  if (n < 0) return null;
+  if (n > 7) return ((n % 7) || 7);
+  return n;
+};
+
 /** Extract "HH:MM" from ISO/SQL strings or return null. */
 const extractHHMM = (v) => {
   if (!v) return null;
@@ -227,7 +236,7 @@ export default function StudentTimeTable() {
 
         const normalized = (raw ?? []).map((l) => ({
           ...l,
-          day_of_week: Number(l?.day_of_week ?? l?.dow ?? l?.day ?? 0),
+          day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
 
           subject:
             l?.subject?.id || l?.subject_id
@@ -432,7 +441,7 @@ function WeekGrid({ lessons, weekOffset }) {
       if (l.is_plan) continue;            // never draw plans on the grid
       const mins = resolveStartEndMins(l);
       if (!mins) continue;                // skip untimed
-      const day = Number(l.day_of_week);
+      const day = normalizeDow(l?.day_of_week);
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
@@ -603,7 +612,7 @@ function AgendaList({ lessons, weekOffset }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      const day = Number(l.day_of_week);
+      const day = normalizeDow(l?.day_of_week);
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
@@ -681,7 +690,7 @@ function IcsButton({ lessons, weekOffset }) {
     const events = [];
     for (const l of lessons ?? []) {
       if (l.is_plan) continue; // skip monthly plans in calendar export
-      const dow = Number(l.day_of_week);
+      const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1); // 1→0 … 7→6
       const mins = resolveStartEndMins(l);

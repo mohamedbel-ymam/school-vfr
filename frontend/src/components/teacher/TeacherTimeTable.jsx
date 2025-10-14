@@ -9,6 +9,17 @@ const unwrapLessons = (r) =>
   r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
 
 /** Extract "HH:MM" from ISO/SQL strings like "2025-01-01T09:00:00Z" or "2025-01-01 09:00:00". */
+// normalize 0..6 (Sun..Sat) → 1..7 (Mon..Sun)
+const normalizeDow = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 7;       // Sunday → 7
+  if (n < 0) return null;
+  if (n > 7) return ((n % 7) || 7);
+  return n;                    // 1..7 already
+};
+
+// Extract HH:MM from "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"
 const extractHHMM = (v) => {
   if (!v) return null;
   const s = String(v);
@@ -16,9 +27,10 @@ const extractHHMM = (v) => {
   return m ? `${m[1]}:${m[2]}` : null;
 };
 
-// Preferred string getters (timezone-free)
-const getStartStr = (l) => l?.start_time ?? extractHHMM(l?.starts_at) ?? l?.start ?? null;
-const getEndStr   = (l) => l?.end_time   ?? extractHHMM(l?.ends_at)   ?? l?.end   ?? null;
+// Use extractors for raw fields that may be full datetimes
+const getStartStr = (l) => l?.start_time ?? extractHHMM(l?.starts_at) ?? null;
+const getEndStr   = (l) => l?.end_time   ?? extractHHMM(l?.ends_at)   ?? null;
+
 
 const DAYS = [
   { label: "Lun", full: "Lundi",     val: 1 },
@@ -138,20 +150,13 @@ const parsePeriodToMins = (period) => {
 
 /** Choose minutes to display for a lesson (supports minutes or strings) */
 const resolveStartEndMins = (l) => {
-  // 1) direct minutes from API
-  if (Number.isFinite(l?.start_minutes) && Number.isFinite(l?.end_minutes)) {
-    const s = l.start_minutes, e = l.end_minutes;
-    if (e > s) return [s, e];
-  }
-  // 2) strings
-  const s = toMins(getStartStr(l));
-  const e = toMins(getEndStr(l));
-  if (s != null && e != null && e > s) return [s, e];
-  // 3) period fallback
-  const p = parsePeriodToMins(l?.period);
-  if (p) return p;
-  return null;
-};
+   const s = toMins(getStartStr(l));
+   const e = toMins(getEndStr(l));
+   if (s != null && e != null && e > s) return [s, e];
+   const p = parsePeriodToMins(l?.period);
+   if (p) return p;
+   return null;
+ };
 
 /* ---------------- ICS export ---------------- */
 const toIcsDate = (d) =>
@@ -196,17 +201,12 @@ export default function TeacherTimetable() {
         const res = await TimeTableApi.teacher();
         const raw = unwrapLessons(res) ?? [];
         const normalized = raw.map((l) => ({
-          ...l,
-          // normalize day index
-          day_of_week: Number(l?.day_of_week ?? l?.dow ?? l?.day ?? 0),
-          // keep all time shapes
-          start_time: getStartStr(l),
-          end_time: getEndStr(l),
-          start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
-          end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
-          // never draw plans as timed blocks
-          is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
-        }));
+           ...l,
+           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
+           start_time: getStartStr(l),
+           end_time: getEndStr(l),
+           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
+         }));
         setLessons(normalized);
       } catch (e) {
         console.error(e);
@@ -374,7 +374,7 @@ function WeekGrid({ lessons, weekOffset }) {
       if (l.is_plan) continue;
       const mins = resolveStartEndMins(l);
       if (!mins) continue;
-      const day = Number(l.day_of_week);
+      const day = normalizeDow(l?.day_of_week);
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
@@ -552,7 +552,7 @@ function AgendaList({ lessons, weekOffset }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      const day = Number(l.day_of_week);
+      const day = normalizeDow(l?.day_of_week);
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
@@ -626,7 +626,7 @@ function IcsButton({ lessons, weekOffset }) {
     const events = [];
     for (const l of lessons ?? []) {
       if (l.is_plan) continue; // skip monthly plans
-      const dow = Number(l.day_of_week);
+      const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1);
       const mins = resolveStartEndMins(l);
