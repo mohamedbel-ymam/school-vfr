@@ -79,6 +79,7 @@ const addDays = (date, n) => {
   d.setDate(d.getDate() + n);
   return d;
 };
+const sameMonday = (a, b) => startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
 const isSameDayIndex = (date, dow1to7) => {
   const js = date.getDay();
   const ours = js === 0 ? 7 : js;
@@ -108,6 +109,8 @@ const subjectBlockColors = (l) => {
   const hue = goldenHue(key);
   return { bg: `hsla(${hue},85%,45%,0.20)`, border: `hsl(${hue},65%,45%)`, accent: `hsl(${hue},85%,45%)`, chip: `hsl(${hue},70%,45%)`, chipText: "#fff" };
 };
+
+const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
 /* fixed vertical range */
 const SCHOOL_START_MINS = 9 * 60;
@@ -194,6 +197,8 @@ export default function TeacherTimetable() {
           end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null, // anchor plans to a real date
+          // NEW: weekly rows can be scoped to a specific week (YYYY-MM-DD Monday)
+          week_start: l?.week_start ?? l?.weekStart ?? null,
         }));
         setLessons(normalized);
       } catch (e) {
@@ -209,7 +214,7 @@ export default function TeacherTimetable() {
     const m = new Map();
     for (const l of lessons ?? []) {
       const id = l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
-      const name = l.subject?.name ?? "Matière";
+      const name = l?.subject?.name ?? l?.subject_name ?? "Matière";
       m.set(id, name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
@@ -313,12 +318,26 @@ function WeekGrid({ lessons, weekOffset }) {
     [weekOffset]
   );
 
+  // Include monthly plans on their exact week/day; weekly rows respect optional week_start
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
 
     for (const l of lessons ?? []) {
-      // teacher rows are weekly; if you later add monthly plans, copy the student logic here
-      const day = normalizeDow(l?.day_of_week);
+      let day = null;
+
+      if (l.is_plan) {
+        if (!l.plan_date) continue;
+        const date = new Date(`${l.plan_date}T00:00:00`);
+        if (Number.isNaN(date.getTime()) || !inWeek(date, monday)) continue;
+        const js = date.getDay(); day = js === 0 ? 7 : js;
+      } else {
+        if (l.week_start) {
+          const ws = new Date(`${l.week_start}T00:00:00`);
+          if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
+        }
+        day = normalizeDow(l?.day_of_week);
+      }
+
       if (!day) continue;
 
       const mins = resolveStartEndMins(l);
@@ -368,102 +387,107 @@ function WeekGrid({ lessons, weekOffset }) {
 
   return (
     <div className="rounded-xl border overflow-hidden">
-      <div className="grid grid-cols-8 bg-muted/50 text-xs sm:text-sm sticky top-0 z-20">
-        <div className="px-2 py-2 text-muted-foreground">Heure</div>
-        {DAYS.map((d, idx) => {
-          const date = addDays(monday, idx);
-          const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
-          return (
-            <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
-              <div className="hidden sm:block">{d.full}</div>
-              <div className="sm:hidden">{d.label}</div>
-              <div className="text-[11px] sm:text-xs text-muted-foreground">{date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
-            </div>
-          );
-        })}
-      </div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[900px] md:min-w-0">
+          <div className="grid grid-cols-8 bg-muted/50 text-xs sm:text-sm sticky top-0 z-20">
+            <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">Heure</div>
+            {DAYS.map((d, idx) => {
+              const date = addDays(monday, idx);
+              const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
+              return (
+                <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
+                  <div className="hidden sm:block">{d.full}</div>
+                  <div className="sm:hidden">{d.label}</div>
+                  <div className="text-[11px] sm:text-xs text-muted-foreground">{date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+                </div>
+              );
+            })}
+          </div>
 
-      <div className="grid grid-cols-8">
-        <div className="relative border-r bg-background">
-          {hourMarks.map(({ h, m }) => {
-            const pct = ((m - minM) / range) * 100;
-            return (
-              <div key={m} className="absolute left-0 right-0" style={{ top: `${pct}%`, transform: "translateY(-50%)" }}>
-                <div className="text-[11px] sm:text-xs text-muted-foreground px-2">{pad(h)}:00</div>
-                <div className="h-px bg-border/70" />
-              </div>
-            );
-          })}
-          <div style={{ paddingTop: `${range}px` }} className="opacity-0">.</div>
+          <div className="grid grid-cols-8">
+            {/* hour rail */}
+            <div className="relative border-r bg-background sticky left-0 z-10">
+              {hourMarks.map(({ h, m }) => {
+                const pct = ((m - minM) / range) * 100;
+                return (
+                  <div key={m} className="absolute left-0 right-0" style={{ top: `${pct}%`, transform: "translateY(-50%)" }}>
+                    <div className="text-[11px] sm:text-xs text-muted-foreground px-2">{pad(h)}:00</div>
+                    <div className="h-px bg-border/70" />
+                  </div>
+                );
+              })}
+              <div style={{ paddingTop: `${range}px` }} className="opacity-0">.</div>
+            </div>
+
+            {DAYS.map((d) => {
+              const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
+              return (
+                <div key={d.val} className="relative border-l bg-background/50">
+                  {hourMarks.map(({ m }) => {
+                    const pct = ((m - minM) / range) * 100;
+                    return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
+                  })}
+                  {halfHourMarks.map((m) => {
+                    const pct = ((m - minM) / range) * 100;
+                    return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
+                  })}
+
+                  {lanes.map((lane, laneIndex) =>
+                    lane.map(({ l, s, e }, i) => {
+                      const s2 = clamp(s, minM, maxM);
+                      const e2 = clamp(e, minM, maxM);
+                      if (e2 <= minM || s2 >= maxM) return null;
+
+                      const topPct = ((s2 - minM) / range) * 100;
+                      const heightPct = Math.max(((e2 - s2) / range) * 100, 0.8);
+                      const widthPct = Math.max(100 / lanes.length, 25);
+                      const leftPct = laneIndex * (100 / lanes.length);
+
+                      const c = subjectBlockColors(l);
+                      const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
+                      const room = roomName(l);
+                      const startS = parseTimeLike(getStartStr(l));
+                      const endS = parseTimeLike(getEndStr(l));
+                      const info = [startS && endS ? `${startS}–${endS}` : (l.period ? `Créneau ${l.period}` : ""), room || ""]
+                        .filter(Boolean).join(" • ");
+
+                      return (
+                        <div
+                          key={`${l.id ?? `${d.val}-${i}`}`}
+                          className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
+                          title={`${degree}${info ? ` • ${info}` : ""}`}
+                          style={{
+                            top: `${topPct}%`,
+                            height: `${heightPct}%`,
+                            left: `calc(${leftPct}% + 4px)`,
+                            width: `calc(${widthPct}% - 8px)`,
+                            backgroundColor: c.bg,
+                            borderColor: c.border,
+                            boxShadow: `0 6px 16px ${c.accent}33`,
+                          }}
+                        >
+                          <div className="px-2 py-1 flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
+                            <span className="font-medium text-foreground truncate">{degree}</span>
+                          </div>
+                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">{info}</div>
+                        </div>
+                      );
+                    })
+                  )}
+
+                  <div style={{ height: `${range}px` }} />
+                </div>
+              );
+            })}
+          </div>
         </div>
-
-        {DAYS.map((d) => {
-          const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
-          return (
-            <div key={d.val} className="relative border-l bg-background/50">
-              {hourMarks.map(({ m }) => {
-                const pct = ((m - minM) / range) * 100;
-                return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
-              })}
-              {halfHourMarks.map((m) => {
-                const pct = ((m - minM) / range) * 100;
-                return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
-              })}
-
-              {lanes.map((lane, laneIndex) =>
-                lane.map(({ l, s, e }, i) => {
-                  const s2 = clamp(s, minM, maxM);
-                  const e2 = clamp(e, minM, maxM);
-                  if (e2 <= minM || s2 >= maxM) return null;
-
-                  const topPct = ((s2 - minM) / range) * 100;
-                  const heightPct = Math.max(((e2 - s2) / range) * 100, 0.8);
-                  const widthPct = Math.max(100 / lanes.length, 25);
-                  const leftPct = laneIndex * (100 / lanes.length);
-
-                  const c = subjectBlockColors(l);
-                  const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
-                  const room = l.room?.name ?? l.room ?? "";
-                  const startS = parseTimeLike(getStartStr(l));
-                  const endS = parseTimeLike(getEndStr(l));
-                  const info = [startS && endS ? `${startS}–${endS}` : (l.period ? `Créneau ${l.period}` : ""), room || ""]
-                    .filter(Boolean).join(" • ");
-
-                  return (
-                    <div
-                      key={`${l.id ?? `${d.val}-${i}`}`}
-                      className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                      title={`${degree}${info ? ` • ${info}` : ""}`}
-                      style={{
-                        top: `${topPct}%`,
-                        height: `${heightPct}%`,
-                        left: `calc(${leftPct}% + 4px)`,
-                        width: `calc(${widthPct}% - 8px)`,
-                        backgroundColor: c.bg,
-                        borderColor: c.border,
-                        boxShadow: `0 6px 16px ${c.accent}33`,
-                      }}
-                    >
-                      <div className="px-2 py-1 flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
-                        <span className="font-medium text-foreground truncate">{degree}</span>
-                      </div>
-                      <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">{info}</div>
-                    </div>
-                  );
-                })
-              )}
-
-              <div style={{ height: `${range}px` }} />
-            </div>
-          );
-        })}
       </div>
     </div>
   );
 }
 
-/* AGENDA: plans only on their exact date, show hours if present */
+/* AGENDA: plans only on their exact date, weekly rows respect week_start */
 function AgendaList({ lessons, weekOffset }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
@@ -471,17 +495,20 @@ function AgendaList({ lessons, weekOffset }) {
     const m = new Map(DAYS.map((d) => [d.val, []]));
 
     for (const l of lessons ?? []) {
-      // Plans: show only on the calendar date inside this week
       if (l.is_plan && l.plan_date) {
         const date = new Date(`${l.plan_date}T00:00:00`);
-        if (!isNaN(date) && inWeek(date, monday)) {
+        if (!Number.isNaN(date.getTime()) && inWeek(date, monday)) {
           const js = date.getDay(); const dow = js === 0 ? 7 : js;
           m.get(dow)?.push(l);
         }
         continue;
       }
 
-      // Weekly rows: use day_of_week
+      if (l.week_start) {
+        const ws = new Date(`${l.week_start}T00:00:00`);
+        if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
+      }
+
       const day = normalizeDow(l?.day_of_week);
       if (!day) continue;
       m.get(day)?.push(l);
@@ -509,7 +536,7 @@ function AgendaList({ lessons, weekOffset }) {
                 list.map((l, i) => {
                   const c = subjectBlockColors(l);
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
-                  const room = l.room?.name ?? l.room ?? "";
+                  const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})` : "";
 
@@ -536,13 +563,17 @@ function AgendaList({ lessons, weekOffset }) {
   );
 }
 
-/* ICS (unchanged except it ignores plans) */
+/* ICS (now also respects week_start; still ignores plans) */
 function IcsButton({ lessons, weekOffset }) {
   const download = () => {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
       if (l.is_plan) continue;
+      if (l.week_start) {
+        const ws = new Date(`${l.week_start}T00:00:00`);
+        if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
+      }
       const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1);
@@ -555,8 +586,8 @@ function IcsButton({ lessons, weekOffset }) {
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
       const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
-      const subj = l.subject?.name ?? "Cours";
-      const room = l.room?.name ?? l.room ?? "";
+      const subj = l.subject?.name ?? l.subject_name ?? "Cours";
+      const room = roomName(l);
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,

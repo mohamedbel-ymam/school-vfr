@@ -74,6 +74,7 @@ const addDays = (date, n) => {
   d.setDate(d.getDate() + n);
   return d;
 };
+const sameMonday = (a, b) => startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
 const isSameDayIndex = (date, dow1to7) => {
   const js = date.getDay(); // 0..6
   const ours = js === 0 ? 7 : js; // 1..7
@@ -246,6 +247,9 @@ export default function StudentTimeTable() {
           // plan flags + anchor date
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD
+
+          // NEW: respect week picked by admin on weekly rows
+          week_start: l?.week_start ?? l?.weekStart ?? null, // YYYY-MM-DD (optional)
         }));
 
         setLessons(normalized);
@@ -416,13 +420,13 @@ function Legend({ subjects }) {
 }
 
 /* ----------------------------- Grille hebdomadaire ---------------------------- */
-  function WeekGrid({ lessons, weekOffset }) {
+function WeekGrid({ lessons, weekOffset }) {
   const monday = useMemo(
     () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
     [weekOffset]
   );
 
-  // FIXED: safe grouping (no early returns, no shadowed 'day')
+  // safe grouping, supports monthly plans and weekly rows restricted by week_start
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
 
@@ -437,7 +441,12 @@ function Legend({ subjects }) {
         const js = date.getDay();            // 0..6
         day = js === 0 ? 7 : js;             // 1..7
       } else {
-        day = normalizeDow(l?.day_of_week);  // weekly row
+        // weekly row; if week_start exists, only display on that chosen week
+        if (l.week_start) {
+          const ws = new Date(`${l.week_start}T00:00:00`);
+          if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
+        }
+        day = normalizeDow(l?.day_of_week);
       }
 
       if (!day) continue;
@@ -457,7 +466,7 @@ function Legend({ subjects }) {
       });
     }
     return m;
-  }, [lessons, monday])
+  }, [lessons, monday]);
 
   const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
 
@@ -588,8 +597,7 @@ function Legend({ subjects }) {
                         >
                           <div className="px-2 py-1 font-medium truncate">{subjName}</div>
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] opacity-95 truncate">
-                            {sText && eText ? `${sText}–${eText}` : ""}
-                            {rName ? ` • ${rName}` : ""}
+                            {sText && eText ? `${sText}–${eText}` : ""}{rName ? ` • ${rName}` : ""}
                           </div>
                         </div>
                       );
@@ -618,12 +626,19 @@ function AgendaList({ lessons, weekOffset }) {
     for (const l of lessons ?? []) {
       if (l.is_plan && l.plan_date) {
         const date = new Date(`${l.plan_date}T00:00:00`);
-        if (!isNaN(date) && inWeek(date, monday)) {
+        if (!Number.isNaN(date.getTime()) && inWeek(date, monday)) {
           const js = date.getDay(); const dow = js === 0 ? 7 : js;
           m.get(dow)?.push(l);
         }
         continue;
       }
+
+      // weekly row; if week_start exists, only display on that chosen week
+      if (l.week_start) {
+        const ws = new Date(`${l.week_start}T00:00:00`);
+        if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
+      }
+
       const day = normalizeDow(l?.day_of_week);
       if (!day) continue;
       m.get(day)?.push(l);
@@ -699,6 +714,11 @@ function IcsButton({ lessons, weekOffset }) {
     const events = [];
     for (const l of lessons ?? []) {
       if (l.is_plan) continue; // skip monthly plans in calendar export
+      // respect optional week_start on weekly rows
+      if (l.week_start) {
+        const ws = new Date(`${l.week_start}T00:00:00`);
+        if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
+      }
       const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
       const date = addDays(monday, dow - 1);

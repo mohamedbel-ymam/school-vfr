@@ -76,7 +76,6 @@ const mondayFromIsoWeek = (year, week) => {
   return monday;
 };
 
-
 const getStartMin = (row) => Number.isFinite(row?.start_minutes) ? row.start_minutes : toMins(getStartStr(row));
 const getEndMin   = (row) => Number.isFinite(row?.end_minutes)   ? row.end_minutes   : toMins(getEndStr(row));
 
@@ -222,8 +221,8 @@ export default function ManageTimetables() {
     try {
       const params = {
         per_page: 1000,
-        ...(degreeId !== "__all__" ? { degree_id: degreeId } : {}),
-        ...(teacherId !== "__all__" ? { teacher_id: teacherId } : {}),
+        ...(degreeId !== "__all__" ? { degree_id: Number(degreeId) } : {}),
+        ...(teacherId !== "__all__" ? { teacher_id: Number(teacherId) } : {}),
       };
       const res = await fetchAdminTimetables(params);
       setRows(unwrap(res));
@@ -364,7 +363,7 @@ export default function ManageTimetables() {
 
             <label className="inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border bg-background">
               <input type="checkbox" checked={hidePastWeekly} onChange={(e) => setHidePastWeekly(e.target.checked)} />
-              masker les semaines (passées)
+              Masquer les semaines (passées)
             </label>
 
             <div className="flex flex-wrap gap-2">
@@ -662,7 +661,7 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
                             </span>
                           ) : (
                             subjectName
-                          )}{" "}
+                          )} {" "}
                           {s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}
                         </div>
                         <div className="text-xs text-muted-foreground">
@@ -745,6 +744,15 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
     if (!canSave) return;
     setSaving(true);
     try {
+      // Compute week_start (YYYY-MM-DD) if ISO week was selected
+      let weekStart = null;
+      if (weeklyIso) {
+        const parsed = parseIsoWeek(weeklyIso);
+        if (parsed) {
+          weekStart = mondayFromIsoWeek(parsed.year, parsed.week).toISOString().slice(0, 10);
+        }
+      }
+
       const payload = {
         degree_id: Number(form.degree_id),
         subject_id: Number(form.subject_id),
@@ -753,6 +761,7 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
         start_time: fmtHHMM(form.start_time),
         end_time: fmtHHMM(form.end_time || addMinutes(form.start_time, DEFAULT_CLASS_MINS)),
         ...(form.room_id ? { room_id: Number(form.room_id) } : {}),
+        ...(weekStart ? { week_start: weekStart } : {}), // <— NEW: persist selected week to DB
       };
 
       const res = await TimeTableApi.create(payload);
@@ -943,7 +952,6 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
   );
 }
 
-
 /* ========================= Monthly Planner ========================= */
 
 function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, highlightDate, onClearHighlight }) {
@@ -974,10 +982,6 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
   const first = new Date(y, m - 1, 1);
   const leadBlanks = monIndex(first.getDay());
   const totalDays = daysInMonth(y, m);
-  const cells = [];
-  for (let i = 0; i < leadBlanks; i++) cells.push(null);
-  for (let d = 1; d <= totalDays; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
 
   const plansByDate = useMemo(() => {
     const map = new Map();
@@ -1052,6 +1056,7 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
             ))}
           </div>
 
+          {/* Calendar grid */}
           <div className="grid grid-cols-7 gap-1.5 md:gap-2 text-sm">
             {(() => {
               const cellsOut = [];

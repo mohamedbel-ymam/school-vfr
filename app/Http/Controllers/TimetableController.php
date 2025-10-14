@@ -54,7 +54,40 @@ class TimetableController extends Controller
             ],
         ]);
     }
-
+    public function student(Request $request)
+    {
+        $user = $request->user(); // role: student
+    
+        // Find the student's degree, trying several schemas (you already have this helper)
+        $degreeId = $this->resolveStudentDegreeId($user->id);
+        if (!$degreeId) {
+            return response()->json([
+                'data' => ['lessons' => []],
+            ]);
+        }
+    
+        $lessons = \App\Models\Timetable::with([
+                'subject:id,name',
+                'degree:id,name',
+                'room:id,name',
+                'teacher:id,firstname,lastname',
+            ])
+            ->where('degree_id', $degreeId)
+            // sort safely only if columns exist
+            ->when(\Illuminate\Support\Facades\Schema::hasColumn('timetables','day_of_week'), fn($q) => $q->orderBy('day_of_week'))
+            ->when(\Illuminate\Support\Facades\Schema::hasColumn('timetables','start_time'), function ($q) {
+                $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END')
+                  ->orderBy('start_time');
+            })
+            ->when(\Illuminate\Support\Facades\Schema::hasColumn('timetables','period'), fn($q) => $q->orderBy('period'))
+            ->get();
+        
+        return response()->json([
+            'data' => [
+                'lessons' => \App\Http\Resources\TimetableResource::collection($lessons),
+            ],
+        ]);
+    }
     /** Teacher → lessons for the authenticated teacher (optional ?degree_id=...) */
     public function teacher(Request $request)
     {
