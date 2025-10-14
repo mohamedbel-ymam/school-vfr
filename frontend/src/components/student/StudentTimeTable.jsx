@@ -1,8 +1,6 @@
 // src/components/student/StudentTimeTable.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
-
-// fixed subject color map (e.g., english: red). Fallback is deterministic if not listed.
 import subjectColors from "../../config/subjectColors";
 
 /* --------------------------------- Constantes --------------------------------- */
@@ -23,7 +21,6 @@ const PERIOD_DURATION_MINS = 90;       // 1h30 fallback when only "period" is gi
 /* ---------------------------------- Helpers ----------------------------------- */
 const unwrap = (r) => r?.data?.data ?? r?.data ?? null;
 
-// --- TIME helpers (timezone-free) ---
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
@@ -36,11 +33,10 @@ const normalizeDow = (v) => {
   return n;
 };
 
-/** Extract "HH:MM" from ISO/SQL strings or return null. */
 const extractHHMM = (v) => {
   if (!v) return null;
   const s = String(v);
-  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/); // "2025-01-01T09:00:00Z" or "2025-01-01 09:00:00"
+  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
   return m ? `${m[1]}:${m[2]}` : null;
 };
 
@@ -58,7 +54,6 @@ const parseTimeLike = (v) => {
   if (m) return `${pad(+m[1])}:00`;
   return null;
 };
-
 const toMins = (hhmm) => {
   const s = parseTimeLike(hhmm);
   if (!s) return null;
@@ -84,8 +79,6 @@ const isSameDayIndex = (date, dow1to7) => {
   const ours = js === 0 ? 7 : js; // 1..7
   return ours === dow1to7;
 };
-const isSameDay = (a, b) =>
-  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const inWeek = (date, monday) => {
   const start = new Date(monday);
   const end = addDays(monday, 6);
@@ -114,14 +107,12 @@ const hashInt = (str) => {
 };
 const hueForSubject = (key) => (hashInt(String(key)) * 137.508) % 360;
 
-/** Solid HSL for subject block background. */
 const subjectSolidColor = (l) => {
   const key = String(subjectKey(l));
-  if (subjectColors[key]) return subjectColors[key]; // exact mapping (e.g., english = red)
+  if (subjectColors[key]) return subjectColors[key];
   const hue = hueForSubject(key);
-  return `hsl(${hue} 65% 45%)`; // pleasant solid fallback
+  return `hsl(${hue} 65% 45%)`;
 };
-/** Soft (transparent) background using the same hue. */
 const subjectSoftBgFromKey = (key) => {
   const hue = hueForSubject(key);
   return `hsl(${hue} 65% 45% / 0.14)`;
@@ -147,48 +138,37 @@ const getStartMin = (l) =>
 const getEndMin = (l) =>
   Number.isFinite(l?.end_minutes) ? l.end_minutes : toMins(getEndStr(l));
 
-// period → [startMins, endMins]
 const parsePeriodToMins = (period) => {
   if (!period) return null;
   const s = String(period).trim();
-
-  // "08:00-09:30" / "08h00–09h30"
   let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
   if (m) {
     const sm = toMins(m[1]);
     const em = toMins(m[2]);
     if (sm != null && em != null && em > sm) return [sm, em];
   }
-
-  // Numeric label: "P1", "1", "1ère"
   m = s.match(/(\d{1,2})/);
   if (m) {
-    const idx = Math.max(1, Math.min(20, parseInt(m[1], 10))); // 1..20
+    const idx = Math.max(1, Math.min(20, parseInt(m[1], 10)));
     const start = SCHOOL_START_MINS + (idx - 1) * PERIOD_DURATION_MINS;
     const end = start + PERIOD_DURATION_MINS;
     return [start, end];
   }
-
   return null;
 };
 
-// Choose minutes to display for a row, *only* from admin-entered times or period
+// minutes to render for any row (weekly or plan)
 const resolveStartEndMins = (row) => {
-  // 1) numeric minutes shape
   if (Number.isFinite(row?.start_minutes) && Number.isFinite(row?.end_minutes)) {
     const s = row.start_minutes, e = row.end_minutes;
     if (e > s) return [s, e];
   }
-  // 2) strings (HH:MM / ISO time part)
   const s = getStartMin(row);
   const e = getEndMin(row);
   if (s != null && e != null && e > s) return [s, e];
-
-  // 3) "period" fallback
   const p = parsePeriodToMins(row?.period);
   if (p) return p;
-
-  return null; // nothing timed
+  return null;
 };
 
 /* ----------------------------------- ICS ------------------------------------- */
@@ -234,27 +214,20 @@ export default function StudentTimeTable() {
   const [subjectFilter, setSubjectFilter] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
 
-  // chargement des données
   useEffect(() => {
     (async () => {
       try {
-        const res = await TimeTableApi.student(); // GET timetable élève
+        const res = await TimeTableApi.student();
         const payload = unwrap(res);
-
         const raw = Array.isArray(payload) ? payload : payload?.lessons ?? payload?.data ?? [];
 
         const normalized = (raw ?? []).map((l) => ({
           ...l,
-          // day-of-week (weekly rows)
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
 
-          // subject
           subject:
             l?.subject?.id || l?.subject_id
-              ? {
-                  id: l.subject?.id ?? l.subject_id,
-                  name: l.subject?.name ?? l.subject_name ?? "Matière",
-                }
+              ? { id: l.subject?.id ?? l.subject_id, name: l.subject?.name ?? l.subject_name ?? "Matière" }
               : l?.subject?.name
               ? { id: null, name: l.subject.name }
               : l?.subject,
@@ -264,15 +237,15 @@ export default function StudentTimeTable() {
           timetable_id: l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
           timetable: l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
 
-          // keep all possible time representations
+          // keep time info (any shape)
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
           end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
 
-          // monthly plan flag + date
+          // plan flags + anchor date
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
-          plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD preferred
+          plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD
         }));
 
         setLessons(normalized);
@@ -286,7 +259,7 @@ export default function StudentTimeTable() {
     })();
   }, []);
 
-  // listes pour les filtres
+  // filters data
   const subjects = useMemo(() => {
     const s = new Map();
     for (const l of lessons) {
@@ -450,7 +423,16 @@ function WeekGrid({ lessons, weekOffset }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue;            // never draw plans on the grid
+      if (l.is_plan) {
+        if (!l.plan_date) return null;
+        const date = new Date(`${l.plan_date}T00:00:00`);
+        if (isNaN(date) || !inWeek(date, monday)) return null; // only that week
+        const js = date.getDay(); // 0..6
+        day = js === 0 ? 7 : js;  // 1..7
+      } else {
+        day = normalizeDow(l?.day_of_week);
+      }
+      if (!day) return null;           // never draw plans on the grid
       const mins = resolveStartEndMins(l);
       if (!mins) continue;                // skip untimed
       const day = normalizeDow(l?.day_of_week);
@@ -470,7 +452,6 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
 
-  // Empilement par "voies" pour éviter les collisions
   const lanesByDay = useMemo(() => {
     const out = new Map();
     for (const d of DAYS) {
@@ -621,24 +602,19 @@ function WeekGrid({ lessons, weekOffset }) {
 function AgendaList({ lessons, weekOffset }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
-  // IMPORTANT: show weekly rows by day_of_week, but
-  // show MONTHLY PLANS only on their exact calendar date within the selected week.
+  // weekly rows by day_of_week; monthly plans only on plan_date within the displayed week
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
 
     for (const l of lessons ?? []) {
-      // monthly plan with plan_date → only include if it's in the displayed week; day is derived from plan_date
       if (l.is_plan && l.plan_date) {
         const date = new Date(`${l.plan_date}T00:00:00`);
         if (!isNaN(date) && inWeek(date, monday)) {
-          const js = date.getDay();          // 0..6
-          const dow = js === 0 ? 7 : js;     // 1..7
+          const js = date.getDay(); const dow = js === 0 ? 7 : js;
           m.get(dow)?.push(l);
         }
         continue;
       }
-
-      // weekly row → use configured day_of_week
       const day = normalizeDow(l?.day_of_week);
       if (!day) continue;
       m.get(day)?.push(l);
@@ -673,8 +649,9 @@ function AgendaList({ lessons, weekOffset }) {
                   const soft = subjectSoftBgFromKey(key);
                   const rName = roomName(l);
                   const times = resolveStartEndMins(l);
-
-                  const timeStr = times ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})` : "";
+                  const timeStr = times
+                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
+                    : "";
 
                   return (
                     <div
@@ -691,9 +668,7 @@ function AgendaList({ lessons, weekOffset }) {
                         </span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
-                      <div className="text-xs text-foreground/80">
-                        {rName ? rName : ""}
-                      </div>
+                      <div className="text-xs text-foreground/80">{rName ? rName : ""}</div>
                     </div>
                   );
                 })
@@ -717,9 +692,9 @@ function IcsButton({ lessons, weekOffset }) {
       if (l.is_plan) continue; // skip monthly plans in calendar export
       const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
-      const date = addDays(monday, dow - 1); // 1→0 … 7→6
+      const date = addDays(monday, dow - 1);
       const mins = resolveStartEndMins(l);
-      if (!mins) continue; // only export timed lessons
+      if (!mins) continue;
       const start = new Date(date), end = new Date(date);
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);

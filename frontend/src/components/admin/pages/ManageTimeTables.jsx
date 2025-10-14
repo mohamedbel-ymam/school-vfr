@@ -56,6 +56,26 @@ const addMinutes = (hhmm, mins) => {
   const total = (m + mins) % (24 * 60);
   return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
 };
+// ----- ISO week helpers (YYYY-Www → Monday date) -----
+const parseIsoWeek = (s) => {
+  // "2025-W06" → { year: 2025, week: 6 }
+  const m = /^(\d{4})-W(\d{2})$/.exec(String(s || ""));
+  if (!m) return null;
+  return { year: +m[1], week: +m[2] };
+};
+
+const mondayFromIsoWeek = (year, week) => {
+  // ISO week 1 is the week with Jan 4th; get Monday of week 1
+  const jan4 = new Date(year, 0, 4);
+  const day = jan4.getDay() || 7; // 1..7 (Mon..Sun)
+  const mondayWeek1 = new Date(jan4);
+  mondayWeek1.setDate(jan4.getDate() - day + 1); // Monday of week 1
+  const monday = new Date(mondayWeek1);
+  monday.setDate(mondayWeek1.getDate() + (week - 1) * 7);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
 
 const getStartMin = (row) => Number.isFinite(row?.start_minutes) ? row.start_minutes : toMins(getStartStr(row));
 const getEndMin   = (row) => Number.isFinite(row?.end_minutes)   ? row.end_minutes   : toMins(getEndStr(row));
@@ -677,19 +697,41 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
     room_id: "",
   });
 
+  // NEW: ISO week picker like "2025-W06"
+  const [weeklyIso, setWeeklyIso] = useState("");
+
+  // Existing monthly controls (still supported)
   const [monthlyMonth, setMonthlyMonth] = useState(""); // "YYYY-MM"
   const [monthlyDay, setMonthlyDay] = useState("");     // "1..31"
   const [monthlyTitle, setMonthlyTitle] = useState("");
   const [monthlyAuto, setMonthlyAuto] = useState(true);
+
   const [saving, setSaving] = useState(false);
 
+  // When a week is picked, compute plan date = Monday(week) + (day_of_week-1)
+  const syncPlanDateFromWeek = (iso) => {
+    const parsed = parseIsoWeek(iso);
+    if (!parsed) return;
+    const monday = mondayFromIsoWeek(parsed.year, parsed.week);
+    const d = addDays(monday, Number(form.day_of_week) - 1);
+    setMonthlyMonth(fmtMonth(d));
+    setMonthlyDay(String(d.getDate()));
+    setMonthlyAuto(false); // stop auto-filling from "this week"
+  };
+
+  // If no week is picked, keep the legacy "auto-fill to this week"
   useEffect(() => {
+    if (weeklyIso) {
+      // if a week is selected, keep the plan date in that week when day_of_week changes
+      syncPlanDateFromWeek(weeklyIso);
+      return;
+    }
     if (!monthlyAuto) return;
     const monday = startOfWeekMonday(new Date());
     const d = addDays(monday, Number(form.day_of_week) - 1);
     setMonthlyMonth(fmtMonth(d));
     setMonthlyDay(String(d.getDate()));
-  }, [form.day_of_week, monthlyAuto]);
+  }, [form.day_of_week, monthlyAuto, weeklyIso]);
 
   const canSave =
     form.degree_id && form.subject_id && form.teacher_id && form.day_of_week && form.start_time && form.end_time;
@@ -716,6 +758,7 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
       const res = await TimeTableApi.create(payload);
       const created = res?.data?.data ?? res?.data;
 
+      // If month+day is set (either from ISO week picker or manually), also create a monthly plan for that exact date
       if (monthlyMonth && monthlyDay) {
         const plan_date = toYmdFromYm(monthlyMonth, monthlyDay);
         try {
@@ -726,18 +769,18 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
             teacher_id: payload.teacher_id,
             title: monthlyTitle || null,
           });
-          toast.success("Monthly plan created");
+          toast.success("Plan mensuel créé");
           goMonthly?.({ month: monthlyMonth, degreeId: payload.degree_id, focusDate: plan_date });
         } catch (e) {
           console.error(e);
-          toast.error(e?.response?.data?.message || "Emploi du temps saved, but monthly plan failed");
+          toast.error(e?.response?.data?.message || "Rangée créée, mais création du plan mensuel a échoué");
         }
       }
 
       onCreated?.(created);
     } catch (e) {
       console.error(e);
-      const msg = e?.response?.data?.message || Object.values(e?.response?.data?.errors ?? {})?.[0]?.[0] || "Failed to create row";
+      const msg = e?.response?.data?.message || Object.values(e?.response?.data?.errors ?? {})?.[0]?.[0] || "Échec de création";
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -746,65 +789,41 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
 
   return (
     <div className="rounded-2xl border p-4 bg-card text-card-foreground space-y-4">
-      <div className="font-semibold">créer un rangé d'emploi du temps</div>
+      <div className="font-semibold">Créer une rangée (hebdo)</div>
 
       <div className="grid md:grid-cols-6 gap-3">
         <div className="md:col-span-2">
           <Select value={form.degree_id} onValueChange={(v) => setForm((f) => ({ ...f, degree_id: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Niveau *" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Niveau *" /></SelectTrigger>
             <SelectContent>
-              {degrees.map((d) => (
-                <SelectItem key={d.id} value={String(d.id)}>
-                  {d.name}
-                </SelectItem>
-              ))}
+              {degrees.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
 
         <div className="md:col-span-2">
           <Select value={form.subject_id} onValueChange={(v) => setForm((f) => ({ ...f, subject_id: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Matière *" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Matière *" /></SelectTrigger>
             <SelectContent>
-              {subjects.map((s) => (
-                <SelectItem key={s.id} value={String(s.id)}>
-                  {s.name}
-                </SelectItem>
-              ))}
+              {subjects.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
 
         <div className="md:col-span-2">
           <Select value={form.teacher_id} onValueChange={(v) => setForm((f) => ({ ...f, teacher_id: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Enseignant *" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Enseignant *" /></SelectTrigger>
             <SelectContent>
-              {teachers.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>
-                  {t.firstname} {t.lastname}
-                </SelectItem>
-              ))}
+              {teachers.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.firstname} {t.lastname}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
 
         <div>
           <Select value={form.day_of_week} onValueChange={(v) => setForm((f) => ({ ...f, day_of_week: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Day *" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Jour *" /></SelectTrigger>
             <SelectContent>
-              {DAYS.map((d) => (
-                <SelectItem key={d.val} value={String(d.val)}>
-                  {d.label}
-                </SelectItem>
-              ))}
+              {DAYS.map((d) => <SelectItem key={d.val} value={String(d.val)}>{d.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -835,9 +854,7 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
 
         <div className="md:col-span-2">
           <Select value={form.room_id} onValueChange={(v) => setForm((f) => ({ ...f, room_id: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Room (optional)" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Salle (facultatif)" /></SelectTrigger>
             <SelectContent>
               {rooms.length ? rooms.map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>) : null}
             </SelectContent>
@@ -845,17 +862,42 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
         </div>
       </div>
 
+      {/* Monthly plan block (optional) */}
       <div className="rounded-xl border p-3 bg-muted/20 space-y-2">
-        <div className="text-sm font-medium">Créer aussi l'emploi du temps pour le mois (optionel)</div>
+        <div className="text-sm font-medium">Créer aussi un plan (pour une semaine précise)</div>
+
+        {/* NEW: Week picker */}
         <div className="grid md:grid-cols-6 gap-3">
+          <div className="md:col-span-2">
+            <Input
+              type="week"
+              value={weeklyIso}
+              onChange={(e) => {
+                const v = e.target.value;
+                setWeeklyIso(v);
+                if (v) syncPlanDateFromWeek(v);
+              }}
+              className="h-9"
+              placeholder="Semaine (ex: 2025-W06)"
+            />
+          </div>
+
+          {/* Still allow manual month/day override if desired */}
           <div>
-            <Input type="month" value={monthlyMonth} onChange={(e) => { setMonthlyAuto(false); setMonthlyMonth(e.target.value); }} className="h-9" />
+            <Input
+              type="month"
+              value={monthlyMonth}
+              onChange={(e) => { setMonthlyAuto(false); setMonthlyMonth(e.target.value); }}
+              className="h-9"
+            />
           </div>
           <div>
-            <Select value={monthlyDay || undefined} onValueChange={(v) => { setMonthlyAuto(false); setMonthlyDay(v); }} disabled={!monthlyMonth}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Day" />
-              </SelectTrigger>
+            <Select
+              value={monthlyDay || undefined}
+              onValueChange={(v) => { setMonthlyAuto(false); setMonthlyDay(v); }}
+              disabled={!monthlyMonth}
+            >
+              <SelectTrigger className="h-9"><SelectValue placeholder="Jour" /></SelectTrigger>
               <SelectContent>
                 {(() => {
                   if (!monthlyMonth) return null;
@@ -863,40 +905,44 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
                   const count = new Date(y, m, 0).getDate();
                   return Array.from({ length: count }, (_, i) => {
                     const d = String(i + 1);
-                    return (
-                      <SelectItem key={d} value={d}>
-                        {d}
-                      </SelectItem>
-                    );
+                    return <SelectItem key={d} value={d}>{d}</SelectItem>;
                   });
                 })()}
               </SelectContent>
             </Select>
           </div>
-          <div className="md:col-span-4">
-            <Input value={monthlyTitle} onChange={(e) => setMonthlyTitle(e.target.value)} placeholder="Plan title (optional)" className="h-9" />
+
+          <div className="md:col-span-2">
+            <Input
+              value={monthlyTitle}
+              onChange={(e) => setMonthlyTitle(e.target.value)}
+              placeholder="Titre du plan (facultatif)"
+              className="h-9"
+            />
           </div>
         </div>
+
         <div className="text-xs text-muted-foreground">
-          Day-of-week auto-fills the date to the matching day in <b>this week</b> until you change month/day.
+          Sélectionnez une <b>semaine</b> (ou gardez mois+jour). La date du plan sera le <b>{`jour choisi (${DAYS[+form.day_of_week - 1]?.label})`} de cette semaine</b>.
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={save} disabled={!canSave || saving}>
-          {saving ? "Saving…" : "Enregistrer row"}
+          {saving ? "Enregistrement…" : "Enregistrer rangée"}
         </Button>
         <Button variant="ghost" onClick={onCancel} disabled={saving}>
-          Cancel
+          Annuler
         </Button>
       </div>
 
       <div className="text-xs text-muted-foreground">
-        Requis : Niveau, Matière, Enseignant, Jour, Heure de début et Heure de fin (demi-heures acceptées).
+        Requis : Niveau, Matière, Enseignant, Jour, Heure de début et de fin.
       </div>
     </div>
   );
 }
+
 
 /* ========================= Monthly Planner ========================= */
 
