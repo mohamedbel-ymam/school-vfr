@@ -308,32 +308,35 @@ function ViewToggle({ value, onChange }) {
 
 /* GRID */
 function WeekGrid({ lessons, weekOffset }) {
-  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
+  const monday = useMemo(
+    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
+    [weekOffset]
+  );
 
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
+
     for (const l of lessons ?? []) {
-      if (l.is_plan) {
-        if (!l.plan_date) return null;
-        const date = new Date(`${l.plan_date}T00:00:00`);
-        if (isNaN(date) || !inWeek(date, monday)) return null; // only that week
-        const js = date.getDay(); // 0..6
-        day = js === 0 ? 7 : js;  // 1..7
-      } else {
-        day = normalizeDow(l?.day_of_week);
-      }
-      if (!day) return null;              // plans never shown in grid
-      const mins = resolveStartEndMins(l);
-      if (!mins) continue;                   // only timed weekly rows
+      // teacher rows are weekly; if you later add monthly plans, copy the student logic here
       const day = normalizeDow(l?.day_of_week);
       if (!day) continue;
-      m.get(day)?.push(l);
+
+      const mins = resolveStartEndMins(l);
+      if (!mins) continue;
+
+      if (!m.has(day)) m.set(day, []);
+      m.get(day).push(l);
     }
+
     for (const [, arr] of m) {
-      arr.sort((a, b) => (resolveStartEndMins(a)?.[0] ?? 0) - (resolveStartEndMins(b)?.[0] ?? 0));
+      arr.sort((a, b) => {
+        const A = resolveStartEndMins(a)?.[0] ?? 0;
+        const B = resolveStartEndMins(b)?.[0] ?? 0;
+        return A - B;
+      });
     }
     return m;
-  }, [lessons]);
+  }, [lessons, monday]);
 
   const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
 

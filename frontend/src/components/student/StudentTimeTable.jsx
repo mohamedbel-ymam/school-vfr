@@ -416,30 +416,39 @@ function Legend({ subjects }) {
 }
 
 /* ----------------------------- Grille hebdomadaire ---------------------------- */
-function WeekGrid({ lessons, weekOffset }) {
-  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
+  function WeekGrid({ lessons, weekOffset }) {
+  const monday = useMemo(
+    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
+    [weekOffset]
+  );
 
-  // group by day — only timed lessons (skip monthly plans & untimed so no phantom lines)
+  // FIXED: safe grouping (no early returns, no shadowed 'day')
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
+
     for (const l of lessons ?? []) {
+      let day = null;
+
       if (l.is_plan) {
-        if (!l.plan_date) return null;
+        // show a plan only in its actual week
+        if (!l.plan_date) continue;
         const date = new Date(`${l.plan_date}T00:00:00`);
-        if (isNaN(date) || !inWeek(date, monday)) return null; // only that week
-        const js = date.getDay(); // 0..6
-        day = js === 0 ? 7 : js;  // 1..7
+        if (Number.isNaN(date.getTime()) || !inWeek(date, monday)) continue;
+        const js = date.getDay();            // 0..6
+        day = js === 0 ? 7 : js;             // 1..7
       } else {
-        day = normalizeDow(l?.day_of_week);
+        day = normalizeDow(l?.day_of_week);  // weekly row
       }
-      if (!day) return null;           // never draw plans on the grid
-      const mins = resolveStartEndMins(l);
-      if (!mins) continue;                // skip untimed
-      const day = normalizeDow(l?.day_of_week);
+
       if (!day) continue;
+
+      const mins = resolveStartEndMins(l);   // timed only
+      if (!mins) continue;
+
       if (!m.has(day)) m.set(day, []);
       m.get(day).push(l);
     }
+
     for (const [, arr] of m) {
       arr.sort((a, b) => {
         const A = resolveStartEndMins(a)?.[0] ?? 0;
@@ -448,7 +457,7 @@ function WeekGrid({ lessons, weekOffset }) {
       });
     }
     return m;
-  }, [lessons]);
+  }, [lessons, monday])
 
   const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
 
