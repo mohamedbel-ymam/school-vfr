@@ -31,7 +31,7 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const extractHHMM = (v) => {
   if (!v) return null;
   const s = String(v);
-  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/); // handles "2025-01-01T09:00:00Z" or "2025-01-01 09:00:00"
+  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/); // "2025-01-01T09:00:00Z" or "2025-01-01 09:00:00"
   return m ? `${m[1]}:${m[2]}` : null;
 };
 
@@ -84,7 +84,10 @@ const slugify = (s = "") =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
-const subjectKey = (l) => l?.subject?.id ?? l?.subject_id ?? slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
+const subjectKey = (l) =>
+  l?.subject?.id ??
+  l?.subject_id ??
+  slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
 
 const hashInt = (str) => {
   let h = 0;
@@ -93,21 +96,38 @@ const hashInt = (str) => {
 };
 const hueForSubject = (key) => (hashInt(String(key)) * 137.508) % 360;
 
-/** Solid HEX/HSL for subject block background. */
+/** Solid HSL for subject block background. */
 const subjectSolidColor = (l) => {
   const key = String(subjectKey(l));
   if (subjectColors[key]) return subjectColors[key]; // exact mapping (e.g., english = red)
   const hue = hueForSubject(key);
   return `hsl(${hue} 65% 45%)`; // pleasant solid fallback
 };
+/** Soft (transparent) background using the same hue. */
+const subjectSoftBgFromKey = (key) => {
+  const hue = hueForSubject(key);
+  return `hsl(${hue} 65% 45% / 0.14)`;
+};
 
 const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
 // --- time extraction from any backend shape ---
 const getStartStr = (l) =>
-  l?.start_time ?? extractHHMM(l?.starts_at) ?? null;
-const getEndStr   = (l) =>
-  l?.end_time   ?? extractHHMM(l?.ends_at)   ?? null;
+  l?.start_time ??
+  extractHHMM(l?.starts_at) ??
+  l?.start ??
+  null;
+
+const getEndStr = (l) =>
+  l?.end_time ??
+  extractHHMM(l?.ends_at) ??
+  l?.end ??
+  null;
+
+const getStartMin = (l) =>
+  Number.isFinite(l?.start_minutes) ? l.start_minutes : toMins(getStartStr(l));
+const getEndMin = (l) =>
+  Number.isFinite(l?.end_minutes) ? l.end_minutes : toMins(getEndStr(l));
 
 // period → [startMins, endMins]
 const parsePeriodToMins = (period) => {
@@ -136,10 +156,17 @@ const parsePeriodToMins = (period) => {
 
 // Choose minutes to display for a row, *only* from admin-entered times or period
 const resolveStartEndMins = (row) => {
-  const s = toMins(getStartStr(row));
-  const e = toMins(getEndStr(row));
+  // 1) numeric minutes shape
+  if (Number.isFinite(row?.start_minutes) && Number.isFinite(row?.end_minutes)) {
+    const s = row.start_minutes, e = row.end_minutes;
+    if (e > s) return [s, e];
+  }
+  // 2) strings (HH:MM / ISO time part)
+  const s = getStartMin(row);
+  const e = getEndMin(row);
   if (s != null && e != null && e > s) return [s, e];
 
+  // 3) "period" fallback
   const p = parsePeriodToMins(row?.period);
   if (p) return p;
 
@@ -201,6 +228,7 @@ export default function StudentTimeTable() {
         const normalized = (raw ?? []).map((l) => ({
           ...l,
           day_of_week: Number(l?.day_of_week ?? l?.dow ?? l?.day ?? 0),
+
           subject:
             l?.subject?.id || l?.subject_id
               ? {
@@ -210,12 +238,18 @@ export default function StudentTimeTable() {
               : l?.subject?.name
               ? { id: null, name: l.subject.name }
               : l?.subject,
+
           room: l?.room ?? (l?.room_id ? null : undefined),
+
           timetable_id: l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
           timetable: l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
-          // exact hour strings (timezone-free)
+
+          // keep all possible time representations
           start_time: getStartStr(l),
           end_time: getEndStr(l),
+          start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
+          end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
+
           // never place monthly plan as timed block
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
         }));
@@ -370,14 +404,15 @@ function Legend({ subjects }) {
     <div className="flex flex-wrap gap-2 text-xs">
       {subjects.map((s) => {
         const key = s.id;
-        const color = subjectColors[key] || `hsl(${hueForSubject(key)} 65% 45%)`;
+        const solid = subjectColors[key] || `hsl(${hueForSubject(key)} 65% 45%)`;
+        const soft = subjectSoftBgFromKey(key);
         return (
           <span
             key={s.id}
             className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-2 py-0.5 border"
-            style={{ borderColor: "transparent", background: `${color}22` }}
+            style={{ borderColor: "transparent", background: soft }}
           >
-            <span className="h-3 w-3 rounded-full" style={{ background: color }} />
+            <span className="h-3 w-3 rounded-full" style={{ background: solid }} />
             <span className="text-foreground/80">{s.name}</span>
           </span>
         );
@@ -394,7 +429,7 @@ function WeekGrid({ lessons, weekOffset }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue;            // ⟵ never draw plans on the grid
+      if (l.is_plan) continue;            // never draw plans on the grid
       const mins = resolveStartEndMins(l);
       if (!mins) continue;                // skip untimed
       const day = Number(l.day_of_week);
@@ -508,8 +543,6 @@ function WeekGrid({ lessons, weekOffset }) {
                     return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
                   })}
 
-                  {/* NOTE: removed the moving "NOW" line entirely */}
-
                   {/* séances (timed only) */}
                   {lanes.map((lane, laneIndex) =>
                     lane.map(({ l, s, e }, i) => {
@@ -522,7 +555,7 @@ function WeekGrid({ lessons, weekOffset }) {
                       const leftPct = laneIndex * (100 / lanes.length);
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Matière";
-                      const color = subjectSolidColor(l);
+                      const solid = subjectSolidColor(l);
                       const rName = roomName(l);
                       const sText = parseTimeLike(getStartStr(l));
                       const eText = parseTimeLike(getEndStr(l));
@@ -537,7 +570,7 @@ function WeekGrid({ lessons, weekOffset }) {
                             height: `${heightPct}%`,
                             left: `calc(${leftPct}% + 4px)`,
                             width: `calc(${widthPct}% - 8px)`,
-                            backgroundColor: color,
+                            backgroundColor: solid,
                             color: "#fff",
                             boxShadow: `0 6px 14px rgba(0,0,0,0.18)`,
                           }}
@@ -598,7 +631,9 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const color = subjectSolidColor(l);
+                  const key = subjectKey(l);
+                  const solid = subjectSolidColor(l);
+                  const soft = subjectSoftBgFromKey(key);
                   const rName = roomName(l);
                   const times = resolveStartEndMins(l);
 
@@ -611,12 +646,12 @@ function AgendaList({ lessons, weekOffset }) {
                     <div
                       key={l.id ?? `${d.val}-${i}`}
                       className="rounded-xl border p-3"
-                      style={{ background: `${color}22`, borderColor: "transparent" }}
+                      style={{ background: soft, borderColor: "transparent" }}
                     >
                       <div className="font-medium text-foreground flex items-center gap-2">
                         <span
                           className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-                          style={{ background: color, color: "#fff" }}
+                          style={{ background: solid, color: "#fff" }}
                         >
                           {l?.subject?.name ?? l?.subject_name ?? "Matière"}
                         </span>

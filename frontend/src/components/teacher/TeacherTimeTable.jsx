@@ -1,3 +1,4 @@
+// src/components/teacher/TeacherTimetable.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import subjectColors from "../../config/subjectColors";
@@ -7,8 +8,17 @@ import subjectColors from "../../config/subjectColors";
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
 
-const getStartRaw = (l) => l?.start_time ?? l?.starts_at ?? null;
-const getEndRaw   = (l) => l?.end_time   ?? l?.ends_at   ?? null;
+/** Extract "HH:MM" from ISO/SQL strings like "2025-01-01T09:00:00Z" or "2025-01-01 09:00:00". */
+const extractHHMM = (v) => {
+  if (!v) return null;
+  const s = String(v);
+  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
+  return m ? `${m[1]}:${m[2]}` : null;
+};
+
+// Preferred string getters (timezone-free)
+const getStartStr = (l) => l?.start_time ?? extractHHMM(l?.starts_at) ?? l?.start ?? null;
+const getEndStr   = (l) => l?.end_time   ?? extractHHMM(l?.ends_at)   ?? l?.end   ?? null;
 
 const DAYS = [
   { label: "Lun", full: "Lundi",     val: 1 },
@@ -84,6 +94,7 @@ const subjectBlockColors = (l) => {
   const key = String(subjectKey(l) ?? "subject");
   const fixed = subjectColors?.[key];
   if (fixed) {
+    // If your palette is hex (#rrggbb), fixed + '22' yields a nice translucent bg.
     return { bg: `${fixed}22`, border: fixed, accent: fixed, chip: fixed, chipText: "#fff" };
   }
   const hue = goldenHue(key);
@@ -125,11 +136,18 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-/** Choose minutes to display for a lesson */
+/** Choose minutes to display for a lesson (supports minutes or strings) */
 const resolveStartEndMins = (l) => {
-  const s = toMins(getStartRaw(l));
-  const e = toMins(getEndRaw(l));
+  // 1) direct minutes from API
+  if (Number.isFinite(l?.start_minutes) && Number.isFinite(l?.end_minutes)) {
+    const s = l.start_minutes, e = l.end_minutes;
+    if (e > s) return [s, e];
+  }
+  // 2) strings
+  const s = toMins(getStartStr(l));
+  const e = toMins(getEndStr(l));
   if (s != null && e != null && e > s) return [s, e];
+  // 3) period fallback
   const p = parsePeriodToMins(l?.period);
   if (p) return p;
   return null;
@@ -179,8 +197,14 @@ export default function TeacherTimetable() {
         const raw = unwrapLessons(res) ?? [];
         const normalized = raw.map((l) => ({
           ...l,
-          start_time: getStartRaw(l),
-          end_time: getEndRaw(l),
+          // normalize day index
+          day_of_week: Number(l?.day_of_week ?? l?.dow ?? l?.day ?? 0),
+          // keep all time shapes
+          start_time: getStartStr(l),
+          end_time: getEndStr(l),
+          start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
+          end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
+          // never draw plans as timed blocks
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
         }));
         setLessons(normalized);
@@ -461,8 +485,6 @@ function WeekGrid({ lessons, weekOffset }) {
                 return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
               })}
 
-              {/* NO “now” line anymore */}
-
               {/* lessons */}
               {lanes.map((lane, laneIndex) =>
                 lane.map(({ l, s, e }, i) => {
@@ -478,8 +500,8 @@ function WeekGrid({ lessons, weekOffset }) {
                   const c = subjectBlockColors(l);                  // subject color background
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = l.room?.name ?? l.room ?? "";
-                  const startS = parseTimeLike(getStartRaw(l));
-                  const endS   = parseTimeLike(getEndRaw(l));
+                  const startS = parseTimeLike(getStartStr(l));
+                  const endS   = parseTimeLike(getEndStr(l));
 
                   const info = [
                     startS && endS ? `${startS}–${endS}` : (l.period ? `Créneau ${l.period}` : ""),
