@@ -4,6 +4,56 @@ import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import subjectColors from "../../config/subjectColors";
 
 /* --------------------------------- Constantes --------------------------------- */
+const SUBJECT_ABBR = {
+  "physique-chimie": "PC",
+  "mathematiques": "Math",
+  "mathematique": "Math",
+  "maths": "Math",
+  "francais": "FR",
+  "anglais": "AN",
+  "histoire-geographie": "HG",
+  "sciences-de-la-vie-et-de-la-terre": "SVT",
+  "svt": "SVT",
+  "education-physique-et-sportive": "EPS",
+  "eps": "EPS",
+  "informatique": "INFO",
+  "technologie": "TECH",
+  "philosophie": "PHILO",
+  "espagnol": "ESP",
+  "allemand": "ALL",
+  "arabe": "AR",
+  "musique": "MUS",
+  "arts-plastiques": "ARTS",
+};
+const abbrSubject = (name = "") => {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const key = slugify(raw); // you already have slugify in both files
+  if (SUBJECT_ABBR[key]) return SUBJECT_ABBR[key];
+
+  // Fallback: initials of first 2–3 words (≥3 letters)
+  const words = raw
+    .normalize?.("NFD").replace(/[\u0300-\u036f]/g, "")
+    .split(/[\s\-]+/).filter(w => w.length >= 3);
+  const initials = words.slice(0, 3).map(w => w[0].toUpperCase()).join("");
+  return initials || raw.slice(0, 6); // last resort
+};
+
+// "Salle 01" → "S-1", "Room 203" → "S-203", "Salle A12" → "S-A12"
+const abbrRoom = (name = "") => {
+  const s = String(name || "").trim();
+  if (!s) return "";
+  const m = s.match(/(salle|room|class(?:room)?)\W*([A-Za-z]?\s*\d+)/i);
+  if (m) {
+    const id = m[2].replace(/\s+/g, "");
+    return `S-${id.replace(/^0+(\d)/, "$1")}`;
+  }
+  // Shorten anything like "Salle" alone
+  if (/^salle$/i.test(s)) return "S";
+  return s.length > 8 ? s.slice(0, 8) : s;
+};
+
+const oneLine = (...parts) => parts.filter(Boolean).join(" • ");
 const DAYS = [
   { label: "Lun", full: "Lundi",     val: 1 },
   { label: "Mar", full: "Mardi",     val: 2 },
@@ -588,25 +638,28 @@ function WeekGrid({ lessons, weekOffset }) {
                       const eText = parseTimeLike(getEndStr(l));
 
                       return (
-                        <div
-                          key={`${l.id ?? `${d.val}-${i}`}`}
-                          className="absolute rounded-lg text-[11px] sm:text-sm overflow-hidden"
-                          title={`${subjName} ${sText ?? ""}${eText ? `–${eText}` : ""}${rName ? ` • ${rName}` : ""}`}
-                          style={{
-                            top: `${topPct}%`,
-                            height: `${heightPct}%`,
-                            left: `calc(${leftPct}% + 4px)`,
-                            width: `calc(${widthPct}% - 8px)`,
-                            backgroundColor: solid,
-                            color: "#fff",
-                            boxShadow: `0 6px 14px rgba(0,0,0,0.18)`,
-                          }}
-                        >
-                          <div className="px-2 py-1 font-medium truncate">{subjName}</div>
-                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] opacity-95 truncate">
-                            {sText && eText ? `${sText}–${eText}` : ""}{rName ? ` • ${rName}` : ""}
-                          </div>
+                      <div
+                        key={`${l.id ?? `${d.val}-${i}`}`}
+                        className="absolute rounded-lg text-[11px] sm:text-sm overflow-hidden"
+                        title={`${(l?.subject?.name ?? l?.subject_name ?? "Matière")} ${sText && eText ? `(${sText}–${eText})` : ""}${rName ? ` • ${rName}` : ""}`}
+                        style={{
+                          top: `${topPct}%`,
+                          height: `${heightPct}%`,
+                          left: `calc(${leftPct}% + 4px)`,
+                          width: `calc(${widthPct}% - 8px)`,
+                          backgroundColor: solid,
+                          color: "#fff",
+                          boxShadow: `0 6px 14px rgba(0,0,0,0.18)`,
+                        }}
+                      >
+                        <div className="px-2 py-1 font-medium truncate whitespace-nowrap">
+                          {oneLine(
+                            abbrSubject(l?.subject?.name ?? l?.subject_name ?? "Matière"),
+                            sText && eText ? `${sText}–${eText}` : "",
+                            rName ? abbrRoom(rName) : ""
+                          )}
                         </div>
+                      </div>
                       );
                     })
                   )}

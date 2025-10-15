@@ -464,7 +464,7 @@ function WeekGrid({ lessons, weekOffset }) {
                         <div
                           key={`${l.id ?? `${d.val}-${i}`}`}
                           className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                          title={`${degree}${info ? ` • ${info}` : ""}`}
+                          title={`${(l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau")} • ${(l.subject?.name ?? "Cours")} ${startS && endS ? `(${startS}–${endS})` : (l.period ? `Créneau ${l.period}` : "")}${room ? ` • ${room}` : ""}`}
                           style={{
                             top: `${topPct}%`,
                             height: `${heightPct}%`,
@@ -475,12 +475,17 @@ function WeekGrid({ lessons, weekOffset }) {
                             boxShadow: `0 6px 16px ${c.accent}33`,
                           }}
                         >
-                          <div className="px-2 py-1 flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full" style={{ background: c.accent }} />
-                            <span className="font-medium text-foreground truncate">{degree}</span>
+                          <div className="px-2 py-1 font-medium text-foreground truncate whitespace-nowrap">
+                            {oneLine(
+                              // you can swap order if you prefer degree first
+                              abbrSubject(l?.subject?.name ?? "Cours"),
+                              startS && endS ? `${startS}–${endS}` : (l.period ? `P${l.period}` : ""),
+                              room ? abbrRoom(room) : "",
+                              (l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau")
+                            )}
                           </div>
-                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] text-muted-foreground truncate">{info}</div>
                         </div>
+
                       );
                     })
                   )}
