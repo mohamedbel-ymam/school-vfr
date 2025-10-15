@@ -83,11 +83,11 @@ class TimetableController extends Controller
             ->get();
         
         return response()->json([
-            'data' => [
-                'lessons' => \App\Http\Resources\TimetableResource::collection($lessons),
-            ],
+        'data' => [
+            'lessons' => $lessons, // <- plain collection (no Resource here)
+        ],
         ]);
-    }
+        }
     /** Teacher → lessons for the authenticated teacher (optional ?degree_id=...) */
     public function teacher(Request $request)
     {
@@ -112,7 +112,7 @@ class TimetableController extends Controller
 
         return response()->json([
             'data' => [
-                'lessons' => TimetableResource::collection($lessons),
+                'lessons' => $lessons, // <- plain collection (no Resource here)
             ],
         ]);
     }
@@ -148,7 +148,7 @@ class TimetableController extends Controller
 
         return response()->json([
             'data' => [
-                'lessons' => TimetableResource::collection($lessons),
+                'lessons' => $lessons, // <- plain collection (no Resource here)
             ],
         ]);
     }

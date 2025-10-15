@@ -187,7 +187,16 @@ export default function TeacherTimetable() {
     (async () => {
       try {
         const res = await TimeTableApi.teacher();
-        const raw = unwrapLessons(res) ?? [];
+        const payload = unwrap(res);
+        const raw = Array.isArray(payload?.lessons)
+          ? payload.lessons
+          : Array.isArray(payload?.lessons?.data)
+          ? payload.lessons.data
+          : Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
         const normalized = raw.map((l) => ({
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
