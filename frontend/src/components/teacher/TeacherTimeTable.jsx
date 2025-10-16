@@ -170,7 +170,6 @@ const degreeAbbr = (name = "") => {
     if (l) return "2Bac(L)";
     return "2Bac";
   }
-  // fallback: first 8 chars upper
   return name.length > 10 ? name.slice(0, 10) + "…" : name;
 };
 
@@ -193,7 +192,7 @@ const subjectBlockColors = (l) => {
 
 const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
-/* fixed vertical range */
+/* fixed vertical baseline for period fallback */
 const SCHOOL_START_MINS = 9 * 60;
 const SCHOOL_END_MINS = 22 * 60;
 const PERIOD_DURATION_MINS = 90;
@@ -444,7 +443,25 @@ function WeekGrid({ lessons, weekOffset }) {
     return m;
   }, [lessons, monday]);
 
-  const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
+  // 🔧 Dynamic vertical window from shown items (with padding & clamps)
+  const { minM, maxM, range } = useMemo(() => {
+    let min = Infinity, max = -Infinity;
+    for (const d of DAYS) {
+      for (const l of (byDay.get(d.val) ?? [])) {
+        const mins = resolveStartEndMins(l);
+        if (!mins) continue;
+        min = Math.min(min, mins[0]);
+        max = Math.max(max, mins[1]);
+      }
+    }
+    if (!Number.isFinite(min)) min = 8 * 60; // defaults
+    if (!Number.isFinite(max)) max = 18 * 60;
+    const PAD = 30;
+    min = Math.max(7 * 60, Math.floor((min - PAD) / 30) * 30);
+    max = Math.min(22 * 60, Math.ceil((max + PAD) / 30) * 30);
+    if (max - min < 60) max = min + 60;
+    return { minM: min, maxM: max, range: max - min };
+  }, [byDay]);
 
   const lanesByDay = useMemo(() => {
     const out = new Map();
@@ -469,8 +486,8 @@ function WeekGrid({ lessons, weekOffset }) {
     return out;
   }, [byDay]);
 
-  const hourMarks = useMemo(() => { const arr = []; for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m }); return arr; }, []);
-  const halfHourMarks = useMemo(() => { const arr = []; for (let m = minM + 30; m < maxM; m += 60) arr.push(m); return arr; }, []);
+  const hourMarks = useMemo(() => { const arr = []; for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m }); return arr; }, [minM, maxM]);
+  const halfHourMarks = useMemo(() => { const arr = []; for (let m = minM + 30; m < maxM; m += 60) arr.push(m); return arr; }, [minM, maxM]);
 
   return (
     <div className="rounded-xl border overflow-hidden">

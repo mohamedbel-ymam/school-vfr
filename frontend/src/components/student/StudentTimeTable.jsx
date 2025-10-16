@@ -60,9 +60,15 @@ const DAYS = [
   { label: "Dim", full: "Dimanche", val: 7 },
 ];
 
-const SCHOOL_START_MINS = 9 * 60; // 09:00
-const SCHOOL_END_MINS = 22 * 60; // 22:00
-const PERIOD_DURATION_MINS = 90; // fallback when only "period" is given
+// Fallback/parse constants
+const SCHOOL_START_MINS = 9 * 60;      // used only for parsing "period"
+const SCHOOL_END_MINS = 22 * 60;       // used only for parsing "period"
+const PERIOD_DURATION_MINS = 90;       // fallback when only "period" is given
+
+// Hard clamps for dynamic window
+const HARD_MIN = 7 * 60;               // 07:00 earliest
+const HARD_MAX = 22 * 60;              // 22:00 latest
+const PAD_MINS = 30;                   // 30min headroom
 
 /* ---------------------------------- Helpers ----------------------------------- */
 const unwrap = (r) => r?.data?.data ?? r?.data ?? null;
@@ -404,8 +410,8 @@ export default function StudentTimeTable() {
             value={subjectFilter}
             onChange={setSubjectFilter}
             options={[
-              { value: "", label: "Toutes les matières" },
-              ...subjects.map((s) => ({ value: s.id, label: s.name })),
+                { value: "", label: "Toutes les matières" },
+                ...subjects.map((s) => ({ value: s.id, label: s.name })),
             ]}
           />
           <ViewToggle value={view} onChange={setView} />
@@ -572,9 +578,32 @@ function WeekGrid({ lessons, weekOffset }) {
     return m;
   }, [lessons, monday]);
 
-  const minM = SCHOOL_START_MINS,
-    maxM = SCHOOL_END_MINS,
-    range = maxM - minM;
+  // --- Dynamic vertical time window (auto-fit to dataset) ---
+  const { minM, maxM } = useMemo(() => {
+    let min = Infinity, max = -Infinity;
+    for (const d of DAYS) {
+      const arr = byDay.get(d.val) ?? [];
+      for (const l of arr) {
+        const mins = resolveStartEndMins(l);
+        if (!mins) continue;
+        min = Math.min(min, mins[0]);
+        max = Math.max(max, mins[1]);
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+      // default window if nothing to show
+      min = 9 * 60;  // 09:00
+      max = 12 * 60; // 12:00
+    }
+    // pad and clamp
+    min = Math.floor((min - PAD_MINS) / 30) * 30;
+    max = Math.ceil((max + PAD_MINS) / 30) * 30;
+    min = clamp(min, HARD_MIN, HARD_MAX - 30);
+    max = clamp(max, min + 60, HARD_MAX);
+    return { minM: min, maxM: max };
+  }, [byDay]);
+
+  const range = maxM - minM;
 
   const lanesByDay = useMemo(() => {
     const out = new Map();
@@ -606,15 +635,18 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const hourMarks = useMemo(() => {
     const arr = [];
-    for (let m = minM; m <= maxM; m += 60)
-      arr.push({ h: Math.floor(m / 60), m });
+    // align to hour
+    const startHour = Math.ceil(minM / 60);
+    const endHour = Math.floor(maxM / 60);
+    for (let h = startHour; h <= endHour; h++) arr.push({ h, m: h * 60 });
     return arr;
-  }, []);
+  }, [minM, maxM]);
+
   const halfHourMarks = useMemo(() => {
     const arr = [];
     for (let m = minM + 30; m < maxM; m += 60) arr.push(m);
     return arr;
-  }, []);
+  }, [minM, maxM]);
 
   return (
     <div className="rounded-xl border overflow-hidden">
