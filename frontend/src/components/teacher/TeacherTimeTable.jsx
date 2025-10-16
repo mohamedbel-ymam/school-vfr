@@ -5,7 +5,8 @@ import subjectColors from "../../config/subjectColors";
 
 /* ---------------- helpers & constants ---------------- */
 
-const unwrapLessons = (r) =>
+// unwrap common shapes: {data:{lessons:[...]}} | {lessons:[...]} | [...]
+const unwrap = (r) =>
   r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
 
 // normalize 0..6 (Sun..Sat) → 1..7 (Mon..Sun)
@@ -26,7 +27,7 @@ const extractHHMM = (v) => {
   return m ? `${m[1]}:${m[2]}` : null;
 };
 
-// Accept all likely time fields
+// Prefer normalized time fields
 const getStartStr = (l) =>
   l?.start_time ?? extractHHMM(l?.starts_at) ?? l?.start ?? null;
 const getEndStr = (l) =>
@@ -93,6 +94,86 @@ const inWeek = (date, monday) => {
   return date >= start && date <= end;
 };
 
+/* ---------- SUBJECT/ROOM/DEGREE abbreviations ---------- */
+const _strip = (s = "") =>
+  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+const SUBJECT_ABBR = {
+  "physique & chimie": "PC",
+  "physique et chimie": "PC",
+  "physique-chimie": "PC",
+  "français": "FR",
+  "francais": "FR",
+  "mathématiques": "MA",
+  "mathematiques": "MA",
+  "maths": "MA",
+  "anglais": "AN",
+  "arabe": "AR",
+  "svt": "SVT",
+  "histoire géographie": "HG",
+  "histoire-geographie": "HG",
+  "histoire-géographie": "HG",
+  "informatique": "INFO",
+  "éducation physique": "EPS",
+  "education physique": "EPS",
+  "philosophie": "PHI",
+};
+const subjectAbbr = (name = "") => {
+  const n = _strip(name);
+  if (SUBJECT_ABBR[n]) return SUBJECT_ABBR[n];
+  const letters = n
+    .split(/\s+/)
+    .filter((w) => w && !["de", "du", "et", "la", "le", "les"].includes(w))
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 4)
+    .toUpperCase();
+  return letters || name.slice(0, 4).toUpperCase();
+};
+
+const roomAbbr = (r) => {
+  if (!r) return "";
+  const s = String(r);
+  const m = s.match(/(?:salle|room)\s*([a-z]?)(\d+)/i);
+  if (m) return `S-${(m[1] || "").toUpperCase()}${m[2]}`;
+  if (/^S-\w+/i.test(s)) return s;
+  return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
+};
+
+// degree abbreviations (robust to accents/case)
+const degreeAbbr = (name = "") => {
+  const n = _strip(name);
+  if (!n) return "Niv.";
+  // 3e année collège → 3AC
+  if (/(^|\s)3(\s|e|eme|ème).*(college|collegue|colle|ac)/i.test(n)) return "3AC";
+  // Tronc commun → TC
+  if (/tronc\s*commun|^tc$/.test(n)) return "TC";
+  // 1/2 Bac (SM/SP/SVT/L, …)
+  const bac = n.includes("bac");
+  const one = /\b1\b|premiere|1ere|1re/.test(n);
+  const two = /\b2\b|deuxieme|2eme|2e/.test(n);
+  const sm = /sciences?\s*mat(h)?|sm\b/.test(n);
+  const sp = /sciences?\s*phys|sp\b/.test(n);
+  const svt = /\bsvt\b|sciences?\s*vie/.test(n);
+  const l = /\blettres?\b|litt/i.test(n);
+  if (bac && one) {
+    if (sm) return "1Bac(SM)";
+    if (sp) return "1Bac(SP)";
+    if (svt) return "1Bac(SVT)";
+    if (l) return "1Bac(L)";
+    return "1Bac";
+  }
+  if (bac && two) {
+    if (sm) return "2Bac(SM)";
+    if (sp) return "2Bac(SP)";
+    if (svt) return "2Bac(SVT)";
+    if (l) return "2Bac(L)";
+    return "2Bac";
+  }
+  // fallback: first 8 chars upper
+  return name.length > 10 ? name.slice(0, 10) + "…" : name;
+};
+
 /* ---------- SUBJECT colors ---------- */
 const slugify = (s = "") =>
   s.normalize?.("NFD")?.replace(/[\u0300-\u036f]/g, "")
@@ -105,9 +186,9 @@ const subjectKey = (l) =>
 const subjectBlockColors = (l) => {
   const key = String(subjectKey(l) ?? "subject");
   const fixed = subjectColors?.[key];
-  if (fixed) return { bg: `${fixed}22`, border: fixed, accent: fixed, chip: fixed, chipText: "#fff" };
+  if (fixed) return { bg: `${fixed}22`, border: fixed, accent: fixed };
   const hue = goldenHue(key);
-  return { bg: `hsla(${hue},85%,45%,0.20)`, border: `hsl(${hue},65%,45%)`, accent: `hsl(${hue},85%,45%)`, chip: `hsl(${hue},70%,45%)`, chipText: "#fff" };
+  return { bg: `hsla(${hue},85%,45%,0.20)`, border: `hsl(${hue},65%,45%)`, accent: `hsl(${hue},85%,45%)` };
 };
 
 const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
@@ -190,14 +271,12 @@ export default function TeacherTimetable() {
         const payload = unwrap(res);
         const raw = Array.isArray(payload?.lessons)
           ? payload.lessons
-          : Array.isArray(payload?.lessons?.data)
-          ? payload.lessons.data
-          : Array.isArray(payload)
-          ? payload
           : Array.isArray(payload?.data)
           ? payload.data
+          : Array.isArray(payload)
+          ? payload
           : [];
-        const normalized = raw.map((l) => ({
+        const normalized = (raw ?? []).map((l) => ({
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
           start_time: getStartStr(l),
@@ -205,8 +284,7 @@ export default function TeacherTimetable() {
           start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
           end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
-          plan_date: l?.plan_date ?? l?.date ?? null, // anchor plans to a real date
-          // NEW: weekly rows can be scoped to a specific week (YYYY-MM-DD Monday)
+          plan_date: l?.plan_date ?? l?.date ?? null,
           week_start: l?.week_start ?? l?.weekStart ?? null,
         }));
         setLessons(normalized);
@@ -327,7 +405,7 @@ function WeekGrid({ lessons, weekOffset }) {
     [weekOffset]
   );
 
-  // Include monthly plans on their exact week/day; weekly rows respect optional week_start
+  // include monthly plans on their exact week/day; weekly rows respect optional week_start
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
 
@@ -452,40 +530,45 @@ function WeekGrid({ lessons, weekOffset }) {
                       const widthPct = Math.max(100 / lanes.length, 25);
                       const leftPct = laneIndex * (100 / lanes.length);
 
+                      const subjName = l?.subject?.name ?? l?.subject_name ?? "Cours";
                       const c = subjectBlockColors(l);
-                      const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
+                      const degreeFull = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
+                      const degreeShort = degreeAbbr(degreeFull);
                       const room = roomName(l);
                       const startS = parseTimeLike(getStartStr(l));
                       const endS = parseTimeLike(getEndStr(l));
-                      const info = [startS && endS ? `${startS}–${endS}` : (l.period ? `Créneau ${l.period}` : ""), room || ""]
-                        .filter(Boolean).join(" • ");
 
                       return (
                         <div
                           key={`${l.id ?? `${d.val}-${i}`}`}
-                          className="absolute rounded-lg border text-[11px] sm:text-sm overflow-hidden"
-                          title={`${(l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau")} • ${(l.subject?.name ?? "Cours")} ${startS && endS ? `(${startS}–${endS})` : (l.period ? `Créneau ${l.period}` : "")}${room ? ` • ${room}` : ""}`}
+                          className="absolute rounded-lg text-[11px] sm:text-sm overflow-hidden"
+                          title={`${degreeFull} • ${subjName} ${startS && endS ? `(${startS}–${endS})` : ""}${room ? ` • ${room}` : ""}`}
                           style={{
                             top: `${topPct}%`,
                             height: `${heightPct}%`,
                             left: `calc(${leftPct}% + 4px)`,
                             width: `calc(${widthPct}% - 8px)`,
-                            backgroundColor: c.bg,
-                            borderColor: c.border,
-                            boxShadow: `0 6px 16px ${c.accent}33`,
+                            backgroundColor: c.border,
+                            color: "#fff",
+                            boxShadow: `0 6px 16px ${c.accent}44`,
                           }}
                         >
-                          <div className="px-2 py-1 font-medium text-foreground truncate whitespace-nowrap">
-                            {oneLine(
-                              // you can swap order if you prefer degree first
-                              abbrSubject(l?.subject?.name ?? "Cours"),
-                              startS && endS ? `${startS}–${endS}` : (l.period ? `P${l.period}` : ""),
-                              room ? abbrRoom(room) : "",
-                              (l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau")
-                            )}
+                          {/* Compact layout: 3 lines + degree tag */}
+                          <div className="px-2 pt-1 font-semibold leading-tight truncate">
+                            {subjectAbbr(subjName)}
+                          </div>
+                          <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
+                            {startS && endS ? `${startS}–${endS}` : ""}
+                          </div>
+                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">
+                            {roomAbbr(room)}
+                          </div>
+
+                          {/* Degree tag pinned bottom-right (keeps within small cells) */}
+                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">
+                            {degreeShort}
                           </div>
                         </div>
-
                       );
                     })
                   )}
@@ -501,7 +584,7 @@ function WeekGrid({ lessons, weekOffset }) {
   );
 }
 
-/* AGENDA: plans only on their exact date, weekly rows respect week_start */
+/* AGENDA (unchanged visual; still clear) */
 function AgendaList({ lessons, weekOffset }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
@@ -517,12 +600,10 @@ function AgendaList({ lessons, weekOffset }) {
         }
         continue;
       }
-
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
         if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
       }
-
       const day = normalizeDow(l?.day_of_week);
       if (!day) continue;
       m.get(day)?.push(l);
@@ -548,21 +629,19 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const c = subjectBlockColors(l);
                   const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})` : "";
-
                   return (
-                    <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors" style={{ borderColor: c.border }}>
+                    <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: c.chip, color: c.chipText, border: `1px solid ${c.border}` }}>
-                          {degree}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10">
+                          {degreeAbbr(degree)}
                         </span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
-                      <div className="text-xs text-muted-foreground">{room || ""}</div>
+                      <div className="text-xs text-foreground/80">{room || ""}</div>
                     </div>
                   );
                 })
@@ -577,7 +656,7 @@ function AgendaList({ lessons, weekOffset }) {
   );
 }
 
-/* ICS (now also respects week_start; still ignores plans) */
+/* ICS (respects week_start; ignores plans) */
 function IcsButton({ lessons, weekOffset }) {
   const download = () => {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
@@ -606,7 +685,7 @@ function IcsButton({ lessons, weekOffset }) {
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
         start, end,
-        title: degree ? `${degree} • ${subj}` : subj,
+        title: degree ? `${degreeAbbr(degree)} • ${subj}` : subj,
         location: room,
         desc: degree ? `Niveau: ${degree}` : "",
       });

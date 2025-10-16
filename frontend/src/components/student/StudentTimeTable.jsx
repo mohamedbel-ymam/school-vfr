@@ -3,70 +3,66 @@ import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import subjectColors from "../../config/subjectColors";
 
-/* --------------------------------- Constantes --------------------------------- */
+/* --------------------------------- Abbreviations --------------------------------- */
+const _strip = (s = "") =>
+  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 const SUBJECT_ABBR = {
+  "physique & chimie": "PC",
+  "physique et chimie": "PC",
   "physique-chimie": "PC",
-  "mathematiques": "Math",
-  "mathematique": "Math",
-  "maths": "Math",
+  "français": "FR",
   "francais": "FR",
+  "mathématiques": "MA",
+  "mathematiques": "MA",
+  "maths": "MA",
   "anglais": "AN",
-  "histoire-geographie": "HG",
-  "sciences-de-la-vie-et-de-la-terre": "SVT",
-  "svt": "SVT",
-  "education-physique-et-sportive": "EPS",
-  "eps": "EPS",
-  "informatique": "INFO",
-  "technologie": "TECH",
-  "philosophie": "PHILO",
-  "espagnol": "ESP",
-  "allemand": "ALL",
   "arabe": "AR",
-  "musique": "MUS",
-  "arts-plastiques": "ARTS",
+  "svt": "SVT",
+  "histoire géographie": "HG",
+  "histoire-geographie": "HG",
+  "histoire-géographie": "HG",
+  "informatique": "INFO",
+  "éducation physique": "EPS",
+  "education physique": "EPS",
+  "philosophie": "PHI",
 };
-const abbrSubject = (name = "") => {
-  const raw = String(name || "").trim();
-  if (!raw) return "";
-  const key = slugify(raw); // you already have slugify in both files
-  if (SUBJECT_ABBR[key]) return SUBJECT_ABBR[key];
-
-  // Fallback: initials of first 2–3 words (≥3 letters)
-  const words = raw
-    .normalize?.("NFD").replace(/[\u0300-\u036f]/g, "")
-    .split(/[\s\-]+/).filter(w => w.length >= 3);
-  const initials = words.slice(0, 3).map(w => w[0].toUpperCase()).join("");
-  return initials || raw.slice(0, 6); // last resort
-};
-
-// "Salle 01" → "S-1", "Room 203" → "S-203", "Salle A12" → "S-A12"
-const abbrRoom = (name = "") => {
-  const s = String(name || "").trim();
-  if (!s) return "";
-  const m = s.match(/(salle|room|class(?:room)?)\W*([A-Za-z]?\s*\d+)/i);
-  if (m) {
-    const id = m[2].replace(/\s+/g, "");
-    return `S-${id.replace(/^0+(\d)/, "$1")}`;
-  }
-  // Shorten anything like "Salle" alone
-  if (/^salle$/i.test(s)) return "S";
-  return s.length > 8 ? s.slice(0, 8) : s;
+const subjectAbbr = (name = "") => {
+  const n = _strip(name);
+  if (SUBJECT_ABBR[n]) return SUBJECT_ABBR[n];
+  const letters = n
+    .split(/\s+/)
+    .filter((w) => w && !["de", "du", "et", "la", "le", "les"].includes(w))
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 4)
+    .toUpperCase();
+  return letters || name.slice(0, 4).toUpperCase();
 };
 
-const oneLine = (...parts) => parts.filter(Boolean).join(" • ");
+const roomAbbr = (r) => {
+  if (!r) return "";
+  const s = String(r);
+  const m = s.match(/(?:salle|room)\s*([a-z]?)(\d+)/i);
+  if (m) return `S-${(m[1] || "").toUpperCase()}${m[2]}`;
+  if (/^S-\w+/i.test(s)) return s;
+  return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
+};
+
+/* --------------------------------- Constantes --------------------------------- */
 const DAYS = [
-  { label: "Lun", full: "Lundi",     val: 1 },
-  { label: "Mar", full: "Mardi",     val: 2 },
-  { label: "Mer", full: "Mercredi",  val: 3 },
-  { label: "Jeu", full: "Jeudi",     val: 4 },
-  { label: "Ven", full: "Vendredi",  val: 5 },
-  { label: "Sam", full: "Samedi",    val: 6 },
-  { label: "Dim", full: "Dimanche",  val: 7 },
+  { label: "Lun", full: "Lundi", val: 1 },
+  { label: "Mar", full: "Mardi", val: 2 },
+  { label: "Mer", full: "Mercredi", val: 3 },
+  { label: "Jeu", full: "Jeudi", val: 4 },
+  { label: "Ven", full: "Vendredi", val: 5 },
+  { label: "Sam", full: "Samedi", val: 6 },
+  { label: "Dim", full: "Dimanche", val: 7 },
 ];
 
-const SCHOOL_START_MINS    = 9 * 60;   // 09:00
-const SCHOOL_END_MINS      = 22 * 60;  // 22:00
-const PERIOD_DURATION_MINS = 90;       // 1h30 fallback when only "period" is given
+const SCHOOL_START_MINS = 9 * 60; // 09:00
+const SCHOOL_END_MINS = 22 * 60; // 22:00
+const PERIOD_DURATION_MINS = 90; // fallback when only "period" is given
 
 /* ---------------------------------- Helpers ----------------------------------- */
 const unwrap = (r) => r?.data?.data ?? r?.data ?? null;
@@ -79,7 +75,7 @@ const normalizeDow = (v) => {
   if (!Number.isFinite(n)) return null;
   if (n === 0) return 7;
   if (n < 0) return null;
-  if (n > 7) return ((n % 7) || 7);
+  if (n > 7) return (n % 7) || 7;
   return n;
 };
 
@@ -124,7 +120,9 @@ const addDays = (date, n) => {
   d.setDate(d.getDate() + n);
   return d;
 };
-const sameMonday = (a, b) => startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+const sameMonday = (a, b) =>
+  startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+
 const isSameDayIndex = (date, dow1to7) => {
   const js = date.getDay(); // 0..6
   const ours = js === 0 ? 7 : js; // 1..7
@@ -133,14 +131,15 @@ const isSameDayIndex = (date, dow1to7) => {
 const inWeek = (date, monday) => {
   const start = new Date(monday);
   const end = addDays(monday, 6);
-  start.setHours(0,0,0,0);
-  end.setHours(23,59,59,999);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
   return date >= start && date <= end;
 };
 
 // ---- Subject colors (fixed-by-key with safe fallback) ----
 const slugify = (s = "") =>
-  s.normalize?.("NFD")
+  s
+    .normalize?.("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -169,20 +168,14 @@ const subjectSoftBgFromKey = (key) => {
   return `hsl(${hue} 65% 45% / 0.14)`;
 };
 
-const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
+const roomName = (l) =>
+  l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
 // --- time extraction from any backend shape ---
 const getStartStr = (l) =>
-  l?.start_time ??
-  extractHHMM(l?.starts_at) ??
-  l?.start ??
-  null;
-
+  l?.start_time ?? extractHHMM(l?.starts_at) ?? l?.start ?? null;
 const getEndStr = (l) =>
-  l?.end_time ??
-  extractHHMM(l?.ends_at) ??
-  l?.end ??
-  null;
+  l?.end_time ?? extractHHMM(l?.ends_at) ?? l?.end ?? null;
 
 const getStartMin = (l) =>
   Number.isFinite(l?.start_minutes) ? l.start_minutes : toMins(getStartStr(l));
@@ -192,7 +185,9 @@ const getEndMin = (l) =>
 const parsePeriodToMins = (period) => {
   if (!period) return null;
   const s = String(period).trim();
-  let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
+  let m = s.match(
+    /(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i
+  );
   if (m) {
     const sm = toMins(m[1]);
     const em = toMins(m[2]);
@@ -210,8 +205,12 @@ const parsePeriodToMins = (period) => {
 
 // minutes to render for any row (weekly or plan)
 const resolveStartEndMins = (row) => {
-  if (Number.isFinite(row?.start_minutes) && Number.isFinite(row?.end_minutes)) {
-    const s = row.start_minutes, e = row.end_minutes;
+  if (
+    Number.isFinite(row?.start_minutes) &&
+    Number.isFinite(row?.end_minutes)
+  ) {
+    const s = row.start_minutes,
+      e = row.end_minutes;
     if (e > s) return [s, e];
   }
   const s = getStartMin(row);
@@ -224,9 +223,9 @@ const resolveStartEndMins = (row) => {
 
 /* ----------------------------------- ICS ------------------------------------- */
 const toIcsDate = (d) =>
-  `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(
-    d.getUTCMinutes()
-  )}00Z`;
+  `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(
+    d.getUTCDate()
+  )}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
 const buildIcs = (events) => {
   const lines = [
     "BEGIN:VCALENDAR",
@@ -279,41 +278,54 @@ export default function StudentTimeTable() {
           : Array.isArray(payload?.data)
           ? payload.data
           : [];
+
         const normalized = (raw ?? []).map((l) => ({
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
 
           subject:
             l?.subject?.id || l?.subject_id
-              ? { id: l.subject?.id ?? l.subject_id, name: l.subject?.name ?? l.subject_name ?? "Matière" }
+              ? {
+                  id: l.subject?.id ?? l.subject_id,
+                  name: l.subject?.name ?? l.subject_name ?? "Matière",
+                }
               : l?.subject?.name
               ? { id: null, name: l.subject.name }
               : l?.subject,
 
           room: l?.room ?? (l?.room_id ? null : undefined),
 
-          timetable_id: l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
-          timetable: l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
+          timetable_id:
+            l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
+          timetable:
+            l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
 
           // keep time info (any shape)
           start_time: getStartStr(l),
           end_time: getEndStr(l),
-          start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
-          end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
+          start_minutes: Number.isFinite(l?.start_minutes)
+            ? l.start_minutes
+            : undefined,
+          end_minutes: Number.isFinite(l?.end_minutes)
+            ? l.end_minutes
+            : undefined,
 
           // plan flags + anchor date
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD
 
-          // NEW: respect week picked by admin on weekly rows
-          week_start: l?.week_start ?? l?.weekStart ?? null, // YYYY-MM-DD (optional)
+          // optional: weekly row only for a specific week
+          week_start: l?.week_start ?? l?.weekStart ?? null, // YYYY-MM-DD
         }));
 
         setLessons(normalized);
         setTimetable(payload?.timetable ?? payload?.plan ?? null);
       } catch (e) {
         console.error(e);
-        setErr(e?.response?.data?.message || "Échec du chargement de l’emploi du temps");
+        setErr(
+          e?.response?.data?.message ||
+            "Échec du chargement de l’emploi du temps"
+        );
       } finally {
         setLoading(false);
       }
@@ -335,29 +347,40 @@ export default function StudentTimeTable() {
     const p = new Map();
     for (const l of lessons) {
       const pid = l?.timetable_id;
-      if (pid != null) p.set(String(pid), l?.timetable?.title ?? `Plan #${pid}`);
+      if (pid != null)
+        p.set(String(pid), l?.timetable?.title ?? `Plan #${pid}`);
     }
     return [...p.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
   const shownLessons = useMemo(() => {
     return lessons.filter((l) => {
-      const okSubject = !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
-      const okPlan = planFilter === "all" || String(l?.timetable_id) === String(planFilter);
+      const okSubject =
+        !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
+      const okPlan =
+        planFilter === "all" || String(l?.timetable_id) === String(planFilter);
       return okSubject && okPlan;
     });
   }, [lessons, subjectFilter, planFilter]);
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
-  if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
-  if (!lessons?.length) return <div className="p-4 text-center">Aucun emploi du temps pour le moment.</div>;
+  if (err)
+    return (
+      <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>
+    );
+  if (!lessons?.length)
+    return (
+      <div className="p-4 text-center">Aucun emploi du temps pour le moment.</div>
+    );
 
   return (
     <div className="p-4 space-y-4">
       {/* En-tête */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <div className="text-xl font-semibold">{timetable?.title ?? "Mon emploi du temps"}</div>
+          <div className="text-xl font-semibold">
+            {timetable?.title ?? "Mon emploi du temps"}
+          </div>
           <ToolbarSubtitle weekOffset={weekOffset} />
         </div>
 
@@ -371,17 +394,26 @@ export default function StudentTimeTable() {
             <Select
               value={planFilter}
               onChange={setPlanFilter}
-              options={[{ value: "all", label: "Tous les plans" }, ...plans.map((p) => ({ value: p.id, label: p.name }))]}
+              options={[
+                { value: "all", label: "Tous les plans" },
+                ...plans.map((p) => ({ value: p.id, label: p.name })),
+              ]}
             />
           )}
           <Select
             value={subjectFilter}
             onChange={setSubjectFilter}
-            options={[{ value: "", label: "Toutes les matières" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]}
+            options={[
+              { value: "", label: "Toutes les matières" },
+              ...subjects.map((s) => ({ value: s.id, label: s.name })),
+            ]}
           />
           <ViewToggle value={view} onChange={setView} />
           <IcsButton lessons={shownLessons} weekOffset={weekOffset} />
-          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">
+          <button
+            onClick={() => window.print()}
+            className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
+          >
             Imprimer
           </button>
         </div>
@@ -404,7 +436,8 @@ export default function StudentTimeTable() {
 function ToolbarSubtitle({ weekOffset }) {
   const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
   const sunday = addDays(monday, 6);
-  const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const fmt = (d) =>
+    d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return (
     <div className="text-sm text-muted-foreground">
       Semaine du {fmt(monday)} – {fmt(sunday)}
@@ -414,9 +447,18 @@ function ToolbarSubtitle({ weekOffset }) {
 function WeekToolbar({ onPrev, onToday, onNext }) {
   return (
     <div className="inline-flex rounded-md border overflow-hidden">
-      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">←</button>
-      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Aujourd’hui</button>
-      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">→</button>
+      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">
+        ←
+      </button>
+      <button
+        onClick={onToday}
+        className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x"
+      >
+        Aujourd’hui
+      </button>
+      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">
+        →
+      </button>
     </div>
   );
 }
@@ -424,13 +466,17 @@ function ViewToggle({ value, onChange }) {
   return (
     <div className="inline-flex rounded-md border overflow-hidden">
       <button
-        className={`px-3 py-1.5 text-sm ${value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"}`}
+        className={`px-3 py-1.5 text-sm ${
+          value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"
+        }`}
         onClick={() => onChange("grid")}
       >
         Grille
       </button>
       <button
-        className={`px-3 py-1.5 text-sm border-l ${value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"}`}
+        className={`px-3 py-1.5 text-sm border-l ${
+          value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"
+        }`}
         onClick={() => onChange("agenda")}
       >
         Agenda
@@ -459,7 +505,8 @@ function Legend({ subjects }) {
     <div className="flex flex-wrap gap-2 text-xs">
       {subjects.map((s) => {
         const key = s.id;
-        const solid = subjectColors[key] || `hsl(${hueForSubject(key)} 65% 45%)`;
+        const solid =
+          subjectColors[key] || `hsl(${hueForSubject(key)} 65% 45%)`;
         const soft = subjectSoftBgFromKey(key);
         return (
           <span
@@ -495,8 +542,8 @@ function WeekGrid({ lessons, weekOffset }) {
         if (!l.plan_date) continue;
         const date = new Date(`${l.plan_date}T00:00:00`);
         if (Number.isNaN(date.getTime()) || !inWeek(date, monday)) continue;
-        const js = date.getDay();            // 0..6
-        day = js === 0 ? 7 : js;             // 1..7
+        const js = date.getDay(); // 0..6
+        day = js === 0 ? 7 : js; // 1..7
       } else {
         // weekly row; if week_start exists, only display on that chosen week
         if (l.week_start) {
@@ -508,7 +555,7 @@ function WeekGrid({ lessons, weekOffset }) {
 
       if (!day) continue;
 
-      const mins = resolveStartEndMins(l);   // timed only
+      const mins = resolveStartEndMins(l); // timed only
       if (!mins) continue;
 
       if (!m.has(day)) m.set(day, []);
@@ -525,7 +572,9 @@ function WeekGrid({ lessons, weekOffset }) {
     return m;
   }, [lessons, monday]);
 
-  const minM = SCHOOL_START_MINS, maxM = SCHOOL_END_MINS, range = maxM - minM;
+  const minM = SCHOOL_START_MINS,
+    maxM = SCHOOL_END_MINS,
+    range = maxM - minM;
 
   const lanesByDay = useMemo(() => {
     const out = new Map();
@@ -550,14 +599,15 @@ function WeekGrid({ lessons, weekOffset }) {
         }
         if (!placed) lanes.push([it]);
       }
-      out.set(d.val, { lanes, items: timed });
+      out.set(d.val, { lanes });
     }
     return out;
   }, [byDay]);
 
   const hourMarks = useMemo(() => {
     const arr = [];
-    for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
+    for (let m = minM; m <= maxM; m += 60)
+      arr.push({ h: Math.floor(m / 60), m });
     return arr;
   }, []);
   const halfHourMarks = useMemo(() => {
@@ -572,16 +622,25 @@ function WeekGrid({ lessons, weekOffset }) {
         <div className="min-w-[900px] md:min-w-0">
           {/* entêtes */}
           <div className="grid grid-cols-8 bg-muted/50 text-xs sm:text-sm sticky top-0 z-20">
-            <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">Heure</div>
+            <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">
+              Heure
+            </div>
             {DAYS.map((d, idx) => {
               const date = addDays(monday, idx);
-              const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
+              const isToday =
+                isSameDayIndex(new Date(), d.val) && weekOffset === 0;
               return (
-                <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
+                <div
+                  key={d.val}
+                  className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}
+                >
                   <div className="hidden sm:block">{d.full}</div>
                   <div className="sm:hidden">{d.label}</div>
                   <div className="text-[11px] sm:text-xs text-muted-foreground">
-                    {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    {date.toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
                   </div>
                 </div>
               );
@@ -595,13 +654,21 @@ function WeekGrid({ lessons, weekOffset }) {
               {hourMarks.map(({ h, m }) => {
                 const pct = ((m - minM) / range) * 100;
                 return (
-                  <div key={m} className="absolute left-0 right-0" style={{ top: `${pct}%`, transform: "translateY(-50%)" }}>
-                    <div className="text-[11px] sm:text-xs text-muted-foreground px-2">{pad(h)}:00</div>
+                  <div
+                    key={m}
+                    className="absolute left-0 right-0"
+                    style={{ top: `${pct}%`, transform: "translateY(-50%)" }}
+                  >
+                    <div className="text-[11px] sm:text-xs text-muted-foreground px-2">
+                      {pad(h)}:00
+                    </div>
                     <div className="h-px bg-border/70" />
                   </div>
                 );
               })}
-              <div style={{ paddingTop: `${range}px` }} className="opacity-0">.</div>
+              <div style={{ paddingTop: `${range}px` }} className="opacity-0">
+                .
+              </div>
             </div>
 
             {/* colonnes jour */}
@@ -612,54 +679,76 @@ function WeekGrid({ lessons, weekOffset }) {
                   {/* lignes heures */}
                   {hourMarks.map(({ m }) => {
                     const pct = ((m - minM) / range) * 100;
-                    return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
+                    return (
+                      <div
+                        key={`h-${m}`}
+                        className="absolute left-0 right-0 h-px bg-border/50"
+                        style={{ top: `${pct}%` }}
+                      />
+                    );
                   })}
                   {/* demi-heures */}
                   {halfHourMarks.map((m) => {
                     const pct = ((m - minM) / range) * 100;
-                    return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
+                    return (
+                      <div
+                        key={`hh-${m}`}
+                        className="absolute left-0 right-0 h-px bg-border/30"
+                        style={{ top: `${pct}%` }}
+                      />
+                    );
                   })}
 
-                  {/* séances (timed only) */}
+                  {/* séances */}
                   {lanes.map((lane, laneIndex) =>
                     lane.map(({ l, s, e }, i) => {
                       const s2 = clamp(s, minM, maxM);
                       const e2 = clamp(e, minM, maxM);
                       if (e2 <= minM || s2 >= maxM) return null;
+
                       const topPct = ((s2 - minM) / range) * 100;
-                      const heightPct = Math.max(((e2 - s2) / range) * 100, 0.8);
+                      const heightPct = Math.max(
+                        ((e2 - s2) / range) * 100,
+                        0.8
+                      );
                       const widthPct = Math.max(100 / lanes.length, 25);
                       const leftPct = laneIndex * (100 / lanes.length);
 
-                      const subjName = l?.subject?.name ?? l?.subject_name ?? "Matière";
+                      const subjName =
+                        l?.subject?.name ?? l?.subject_name ?? "Matière";
                       const solid = subjectSolidColor(l);
                       const rName = roomName(l);
                       const sText = parseTimeLike(getStartStr(l));
                       const eText = parseTimeLike(getEndStr(l));
 
                       return (
-                      <div
-                        key={`${l.id ?? `${d.val}-${i}`}`}
-                        className="absolute rounded-lg text-[11px] sm:text-sm overflow-hidden"
-                        title={`${(l?.subject?.name ?? l?.subject_name ?? "Matière")} ${sText && eText ? `(${sText}–${eText})` : ""}${rName ? ` • ${rName}` : ""}`}
-                        style={{
-                          top: `${topPct}%`,
-                          height: `${heightPct}%`,
-                          left: `calc(${leftPct}% + 4px)`,
-                          width: `calc(${widthPct}% - 8px)`,
-                          backgroundColor: solid,
-                          color: "#fff",
-                          boxShadow: `0 6px 14px rgba(0,0,0,0.18)`,
-                        }}
-                      >
-                        <div className="px-2 py-1 font-medium truncate whitespace-nowrap">
-                          {oneLine(
-                            abbrSubject(l?.subject?.name ?? l?.subject_name ?? "Matière"),
-                            sText && eText ? `${sText}–${eText}` : "",
-                            rName ? abbrRoom(rName) : ""
-                          )}
+                        <div
+                          key={`${l.id ?? `${d.val}-${i}`}`}
+                          className="absolute rounded-lg text-[11px] sm:text-sm overflow-hidden"
+                          title={`${subjName} ${
+                            sText && eText ? `(${sText}–${eText})` : ""
+                          }${rName ? ` • ${rName}` : ""}`}
+                          style={{
+                            top: `${topPct}%`,
+                            height: `${heightPct}%`,
+                            left: `calc(${leftPct}% + 4px)`,
+                            width: `calc(${widthPct}% - 8px)`,
+                            backgroundColor: solid,
+                            color: "#fff",
+                            boxShadow: `0 6px 14px rgba(0,0,0,0.18)`,
+                          }}
+                        >
+                          {/* 3 compact lines: Subject (abbr) / Time / Room (abbr) */}
+                          <div className="px-2 py-1 font-semibold leading-tight truncate">
+                            {subjectAbbr(subjName)}
+                          </div>
+                          <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
+                            {sText && eText ? `${sText}–${eText}` : ""}
+                          </div>
+                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">
+                            {roomAbbr(rName)}
+                          </div>
                         </div>
-                      </div>
                       );
                     })
                   )}
@@ -677,7 +766,10 @@ function WeekGrid({ lessons, weekOffset }) {
 
 /* ------------------------------------- Agenda --------------------------------- */
 function AgendaList({ lessons, weekOffset }) {
-  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
+  const monday = useMemo(
+    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
+    [weekOffset]
+  );
 
   // weekly rows by day_of_week; monthly plans only on plan_date within the displayed week
   const byDay = useMemo(() => {
@@ -687,7 +779,8 @@ function AgendaList({ lessons, weekOffset }) {
       if (l.is_plan && l.plan_date) {
         const date = new Date(`${l.plan_date}T00:00:00`);
         if (!Number.isNaN(date.getTime()) && inWeek(date, monday)) {
-          const js = date.getDay(); const dow = js === 0 ? 7 : js;
+          const js = date.getDay();
+          const dow = js === 0 ? 7 : js;
           m.get(dow)?.push(l);
         }
         continue;
@@ -723,7 +816,11 @@ function AgendaList({ lessons, weekOffset }) {
         return (
           <div key={d.val}>
             <div className="text-sm font-semibold text-foreground/90 mb-2">
-              {d.full} • {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              {d.full} •{" "}
+              {date.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
             </div>
             <div className="space-y-2">
               {list.length ? (
@@ -734,7 +831,11 @@ function AgendaList({ lessons, weekOffset }) {
                   const rName = roomName(l);
                   const times = resolveStartEndMins(l);
                   const timeStr = times
-                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
+                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(
+                        times[0] % 60
+                      )}–${pad(Math.floor(times[1] / 60))}:${pad(
+                        times[1] % 60
+                      )})`
                     : "";
 
                   return (
@@ -750,9 +851,15 @@ function AgendaList({ lessons, weekOffset }) {
                         >
                           {l?.subject?.name ?? l?.subject_name ?? "Matière"}
                         </span>
-                        {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
+                        {timeStr ? (
+                          <span className="text-muted-foreground">
+                            {timeStr}
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="text-xs text-foreground/80">{rName ? rName : ""}</div>
+                      <div className="text-xs text-foreground/80">
+                        {rName ? rName : ""}
+                      </div>
                     </div>
                   );
                 })
@@ -774,17 +881,22 @@ function IcsButton({ lessons, weekOffset }) {
     const events = [];
     for (const l of lessons ?? []) {
       if (l.is_plan) continue; // skip monthly plans in calendar export
+
       // respect optional week_start on weekly rows
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
         if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
       }
+
       const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
+
       const date = addDays(monday, dow - 1);
       const mins = resolveStartEndMins(l);
       if (!mins) continue;
-      const start = new Date(date), end = new Date(date);
+
+      const start = new Date(date),
+        end = new Date(date);
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
@@ -793,7 +905,8 @@ function IcsButton({ lessons, weekOffset }) {
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
-        start, end,
+        start,
+        end,
         title: subj,
         location: room,
         desc: "",
@@ -809,7 +922,10 @@ function IcsButton({ lessons, weekOffset }) {
     URL.revokeObjectURL(url);
   };
   return (
-    <button onClick={download} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">
+    <button
+      onClick={download}
+      className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
+    >
       Export .ics
     </button>
   );
