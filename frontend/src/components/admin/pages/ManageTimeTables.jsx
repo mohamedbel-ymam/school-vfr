@@ -8,7 +8,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from ".
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
-// Fixed subject color map (create file if you want custom colors per subject key)
+// Fixed subject color map (custom colors per subject key)
 import subjectColors from "../../../config/subjectColors";
 
 /* ========================= Helpers & Config ========================= */
@@ -27,9 +27,12 @@ const extractHHMM = (v) => {
 };
 
 // Prefer backend-normalized fields (start/end, start_minutes/end_minutes)
-const getStartStr = (row) => row?.start ?? row?.start_time ?? extractHHMM(row?.starts_at) ?? null;
-const getEndStr   = (row) => row?.end   ?? row?.end_time   ?? extractHHMM(row?.ends_at)   ?? null;
+const getStartStr = (row) =>
+  row?.start ?? row?.start_time ?? extractHHMM(row?.starts_at) ?? null;
+const getEndStr = (row) =>
+  row?.end ?? row?.end_time ?? extractHHMM(row?.ends_at) ?? null;
 
+/** Accepts "09", "9:30", "09:30:00", "9h30", "9.30" → "HH:MM" */
 const parseTimeLike = (v) => {
   if (!v && v !== 0) return null;
   const s = String(v).trim();
@@ -56,6 +59,7 @@ const addMinutes = (hhmm, mins) => {
   const total = (m + mins) % (24 * 60);
   return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
 };
+
 // ----- ISO week helpers (YYYY-Www → Monday date) -----
 const parseIsoWeek = (s) => {
   // "2025-W06" → { year: 2025, week: 6 }
@@ -63,7 +67,6 @@ const parseIsoWeek = (s) => {
   if (!m) return null;
   return { year: +m[1], week: +m[2] };
 };
-
 const mondayFromIsoWeek = (year, week) => {
   // ISO week 1 is the week with Jan 4th; get Monday of week 1
   const jan4 = new Date(year, 0, 4);
@@ -76,8 +79,10 @@ const mondayFromIsoWeek = (year, week) => {
   return monday;
 };
 
-const getStartMin = (row) => Number.isFinite(row?.start_minutes) ? row.start_minutes : toMins(getStartStr(row));
-const getEndMin   = (row) => Number.isFinite(row?.end_minutes)   ? row.end_minutes   : toMins(getEndStr(row));
+const getStartMin = (row) =>
+  Number.isFinite(row?.start_minutes) ? row.start_minutes : toMins(getStartStr(row));
+const getEndMin = (row) =>
+  Number.isFinite(row?.end_minutes) ? row.end_minutes : toMins(getEndStr(row));
 
 const DAYS = [
   { label: "Lun", val: 1 },
@@ -94,7 +99,7 @@ const normalizeDow = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
   if (n === 0) return 7;
-  if (n < 1 || n > 7) return ((n % 7) || 7);
+  if (n < 1 || n > 7) return (n % 7) || 7;
   return n;
 };
 
@@ -149,7 +154,9 @@ const addDays = (date, n) => {
 const DEFAULT_CLASS_MINS = 90;
 
 function useMediaQuery(query) {
-  const [matches, setMatches] = useState(() => (typeof window !== "undefined" ? window.matchMedia(query).matches : false));
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false
+  );
   useEffect(() => {
     const mql = window.matchMedia(query);
     const handler = (e) => setMatches(e.matches);
@@ -289,12 +296,16 @@ export default function ManageTimetables() {
 
     setCleaning(true);
     try {
-      const chunks = (arr, n) => arr.reduce((a, _, i) => (i % n ? a[a.length - 1].push(arr[i]) : a.push([arr[i]]), a), []);
+      const chunks = (arr, n) =>
+        arr.reduce((a, _, i) => (i % n ? a[a.length - 1].push(arr[i]) : a.push([arr[i]]), a), []);
       const parts = chunks(ids, 10);
-      let success = 0, fail = 0;
+      let success = 0,
+        fail = 0;
 
       for (const batch of parts) {
-        const res = await Promise.allSettled(batch.map((id) => axiosClient.delete(`/admin/timetables/${id}`)));
+        const res = await Promise.allSettled(
+          batch.map((id) => axiosClient.delete(`/admin/timetables/${id}`))
+        );
         for (const r of res) r.status === "fulfilled" ? success++ : fail++;
       }
       toast.success(`Deleted ${success} item(s)` + (fail ? `, ${fail} failed` : ""));
@@ -317,10 +328,16 @@ export default function ManageTimetables() {
     <div className="space-y-6">
       {/* View switch */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant={view === "weekly" ? "default" : "secondary"} onClick={() => setView("weekly")}>
+        <Button
+          variant={view === "weekly" ? "default" : "secondary"}
+          onClick={() => setView("weekly")}
+        >
           Semaines
         </Button>
-        <Button variant={view === "monthly" ? "default" : "secondary"} onClick={() => setView("monthly")}>
+        <Button
+          variant={view === "monthly" ? "default" : "secondary"}
+          onClick={() => setView("monthly")}
+        >
           Mois
         </Button>
       </div>
@@ -362,7 +379,11 @@ export default function ManageTimetables() {
             </div>
 
             <label className="inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border bg-background">
-              <input type="checkbox" checked={hidePastWeekly} onChange={(e) => setHidePastWeekly(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={hidePastWeekly}
+                onChange={(e) => setHidePastWeekly(e.target.checked)}
+              />
               Masquer les semaines (passées)
             </label>
 
@@ -399,7 +420,12 @@ export default function ManageTimetables() {
               ←
             </Button>
 
-            <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-[180px]" />
+            <Input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="w-[180px]"
+            />
 
             <Button
               variant="secondary"
@@ -419,7 +445,11 @@ export default function ManageTimetables() {
           </div>
         )}
 
-        <Button variant="ghost" onClick={resetFilters} disabled={loading || plansLoading}>
+        <Button
+          variant="ghost"
+          onClick={resetFilters}
+          disabled={loading || plansLoading}
+        >
           Restart
         </Button>
       </div>
@@ -443,7 +473,12 @@ export default function ManageTimetables() {
 
       {/* Weekly rows */}
       {view === "weekly" && (
-        <WeeklyGrid rows={rows} hidePast={hidePastWeekly} reload={loadWeekly} onBulkDelete={bulkDeleteRows} />
+        <WeeklyGrid
+          rows={rows}
+          hidePast={hidePastWeekly}
+          reload={loadWeekly}
+          onBulkDelete={bulkDeleteRows}
+        />
       )}
 
       {/* Monthly planner */}
@@ -481,16 +516,34 @@ function WeeklyGrid({ rows, hidePast, onBulkDelete, reload }) {
   }, [rows]);
 
   if (!grouped.length) {
-    return <div className="text-sm text-muted-foreground">Pas de rangée d'emploi du temps trouvé</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        Pas de rangée d'emploi du temps trouvé
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       {grouped.map(({ degree, items }, idx) =>
         isMobile ? (
-          <DegreeTimetableMobile key={degree?.id ?? idx} degree={degree} items={items} hidePast={hidePast} onBulkDelete={onBulkDelete} reload={reload} />
+          <DegreeTimetableMobile
+            key={degree?.id ?? idx}
+            degree={degree}
+            items={items}
+            hidePast={hidePast}
+            onBulkDelete={onBulkDelete}
+            reload={reload}
+          />
         ) : (
-          <DegreeTimetable key={degree?.id ?? idx} degree={degree} items={items} hidePast={hidePast} onBulkDelete={onBulkDelete} reload={reload} />
+          <DegreeTimetable
+            key={degree?.id ?? idx}
+            degree={degree}
+            items={items}
+            hidePast={hidePast}
+            onBulkDelete={onBulkDelete}
+            reload={reload}
+          />
         )
       )}
     </div>
@@ -533,15 +586,27 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
   }, [items, hidePast]);
 
   const deleteAllForDegree = async () => {
-    await onBulkDelete(idsForDegree, `rows in degree "${degree?.name ?? "unknown"}"`);
+    await onBulkDelete(
+      idsForDegree,
+      `rows in degree "${degree?.name ?? "unknown"}"`
+    );
     await reload();
   };
 
   return (
     <div className="rounded-2xl p-4 shadow-sm bg-card text-card-foreground border">
       <div className="flex items-center justify-between mb-3">
-        <div className="font-semibold text-foreground">{degree?.name ? `Niveau: ${degree.name}` : "Niveau"}</div>
-        <Button variant="destructive" onClick={deleteAllForDegree} disabled={!idsForDegree.length} title="Supprimer all weekly rows for this degree" size="sm" className="h-8">
+        <div className="font-semibold text-foreground">
+          {degree?.name ? `Niveau: ${degree.name}` : "Niveau"}
+        </div>
+        <Button
+          variant="destructive"
+          onClick={deleteAllForDegree}
+          disabled={!idsForDegree.length}
+          title="Supprimer all weekly rows for this degree"
+          size="sm"
+          className="h-8"
+        >
           <Trash2 className="h-4 w-4 mr-1" /> Tout Supprimer
         </Button>
       </div>
@@ -550,25 +615,45 @@ function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }
       <div className="flex flex-col gap-3">
         {DAYS.map(({ label, val }) => (
           <div key={val} className="rounded-xl border bg-muted/30">
-            <div className="sticky top-[64px] z-10 px-3 py-2 bg-muted/60 backdrop-blur text-xs font-semibold text-foreground/80 rounded-t-xl">{label}</div>
+            <div className="sticky top-[64px] z-10 px-3 py-2 bg-muted/60 backdrop-blur text-xs font-semibold text-foreground/80 rounded-t-xl">
+              {label}
+            </div>
             <div className="p-3 flex flex-col gap-2">
               {rowsByDay.get(val)?.length ? (
                 rowsByDay.get(val).map((l) => {
                   const subjectName = l.subject?.name ?? "—";
                   const color = subjectColorHexFromRow(l);
-                  const s = getStartStr(l), e = getEndStr(l);
+                  const s = getStartStr(l),
+                    e = getEndStr(l);
                   return (
-                    <div key={l.id ?? `${val}-${l.degree_id ?? degree?.id ?? "x"}-${l.subject_id ?? "s"}-${s ?? "t"}`} className="rounded-lg border p-2 bg-background">
+                    <div
+                      key={
+                        l.id ??
+                        `${val}-${l.degree_id ?? degree?.id ?? "x"}-${
+                          l.subject_id ?? "s"
+                        }-${s ?? "t"}`
+                      }
+                      className="rounded-lg border p-2 bg-background"
+                    >
                       <div className="text-sm font-medium flex flex-wrap items-center gap-2">
                         {(l.subject?.id || l.subject_id) && (
-                          <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: color, color: "white" }}>
+                          <span
+                            className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium"
+                            style={{ backgroundColor: color, color: "white" }}
+                          >
                             {subjectName}
                           </span>
                         )}
-                        <span className="text-xs text-muted-foreground">{s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}
+                        </span>
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5">
-                        {l.teacher ? <>Par {l.teacher.firstname} {l.teacher.lastname}</> : null}
+                        {l.teacher ? (
+                          <>
+                            Par {l.teacher.firstname} {l.teacher.lastname}
+                          </>
+                        ) : null}
                         {l.room?.name ? <> • {l.room.name}</> : null}
                       </div>
                     </div>
@@ -622,15 +707,25 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
   }, [items, hidePast]);
 
   const deleteAllForDegree = async () => {
-    await onBulkDelete(idsForDegree, `rows in degree "${degree?.name ?? "unknown"}"`);
+    await onBulkDelete(
+      idsForDegree,
+      `rows in degree "${degree?.name ?? "unknown"}"`
+    );
     await reload();
   };
 
   return (
     <div className="rounded-2xl p-4 shadow-sm bg-card text-card-foreground border">
       <div className="flex items-center justify-between mb-3">
-        <div className="font-semibold text-foreground">{degree?.name ? `Niveau: ${degree.name}` : "Niveau"}</div>
-        <Button variant="destructive" onClick={deleteAllForDegree} disabled={!idsForDegree.length} title="Supprimer all weekly rows for this degree">
+        <div className="font-semibold text-foreground">
+          {degree?.name ? `Niveau: ${degree.name}` : "Niveau"}
+        </div>
+        <Button
+          variant="destructive"
+          onClick={deleteAllForDegree}
+          disabled={!idsForDegree.length}
+          title="Supprimer all weekly rows for this degree"
+        >
           <Trash2 className="h-4 w-4 mr-1" /> Delete all for this degree
         </Button>
       </div>
@@ -640,15 +735,23 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
           <div className="grid grid-cols-7 gap-3 text-sm">
             {DAYS.map(({ label, val }) => (
               <div key={val}>
-                <div className="font-semibold mb-2 text-foreground/90">{label}</div>
+                <div className="font-semibold mb-2 text-foreground/90">
+                  {label}
+                </div>
                 <div className="space-y-2">
                   {rowsByDay.get(val)?.map((l) => {
                     const subjectName = l.subject?.name ?? "—";
                     const color = subjectColorHexFromRow(l);
-                    const s = getStartStr(l), e = getEndStr(l);
+                    const s = getStartStr(l),
+                      e = getEndStr(l);
                     return (
                       <div
-                        key={l.id ?? `${val}-${l.degree_id ?? degree?.id ?? "x"}-${l.subject_id ?? "s"}-${s ?? "t"}`}
+                        key={
+                          l.id ??
+                          `${val}-${l.degree_id ?? degree?.id ?? "x"}-${
+                            l.subject_id ?? "s"
+                          }-${s ?? "t"}`
+                        }
                         className="rounded-xl border p-2 bg-muted/40 hover:bg-muted/60 transition-colors"
                       >
                         <div className="font-medium text-foreground flex items-center gap-2">
@@ -661,18 +764,24 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
                             </span>
                           ) : (
                             subjectName
-                          )} {" "}
+                          )}{" "}
                           {s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {l.teacher ? <>By {l.teacher.firstname} {l.teacher.lastname}</> : null}
+                          {l.teacher ? (
+                            <>
+                              By {l.teacher.firstname} {l.teacher.lastname}
+                            </>
+                          ) : null}
                           {l.degree?.name ? <> • {l.degree.name}</> : null}
                           {l.room?.name ? <> • {l.room.name}</> : null}
                         </div>
                       </div>
                     );
                   })}
-                  {!rowsByDay.get(val)?.length && <div className="text-xs text-muted-foreground">—</div>}
+                  {!rowsByDay.get(val)?.length && (
+                    <div className="text-xs text-muted-foreground">—</div>
+                  )}
                 </div>
               </div>
             ))}
@@ -685,7 +794,15 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
 
 /* ========================= Create Row Panel ========================= */
 
-function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreated, goMonthly }) {
+function CreateRowPanel({
+  degrees,
+  teachers,
+  subjects,
+  rooms,
+  onCancel,
+  onCreated,
+  goMonthly,
+}) {
   const [form, setForm] = useState({
     degree_id: "",
     subject_id: "",
@@ -701,7 +818,7 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
 
   // Existing monthly controls (still supported)
   const [monthlyMonth, setMonthlyMonth] = useState(""); // "YYYY-MM"
-  const [monthlyDay, setMonthlyDay] = useState("");     // "1..31"
+  const [monthlyDay, setMonthlyDay] = useState(""); // "1..31"
   const [monthlyTitle, setMonthlyTitle] = useState("");
   const [monthlyAuto, setMonthlyAuto] = useState(true);
 
@@ -733,7 +850,12 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
   }, [form.day_of_week, monthlyAuto, weeklyIso]);
 
   const canSave =
-    form.degree_id && form.subject_id && form.teacher_id && form.day_of_week && form.start_time && form.end_time;
+    form.degree_id &&
+    form.subject_id &&
+    form.teacher_id &&
+    form.day_of_week &&
+    form.start_time &&
+    form.end_time;
 
   const toYmdFromYm = (ym, dStr) => {
     const [y, m] = ym.split("-").map(Number);
@@ -749,7 +871,9 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
       if (weeklyIso) {
         const parsed = parseIsoWeek(weeklyIso);
         if (parsed) {
-          weekStart = mondayFromIsoWeek(parsed.year, parsed.week).toISOString().slice(0, 10);
+          weekStart = mondayFromIsoWeek(parsed.year, parsed.week)
+            .toISOString()
+            .slice(0, 10);
         }
       }
 
@@ -759,7 +883,9 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
         teacher_id: Number(form.teacher_id),
         day_of_week: Number(form.day_of_week),
         start_time: fmtHHMM(form.start_time),
-        end_time: fmtHHMM(form.end_time || addMinutes(form.start_time, DEFAULT_CLASS_MINS)),
+        end_time: fmtHHMM(
+          form.end_time || addMinutes(form.start_time, DEFAULT_CLASS_MINS)
+        ),
         ...(form.room_id ? { room_id: Number(form.room_id) } : {}),
         ...(weekStart ? { week_start: weekStart } : {}), // <— NEW: persist selected week to DB
       };
@@ -779,17 +905,27 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
             title: monthlyTitle || null,
           });
           toast.success("Plan mensuel créé");
-          goMonthly?.({ month: monthlyMonth, degreeId: payload.degree_id, focusDate: plan_date });
+          goMonthly?.({
+            month: monthlyMonth,
+            degreeId: payload.degree_id,
+            focusDate: plan_date,
+          });
         } catch (e) {
           console.error(e);
-          toast.error(e?.response?.data?.message || "Rangée créée, mais création du plan mensuel a échoué");
+          toast.error(
+            e?.response?.data?.message ||
+              "Rangée créée, mais création du plan mensuel a échoué"
+          );
         }
       }
 
       onCreated?.(created);
     } catch (e) {
       console.error(e);
-      const msg = e?.response?.data?.message || Object.values(e?.response?.data?.errors ?? {})?.[0]?.[0] || "Échec de création";
+      const msg =
+        e?.response?.data?.message ||
+        Object.values(e?.response?.data?.errors ?? {})?.[0]?.[0] ||
+        "Échec de création";
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -802,37 +938,73 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
 
       <div className="grid md:grid-cols-6 gap-3">
         <div className="md:col-span-2">
-          <Select value={form.degree_id} onValueChange={(v) => setForm((f) => ({ ...f, degree_id: v }))}>
-            <SelectTrigger><SelectValue placeholder="Niveau *" /></SelectTrigger>
+          <Select
+            value={form.degree_id}
+            onValueChange={(v) => setForm((f) => ({ ...f, degree_id: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Niveau *" />
+            </SelectTrigger>
             <SelectContent>
-              {degrees.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
+              {degrees.map((d) => (
+                <SelectItem key={d.id} value={String(d.id)}>
+                  {d.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
         <div className="md:col-span-2">
-          <Select value={form.subject_id} onValueChange={(v) => setForm((f) => ({ ...f, subject_id: v }))}>
-            <SelectTrigger><SelectValue placeholder="Matière *" /></SelectTrigger>
+          <Select
+            value={form.subject_id}
+            onValueChange={(v) => setForm((f) => ({ ...f, subject_id: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Matière *" />
+            </SelectTrigger>
             <SelectContent>
-              {subjects.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+              {subjects.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>
+                  {s.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
         <div className="md:col-span-2">
-          <Select value={form.teacher_id} onValueChange={(v) => setForm((f) => ({ ...f, teacher_id: v }))}>
-            <SelectTrigger><SelectValue placeholder="Enseignant *" /></SelectTrigger>
+          <Select
+            value={form.teacher_id}
+            onValueChange={(v) => setForm((f) => ({ ...f, teacher_id: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Enseignant *" />
+            </SelectTrigger>
             <SelectContent>
-              {teachers.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.firstname} {t.lastname}</SelectItem>)}
+              {teachers.map((t) => (
+                <SelectItem key={t.id} value={String(t.id)}>
+                  {t.firstname} {t.lastname}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
         <div>
-          <Select value={form.day_of_week} onValueChange={(v) => setForm((f) => ({ ...f, day_of_week: v }))}>
-            <SelectTrigger><SelectValue placeholder="Jour *" /></SelectTrigger>
+          <Select
+            value={form.day_of_week}
+            onValueChange={(v) => setForm((f) => ({ ...f, day_of_week: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Jour *" />
+            </SelectTrigger>
             <SelectContent>
-              {DAYS.map((d) => <SelectItem key={d.val} value={String(d.val)}>{d.label}</SelectItem>)}
+              {DAYS.map((d) => (
+                <SelectItem key={d.val} value={String(d.val)}>
+                  {d.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -845,7 +1017,12 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
             onChange={(e) =>
               setForm((f) => {
                 const t = parseTimeLike(e.target.value) || "";
-                return { ...f, start_time: t, end_time: f.end_time || (t ? addMinutes(t, DEFAULT_CLASS_MINS) : "") };
+                return {
+                  ...f,
+                  start_time: t,
+                  end_time:
+                    f.end_time || (t ? addMinutes(t, DEFAULT_CLASS_MINS) : ""),
+                };
               })
             }
             placeholder="Début"
@@ -856,16 +1033,32 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
             type="time"
             step={1800}
             value={form.end_time}
-            onChange={(e) => setForm((f) => ({ ...f, end_time: parseTimeLike(e.target.value) || "" }))}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                end_time: parseTimeLike(e.target.value) || "",
+              }))
+            }
             placeholder="Fin"
           />
         </div>
 
         <div className="md:col-span-2">
-          <Select value={form.room_id} onValueChange={(v) => setForm((f) => ({ ...f, room_id: v }))}>
-            <SelectTrigger><SelectValue placeholder="Salle (facultatif)" /></SelectTrigger>
+          <Select
+            value={form.room_id}
+            onValueChange={(v) => setForm((f) => ({ ...f, room_id: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Salle (facultatif)" />
+            </SelectTrigger>
             <SelectContent>
-              {rooms.length ? rooms.map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>) : null}
+              {rooms.length
+                ? rooms.map((r) => (
+                    <SelectItem key={r.id} value={String(r.id)}>
+                      {r.name}
+                    </SelectItem>
+                  ))
+                : null}
             </SelectContent>
           </Select>
         </div>
@@ -873,7 +1066,9 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
 
       {/* Monthly plan block (optional) */}
       <div className="rounded-xl border p-3 bg-muted/20 space-y-2">
-        <div className="text-sm font-medium">Créer aussi un plan (pour une semaine précise)</div>
+        <div className="text-sm font-medium">
+          Créer aussi un plan (pour une semaine précise)
+        </div>
 
         {/* NEW: Week picker */}
         <div className="grid md:grid-cols-6 gap-3">
@@ -896,17 +1091,25 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
             <Input
               type="month"
               value={monthlyMonth}
-              onChange={(e) => { setMonthlyAuto(false); setMonthlyMonth(e.target.value); }}
+              onChange={(e) => {
+                setMonthlyAuto(false);
+                setMonthlyMonth(e.target.value);
+              }}
               className="h-9"
             />
           </div>
           <div>
             <Select
               value={monthlyDay || undefined}
-              onValueChange={(v) => { setMonthlyAuto(false); setMonthlyDay(v); }}
+              onValueChange={(v) => {
+                setMonthlyAuto(false);
+                setMonthlyDay(v);
+              }}
               disabled={!monthlyMonth}
             >
-              <SelectTrigger className="h-9"><SelectValue placeholder="Jour" /></SelectTrigger>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Jour" />
+              </SelectTrigger>
               <SelectContent>
                 {(() => {
                   if (!monthlyMonth) return null;
@@ -914,7 +1117,11 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
                   const count = new Date(y, m, 0).getDate();
                   return Array.from({ length: count }, (_, i) => {
                     const d = String(i + 1);
-                    return <SelectItem key={d} value={d}>{d}</SelectItem>;
+                    return (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    );
                   });
                 })()}
               </SelectContent>
@@ -932,7 +1139,9 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
         </div>
 
         <div className="text-xs text-muted-foreground">
-          Sélectionnez une <b>semaine</b> (ou gardez mois+jour). La date du plan sera le <b>{`jour choisi (${DAYS[+form.day_of_week - 1]?.label})`} de cette semaine</b>.
+          Sélectionnez une <b>semaine</b> (ou gardez mois+jour). La date du plan
+          sera le <b>{`jour choisi (${DAYS[+form.day_of_week - 1]?.label})`} de
+          cette semaine</b>.
         </div>
       </div>
 
@@ -954,7 +1163,16 @@ function CreateRowPanel({ degrees, teachers, subjects, rooms, onCancel, onCreate
 
 /* ========================= Monthly Planner ========================= */
 
-function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, highlightDate, onClearHighlight }) {
+function MonthlyPlanner({
+  month,
+  degreeId,
+  subjects,
+  teachers,
+  plans,
+  reload,
+  highlightDate,
+  onClearHighlight,
+}) {
   const NONE = "__none__";
   const [openDate, setOpenDate] = useState(null);
   // (Note: the per-cell form state lives inside DayCell now)
@@ -994,7 +1212,7 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
 
   const ymd = (d) => (d ? `${y}-${pad2(m)}-${pad2(d)}` : null);
 
-  // FIXED: accept the selected mini from DayCell instead of reading a stale local state
+  // Accept the selected mini from DayCell (no stale state)
   const quickAdd = async (dateStr, mini) => {
     if (degreeId === "__all__") {
       toast.error("Select a Niveau first.");
@@ -1043,7 +1261,9 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
   return (
     <div className="rounded-2xl p-4 shadow-sm bg-card text-card-foreground border">
       <div className="flex items-center justify-between mb-3">
-        <div className="font-semibold text-foreground">Monthly Subject Plans {degreeId !== "__all__" ? "" : "(select a degree)"}</div>
+        <div className="font-semibold text-foreground">
+          Monthly Subject Plans {degreeId !== "__all__" ? "" : "(select a degree)"}
+        </div>
       </div>
 
       <div className="overflow-x-auto snap-x snap-mandatory">
@@ -1062,7 +1282,12 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
               const cellsOut = [];
               let idx = 0;
               for (let i = 0; i < leadBlanks; i++) {
-                cellsOut.push(<div key={`b-${i}`} className="min-h=[84px] md:min-h-[110px]"></div>);
+                cellsOut.push(
+                  <div
+                    key={`b-${i}`}
+                    className="min-h=[84px] md:min-h-[110px]"
+                  ></div>
+                );
                 idx++;
               }
               for (let d = 1; d <= totalDays; d++, idx++) {
@@ -1083,21 +1308,39 @@ function MonthlyPlanner({ month, degreeId, subjects, teachers, plans, reload, hi
                 );
               }
               while (idx % 7 !== 0) {
-                cellsOut.push(<div key={`t-${idx}`} className="min-h-[84px] md:min-h-[110px]"></div>);
+                cellsOut.push(
+                  <div
+                    key={`t-${idx}`}
+                    className="min-h-[84px] md:min-h-[110px]"
+                  ></div>
+                );
                 idx++;
               }
               return cellsOut;
             })()}
           </div>
 
-          {degreeId === "__all__" && <div className="mt-3 text-xs text-muted-foreground">Select a degree to view or add monthly subject plans.</div>}
+          {degreeId === "__all__" && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              Select a degree to view or add monthly subject plans.
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, quickAdd, deletePlan }) {
+function DayCell({
+  dateStr,
+  dayNumber,
+  degreeId,
+  subjects,
+  teachers,
+  dayPlans,
+  quickAdd,
+  deletePlan,
+}) {
   const NONE = "__none__";
   const [open, setOpen] = useState(false);
   const [mini, setMini] = useState({ subject_id: "", teacher_id: "", title: "" });
@@ -1110,9 +1353,16 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
       }`}
     >
       <div className="flex items-center justify-between">
-        <div className="text-[11px] md:text-xs font-semibold text-foreground/80">{dayNumber}</div>
+        <div className="text-[11px] md:text-xs font-semibold text-foreground/80">
+          {dayNumber}
+        </div>
         {degreeId !== "__all__" && (
-          <Button size="sm" variant="secondary" className="h-6 px-2" onClick={() => setOpen((o) => !o)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-6 px-2"
+            onClick={() => setOpen((o) => !o)}
+          >
             {open ? "Close" : "Add"}
           </Button>
         )}
@@ -1120,30 +1370,52 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
 
       <div className="flex flex-col gap-1">
         {dayPlans.map((p) => {
-          const key = p?.subject?.key || (p?.subject?.name ? slugify(p.subject.name) : "");
-          const color = key ? (subjectColors[key] || `hsl(${goldenHue(key)} 70% 45%)`) : `hsl(${goldenHue("subject")} 70% 45%)`;
-          return (
-            <div key={p.id} className="inline-flex items-center gap-2 rounded-md px-2 py-1 bg-muted">
+          const key =
+            p?.subject?.key || (p?.subject?.name ? slugify(p.subject.name) : "");
+          const color = key
+            ? subjectColors[key] || `hsl(${goldenHue(key)} 70% 45%)`
+            : `hsl(${goldenHue("subject")} 70% 45%)`;
+        return (
+            <div
+              key={p.id}
+              className="inline-flex items-center gap-2 rounded-md px-2 py-1 bg-muted"
+            >
               {p.subject?.name ? (
-                <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: color, color: "white" }}>
+                <span
+                  className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium"
+                  style={{ backgroundColor: color, color: "white" }}
+                >
                   {p.subject.name}
                 </span>
               ) : null}
-              <span className="text-xs text-foreground flex-1 truncate">{p.title || ""}</span>
-              <button className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-background/70" title="Supprimer plan" onClick={() => deletePlan(p.id)}>
+              <span className="text-xs text-foreground flex-1 truncate">
+                {p.title || ""}
+              </span>
+              <button
+                className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-background/70"
+                title="Supprimer plan"
+                onClick={() => deletePlan(p.id)}
+              >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
           );
         })}
-        {!dayPlans.length && <span className="text-[11px] text-muted-foreground">—</span>}
+        {!dayPlans.length && (
+          <span className="text-[11px] text-muted-foreground">—</span>
+        )}
       </div>
 
       {open && (
         <div className="mt-auto border rounded-md p-2 bg-background">
-          <div className="text-[10px] md:text-[11px] mb-1 text-muted-foreground">{dateStr}</div>
+          <div className="text-[10px] md:text-[11px] mb-1 text-muted-foreground">
+            {dateStr}
+          </div>
           <div className="grid grid-cols-1 gap-2">
-            <Select value={mini.subject_id} onValueChange={(v) => setMini((s) => ({ ...s, subject_id: v }))}>
+            <Select
+              value={mini.subject_id}
+              onValueChange={(v) => setMini((s) => ({ ...s, subject_id: v }))}
+            >
               <SelectTrigger className="h-8">
                 <SelectValue placeholder="Matière *" />
               </SelectTrigger>
@@ -1156,7 +1428,12 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
               </SelectContent>
             </Select>
 
-            <Select value={mini.teacher_id || NONE} onValueChange={(v) => setMini((s) => ({ ...s, teacher_id: v === NONE ? "" : v }))}>
+            <Select
+              value={mini.teacher_id || NONE}
+              onValueChange={(v) =>
+                setMini((s) => ({ ...s, teacher_id: v === NONE ? "" : v }))
+              }
+            >
               <SelectTrigger className="h-8">
                 <SelectValue placeholder="Enseignant (optional)" />
               </SelectTrigger>
@@ -1170,7 +1447,14 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
               </SelectContent>
             </Select>
 
-            <Input value={mini.title} onChange={(e) => setMini((s) => ({ ...s, title: e.target.value }))} placeholder="Title (optional)" className="h-8" />
+            <Input
+              value={mini.title}
+              onChange={(e) =>
+                setMini((s) => ({ ...s, title: e.target.value }))
+              }
+              placeholder="Title (optional)"
+              className="h-8"
+            />
 
             <div className="flex gap-2">
               <Button
@@ -1181,7 +1465,7 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
                     return;
                   }
                   setSaving(true);
-                  await quickAdd(dateStr, mini); // <-- pass the form values
+                  await quickAdd(dateStr, mini); // pass the form values
                   setMini({ subject_id: "", teacher_id: "", title: "" });
                   setOpen(false);
                   setSaving(false);
@@ -1190,7 +1474,12 @@ function DayCell({ dateStr, dayNumber, degreeId, subjects, teachers, dayPlans, q
               >
                 {saving ? "Saving…" : "Enregistrer"}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setOpen(false)}
+                disabled={saving}
+              >
                 Cancel
               </Button>
             </div>
