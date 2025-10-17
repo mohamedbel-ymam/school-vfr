@@ -28,7 +28,7 @@ class TimetableController extends Controller
         if ($t = $req->query('teacher_id')) $q->where('teacher_id', $t);
         if ($d = $req->query('degree_id'))  $q->where('degree_id', $d);
 
-        // NEW: optional filter by week_start (YYYY-MM-DD or ISO week YYYY-Www)
+        // optional filter by week_start (YYYY-MM-DD or ISO week YYYY-Www)
         if (Schema::hasColumn('timetables', 'week_start')) {
             if ($ws = $this->normalizeWeekStart($req->query('week_start'))) {
                 $q->whereDate('week_start', $ws);
@@ -51,7 +51,6 @@ class TimetableController extends Controller
 
         $page = $q->paginate($perPage);
 
-        // Keep your meta, but emit normalized lessons
         return response()->json([
             'data' => TimetableResource::collection($page->items()),
             'meta' => [
@@ -63,6 +62,7 @@ class TimetableController extends Controller
         ]);
     }
 
+    /** Student → lessons for the authenticated student (optional ?week_start=...) */
     public function student(Request $request)
     {
         $user = $request->user(); // role: student
@@ -82,14 +82,13 @@ class TimetableController extends Controller
             ])
             ->where('degree_id', $degreeId);
 
-        // NEW: week_start filter
+        // week_start filter
         if (Schema::hasColumn('timetables', 'week_start')) {
             if ($ws = $this->normalizeWeekStart($request->query('week_start'))) {
                 $q->whereDate('week_start', $ws);
             }
         }
 
-        // sort safely only if columns exist
         $q->when(Schema::hasColumn('timetables','day_of_week'), fn($q) => $q->orderBy('day_of_week'))
           ->when(Schema::hasColumn('timetables','start_time'), function ($q) {
                 $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END')
@@ -101,7 +100,8 @@ class TimetableController extends Controller
 
         return response()->json([
             'data' => [
-                'lessons' => $lessons, // model appends add start/end/start_minutes/end_minutes
+                // Return normalized payload via Resource
+                'lessons' => TimetableResource::collection($lessons),
             ],
         ]);
     }
@@ -121,7 +121,7 @@ class TimetableController extends Controller
             ->where('teacher_id', $user->id)
             ->when($degreeId, fn($q) => $q->where('degree_id', $degreeId));
 
-        // NEW: week_start filter
+        // week_start filter
         if (Schema::hasColumn('timetables', 'week_start')) {
             if ($ws = $this->normalizeWeekStart($request->query('week_start'))) {
                 $q->whereDate('week_start', $ws);
@@ -139,7 +139,7 @@ class TimetableController extends Controller
 
         return response()->json([
             'data' => [
-                'lessons' => $lessons,
+                'lessons' => TimetableResource::collection($lessons),
             ],
         ]);
     }
@@ -166,7 +166,7 @@ class TimetableController extends Controller
             ])
             ->where('degree_id', $degreeId);
 
-        // NEW: week_start filter
+        // week_start filter
         if (Schema::hasColumn('timetables', 'week_start')) {
             if ($ws = $this->normalizeWeekStart($request->query('week_start'))) {
                 $q->whereDate('week_start', $ws);
@@ -184,7 +184,7 @@ class TimetableController extends Controller
 
         return response()->json([
             'data' => [
-                'lessons' => $lessons,
+                'lessons' => TimetableResource::collection($lessons),
             ],
         ]);
     }
@@ -192,6 +192,9 @@ class TimetableController extends Controller
     /** Create */
     public function store(Request $request)
     {
+        // normalize any incoming time fields into start_time/end_time (HH:MM)
+        $this->normalizeTimeInputs($request);
+
         $data = $request->validate([
             'degree_id'   => ['required','exists:degrees,id'],
             'subject_id'  => ['required','exists:subjects,id'],
@@ -219,6 +222,9 @@ class TimetableController extends Controller
     /** Update */
     public function update(Request $request, Timetable $timetable)
     {
+        // normalize any incoming time fields into start_time/end_time (HH:MM)
+        $this->normalizeTimeInputs($request);
+
         $data = $request->validate([
             'degree_id'   => ['sometimes','exists:degrees,id'],
             'subject_id'  => ['sometimes','exists:subjects,id'],
@@ -340,5 +346,52 @@ class TimetableController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * ---- Time normalization helpers ----
+     * Accepts "9", "09", "9:30", "09:30:00", "9h30", "9.30", RFC strings...
+     * Returns "HH:MM" or null if unparseable.
+     */
+    private function toHHMM(?string $v): ?string
+    {
+        if (!$v) return null;
+
+        if (preg_match('/^\d{1,2}:\d{1,2}(:\d{1,2})?$/', $v)) {
+            [$h, $m] = explode(':', substr($v, 0, 5));
+            return sprintf('%02d:%02d', (int)$h, (int)$m);
+        }
+        if (preg_match('/^(\d{1,2})h(\d{0,2})$/i', $v, $m)) {
+            return sprintf('%02d:%02d', (int)$m[1], (int)($m[2] !== '' ? $m[2] : 0));
+        }
+        if (preg_match('/^(\d{1,2})\.(\d{1,2})$/', $v, $m)) {
+            return sprintf('%02d:%02d', (int)$m[1], (int)$m[2]);
+        }
+        if (preg_match('/^(\d{1,2})$/', $v, $m)) {
+            return sprintf('%02d:00', (int)$m[1]);
+        }
+
+        try {
+            return Carbon::parse($v)->format('H:i');
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Merge canonical start_time/end_time into the request if we detect alternates.
+     */
+    private function normalizeTimeInputs(Request $request): void
+    {
+        $start = $request->input('start_time') ?? $request->input('start') ?? $request->input('starts_at');
+        $end   = $request->input('end_time')   ?? $request->input('end')   ?? $request->input('ends_at');
+
+        $start = $this->toHHMM($start);
+        $end   = $this->toHHMM($end);
+
+        $merge = [];
+        if ($start !== null) $merge['start_time'] = $start;
+        if ($end   !== null) $merge['end_time']   = $end;
+        if ($merge) $request->merge($merge);
     }
 }

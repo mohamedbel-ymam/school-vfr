@@ -54,31 +54,28 @@ class Timetable extends Model
         return $this->toMinutes($this->end_time);
     }
 
-    private function formatTimeForApi($t): ?string
-    {
-        if (empty($t)) return null;
-        $s = (string) $t;
-        // "HH:MM:SS" -> "HH:MM"
-        if (preg_match('/^\d{1,2}:\d{2}:\d{2}$/', $s)) return substr($s, 0, 5);
-        // already "HH:MM"
-        if (preg_match('/^\d{1,2}:\d{2}$/', $s)) return $s;
-        // anything else: best-effort (e.g. "9:0" or "9")
-        if (preg_match('/^(\d{1,2}):(\d{1,2})$/', $s, $m)) {
-            return str_pad($m[1], 2, '0', STR_PAD_LEFT).':'.str_pad($m[2], 2, '0', STR_PAD_LEFT);
+    private function formatTimeForApi($time): ?string
+        {
+            if (!$time) return null;
+        
+            // Already "HH:mm" or "HH:mm:ss"
+            if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $time)) {
+                return substr($time, 0, 5);
+            }
+        
+            try {
+                return \Carbon\Carbon::parse($time)->format('H:i');
+            } catch (\Throwable $e) {
+                return null;
+            }
         }
-        if (preg_match('/^(\d{1,2})$/', $s, $m)) {
-            return str_pad($m[1], 2, '0', STR_PAD_LEFT).':00';
+        
+        private function toMinutes(?string $hhmm): ?int
+        {
+            if (!$hhmm || !preg_match('/^\d{2}:\d{2}$/', $hhmm)) return null;
+            [$h, $m] = explode(':', $hhmm);
+            return ((int)$h) * 60 + (int)$m;
         }
-        return null;
-    }
-
-    private function toMinutes($t): ?int
-    {
-        $s = $this->formatTimeForApi($t);
-        if (!$s) return null;
-        [$h, $m] = array_map('intval', explode(':', $s));
-        return $h * 60 + $m;
-    }
 
     /* -------------------- relations -------------------- */
     public function degree(): BelongsTo  { return $this->belongsTo(Degree::class); }

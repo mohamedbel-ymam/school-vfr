@@ -210,6 +210,7 @@ export default function ManageTimetables() {
   const [rooms, setRooms] = useState([]);
 
   // weekly data
+  
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
@@ -418,7 +419,7 @@ export default function ManageTimetables() {
 
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => setShowCreate(true)} variant="secondary">
-                + Nouveau Rangé
+                + Nouvelle rangée
               </Button>
               <Button onClick={loadWeekly} disabled={loading}>
                 {loading ? "Loading…" : "Apply"}
@@ -1318,7 +1319,7 @@ function MonthlyPlanner({
                 cellsOut.push(
                   <div
                     key={`b-${i}`}
-                    className="min-h=[84px] md:min-h-[110px]"
+                    className="min-h-[84px] md:min-h-[110px]"
                   />
                 );
                 idx++;
@@ -1416,10 +1417,10 @@ function DayCell({
             ? subjectColors[key] || `hsl(${goldenHue(key)} 70% 45%)`
             : `hsl(${goldenHue("subject")} 70% 45%)`;
 
-        const st = getStartStr(p);
-        const et = getEndStr(p);
-        const timeStr =
-          st && et ? `(${fmtHHMM(st)}–${fmtHHMM(et)})` : "toute la journée";
+          const st = getStartStr(p);
+          const et = getEndStr(p);
+          const timeStr =
+            st && et ? `(${fmtHHMM(st)}–${fmtHHMM(et)})` : "toute la journée";
 
           return (
             <div
@@ -1569,3 +1570,4 @@ function DayCell({
     </div>
   );
 }
+

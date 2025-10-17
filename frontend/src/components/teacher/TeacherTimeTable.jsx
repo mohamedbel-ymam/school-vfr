@@ -327,8 +327,8 @@ export default function TeacherTimetable() {
     }
     return arr;
   }, [lessons, subjectFilter, degreeFilter]);
-  const hasTimed = useMemo(() => (filtered ?? []).some(resolveStartEndMins), [filtered]);
 
+  const hasTimed = useMemo(() => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))), [filtered]);
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
@@ -352,16 +352,19 @@ export default function TeacherTimetable() {
         </div>
       </div>
 
-      {view === "grid" && !hasTimed ? (
-        <div className="rounded-md border p-3 text-sm text-muted-foreground">
-         Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
-        ou basculez en vue <b>Agenda</b>.
-        </div>
-      ) : null}
-        <WeekGrid lessons={filtered} weekOffset={weekOffset} />
-       : (
+      {/* Proper conditional: grid vs agenda, with clear empty-hours notice */}
+      {view === "grid" ? (
+        hasTimed ? (
+          <WeekGrid lessons={filtered} weekOffset={weekOffset} />
+        ) : (
+          <div className="rounded-md border p-3 text-sm text-muted-foreground">
+            Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
+            ou basculez en vue <b>Agenda</b>.
+          </div>
+        )
+      ) : (
         <AgendaList lessons={filtered} weekOffset={weekOffset} />
-      )
+      )}
     </div>
   );
 }
@@ -489,7 +492,6 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const hourMarks = useMemo(() => { const arr = []; for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m }); return arr; }, [minM, maxM]);
   const halfHourMarks = useMemo(() => { const arr = []; for (let m = minM + 30; m < maxM; m += 60) arr.push(m); return arr; }, [minM, maxM]);
-  const hasTimed = (lessons ?? []).some((l) => resolveStartEndMins(l));
 
   return (
     <div className="rounded-xl border overflow-hidden">
@@ -648,8 +650,8 @@ function AgendaList({ lessons, weekOffset }) {
                   const degree = l.degree?.name ?? l.timetable?.degree?.name ?? "Niveau";
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
-                  const timeStr = times
-                     ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
+                  const timeStr = mins
+                    ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
                   return (
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">

@@ -71,7 +71,7 @@ const HARD_MAX = 22 * 60;
 const PAD_MINS = 30;
 
 /* ---------------------------------- Helpers ----------------------------------- */
-const unwrapLessons = (res) => res?.data?.data?.lessons ?? []; // <— CHANGED
+const unwrapLessons = (res) => res?.data?.data?.lessons ?? []; // expects {data:{lessons:[...]}} from API
 
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -180,9 +180,9 @@ const roomName = (l) =>
 
 // --- time extraction from any backend shape ---
 const getStartStr = (l) =>
-  l?.start ?? l?.start_time ?? extractHHMM(l?.starts_at) ?? null; // <— CHANGED (prefer `start`)
+  l?.start ?? l?.start_time ?? extractHHMM(l?.starts_at) ?? null; // prefer normalized `start`
 const getEndStr = (l) =>
-  l?.end ?? l?.end_time ?? extractHHMM(l?.ends_at) ?? null;       // <— CHANGED (prefer `end`)
+  l?.end ?? l?.end_time ?? extractHHMM(l?.ends_at) ?? null;       // prefer normalized `end`
 
 const getStartMin = (l) =>
   Number.isFinite(l?.start_minutes) ? l.start_minutes : toMins(getStartStr(l));
@@ -275,7 +275,7 @@ export default function StudentTimeTable() {
     (async () => {
       try {
         const res = await TimeTableApi.student();
-        const raw = unwrapLessons(res); // <— CHANGED
+        const raw = unwrapLessons(res);
 
         const normalized = (raw ?? []).map((l) => ({
           ...l,
@@ -286,7 +286,7 @@ export default function StudentTimeTable() {
               ? {
                   id: l.subject?.id ?? l.subject_id,
                   name: l.subject?.name ?? l.subject_name ?? "Matière",
-                  key: l?.subject?.key, // keep if provided
+                  key: l?.subject?.key,
                 }
               : l?.subject?.name
               ? { id: null, name: l.subject.name }
@@ -299,7 +299,7 @@ export default function StudentTimeTable() {
           timetable:
             l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
 
-          // normalized time fields preferred
+          // prefer normalized fields from backend
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: Number.isFinite(l?.start_minutes)
@@ -316,7 +316,7 @@ export default function StudentTimeTable() {
         }));
 
         setLessons(normalized);
-        setTimetable(null); // backend doesn’t return a single timetable record
+        setTimetable(null);
       } catch (e) {
         console.error(e);
         setErr(
@@ -359,7 +359,11 @@ export default function StudentTimeTable() {
       return okSubject && okPlan;
     });
   }, [lessons, subjectFilter, planFilter]);
-  const hasTimed = useMemo(() => (shownLessons ?? []).some(resolveStartEndMins), [shownLessons]);
+
+  const hasTimed = useMemo(
+    () => (shownLessons ?? []).some((x) => Boolean(resolveStartEndMins(x))),
+    [shownLessons]
+  );
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err)
@@ -421,16 +425,18 @@ export default function StudentTimeTable() {
       <Legend subjects={subjects} />
 
       {/* Contenu */}
-      {view === "grid" && !hasTimed ? (
-        <div className="rounded-md border p-3 text-sm text-muted-foreground">
-          Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
-          ou basculez en vue <b>Agenda</b>.
-        </div>
-      ) : null}
-        <WeekGrid lessons={shownLessons} weekOffset={weekOffset} />
-       : (
+      {view === "grid" ? (
+        hasTimed ? (
+          <WeekGrid lessons={shownLessons} weekOffset={weekOffset} />
+        ) : (
+          <div className="rounded-md border p-3 text-sm text-muted-foreground">
+            Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
+            ou basculez en vue <b>Agenda</b>.
+          </div>
+        )
+      ) : (
         <AgendaList lessons={shownLessons} weekOffset={weekOffset} />
-      )
+      )}
     </div>
   );
 }
@@ -643,7 +649,7 @@ function WeekGrid({ lessons, weekOffset }) {
     for (let m = minM + 30; m < maxM; m += 60) arr.push(m);
     return arr;
   }, [minM, maxM]);
-  const hasTimed = (lessons ?? []).some((l) => resolveStartEndMins(l));
+
   return (
     <div className="rounded-xl border overflow-hidden">
       <div className="overflow-x-auto">
