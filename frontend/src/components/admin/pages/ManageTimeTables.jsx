@@ -173,6 +173,23 @@ function useMediaQuery(query) {
   return matches;
 }
 
+// Safe chunk helper for bulk operations
+const chunk = (arr, size) => {
+  const out = [];
+  if (!Array.isArray(arr) || size <= 0) return out;
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
+// Time string for weekly cells: HH:MM–HH:MM or fallback to Période
+const weeklyTimeString = (l) => {
+  const s = getStartStr(l);
+  const e = getEndStr(l);
+  if (s && e) return `(${fmtHHMM(s)}–${fmtHHMM(e)})`;
+  if (l?.period) return `(Période ${l.period})`;
+  return "";
+};
+
 /* ========================= Main Component ========================= */
 
 export default function ManageTimetables() {
@@ -308,13 +325,7 @@ export default function ManageTimetables() {
 
     setCleaning(true);
     try {
-      const chunks = (arr, n) =>
-        arr.reduce(
-          (a, _, i) =>
-            i % n ? a[a.length - 1].push(arr[i]) : a.push([arr[i]]),
-          []
-        );
-      const parts = chunks(ids, 10);
+      const parts = chunk(ids, 10);
       let success = 0,
         fail = 0;
 
@@ -648,15 +659,13 @@ function DegreeTimetableMobile({
                 rowsByDay.get(val).map((l) => {
                   const subjectName = l.subject?.name ?? "—";
                   const color = subjectColorHexFromRow(l);
-                  const s = getStartStr(l),
-                    e = getEndStr(l);
                   return (
                     <div
                       key={
                         l.id ??
                         `${val}-${l.degree_id ?? degree?.id ?? "x"}-${
                           l.subject_id ?? "s"
-                        }-${s ?? "t"}`
+                        }-${getStartStr(l) ?? "t"}`
                       }
                       className="rounded-lg border p-2 bg-background"
                     >
@@ -670,7 +679,7 @@ function DegreeTimetableMobile({
                           </span>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          {s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}
+                          {weeklyTimeString(l)}
                         </span>
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -700,7 +709,6 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     const today = new Date();
     const js = today.getDay();
-    thead: null;
     const todayIdx = js === 0 ? 7 : js;
     const nowMins = today.getHours() * 60 + today.getMinutes();
 
@@ -714,7 +722,6 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
           if (end != null && end <= nowMins) continue;
         }
       }
-      if (!m.has(dow)) m.set(dow, []);
       m.get(dow).push(it);
     }
     for (const [k, arr] of m) {
@@ -768,15 +775,13 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
                   {rowsByDay.get(val)?.map((l) => {
                     const subjectName = l.subject?.name ?? "—";
                     const color = subjectColorHexFromRow(l);
-                    const s = getStartStr(l),
-                      e = getEndStr(l);
                     return (
                       <div
                         key={
                           l.id ??
                           `${val}-${l.degree_id ?? degree?.id ?? "x"}-${
                             l.subject_id ?? "s"
-                          }-${s ?? "t"}`
+                          }-${getStartStr(l) ?? "t"}`
                         }
                         className="rounded-xl border p-2 bg-muted/40 hover:bg-muted/60 transition-colors"
                       >
@@ -791,7 +796,7 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
                           ) : (
                             subjectName
                           )}{" "}
-                          {s && e ? `(${fmtHHMM(s)}–${fmtHHMM(e)})` : ""}
+                          {weeklyTimeString(l)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {l.teacher ? (
@@ -1411,10 +1416,10 @@ function DayCell({
             ? subjectColors[key] || `hsl(${goldenHue(key)} 70% 45%)`
             : `hsl(${goldenHue("subject")} 70% 45%)`;
 
-          const st = getStartStr(p);
-          const et = getEndStr(p);
-          const timeStr =
-            st && et ? `(${fmtHHMM(st)}–${fmtHHMM(et)})` : "toute la journée";
+        const st = getStartStr(p);
+        const et = getEndStr(p);
+        const timeStr =
+          st && et ? `(${fmtHHMM(st)}–${fmtHHMM(et)})` : "toute la journée";
 
           return (
             <div
@@ -1453,7 +1458,7 @@ function DayCell({
       {/* Quick add mini form */}
       {open && (
         <div className="mt-auto border rounded-md p-2 bg-background">
-          <div className="text-[10px] md:text-[11px] mb-1 text-muted-foreground">
+          <div className="text-[10px] md:text[11px] mb-1 text-muted-foreground">
             {dateStr}
           </div>
           <div className="grid grid-cols-1 gap-2">

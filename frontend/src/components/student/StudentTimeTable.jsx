@@ -420,11 +420,16 @@ export default function StudentTimeTable() {
       <Legend subjects={subjects} />
 
       {/* Contenu */}
-      {view === "grid" ? (
+      {view === "grid" && !hasTimed ? (
+        <div className="rounded-md border p-3 text-sm text-muted-foreground">
+          Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
+          ou basculez en vue <b>Agenda</b>.
+        </div>
+      ) : null}
         <WeekGrid lessons={shownLessons} weekOffset={weekOffset} />
-      ) : (
+       : (
         <AgendaList lessons={shownLessons} weekOffset={weekOffset} />
-      )}
+      )
     </div>
   );
 }
@@ -637,7 +642,7 @@ function WeekGrid({ lessons, weekOffset }) {
     for (let m = minM + 30; m < maxM; m += 60) arr.push(m);
     return arr;
   }, [minM, maxM]);
-
+  const hasTimed = (lessons ?? []).some((l) => resolveStartEndMins(l));
   return (
     <div className="rounded-xl border overflow-hidden">
       <div className="overflow-x-auto">
@@ -853,12 +858,8 @@ function AgendaList({ lessons, weekOffset }) {
                   const rName = roomName(l);
                   const times = resolveStartEndMins(l);
                   const timeStr = times
-                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(
-                        times[0] % 60
-                      )}–${pad(Math.floor(times[1] / 60))}:${pad(
-                        times[1] % 60
-                      )})`
-                    : "";
+                    ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
+                    : (l?.period ? `(Période ${l.period})` : "");
 
                   return (
                     <div
