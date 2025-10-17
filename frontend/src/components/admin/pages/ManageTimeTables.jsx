@@ -4,7 +4,13 @@ import TimeTableApi from "../../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../../api/axios";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../../ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "../../ui/select";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
@@ -203,7 +209,9 @@ export default function ManageTimetables() {
       try {
         const [degRes, tchRes, subRes] = await Promise.all([
           axiosClient.get("/admin/degrees", { params: { per_page: 200 } }),
-          axiosClient.get("/admin/users", { params: { role: "teacher", per_page: 200 } }),
+          axiosClient.get("/admin/users", {
+            params: { role: "teacher", per_page: 200 },
+          }),
           axiosClient.get("/admin/subjects", { params: { per_page: 200 } }),
         ]);
         setDegrees(unwrap(degRes));
@@ -214,7 +222,9 @@ export default function ManageTimetables() {
         toast.error("Failed to load filter lists");
       }
       try {
-        const roomRes = await axiosClient.get("/admin/rooms", { params: { per_page: 200 } });
+        const roomRes = await axiosClient.get("/admin/rooms", {
+          params: { per_page: 200 },
+        });
         setRooms(unwrap(roomRes));
       } catch {
         setRooms([]);
@@ -291,13 +301,19 @@ export default function ManageTimetables() {
       toast.message("Nothing to delete.");
       return;
     }
-    const ok = window.confirm(`This will permanently delete ${ids.length} ${label}. Continue?`);
+    const ok = window.confirm(
+      `This will permanently delete ${ids.length} ${label}. Continue?`
+    );
     if (!ok) return;
 
     setCleaning(true);
     try {
       const chunks = (arr, n) =>
-        arr.reduce((a, _, i) => (i % n ? a[a.length - 1].push(arr[i]) : a.push([arr[i]]), a), []);
+        arr.reduce(
+          (a, _, i) =>
+            i % n ? a[a.length - 1].push(arr[i]) : a.push([arr[i]]),
+          []
+        );
       const parts = chunks(ids, 10);
       let success = 0,
         fail = 0;
@@ -308,7 +324,9 @@ export default function ManageTimetables() {
         );
         for (const r of res) r.status === "fulfilled" ? success++ : fail++;
       }
-      toast.success(`Deleted ${success} item(s)` + (fail ? `, ${fail} failed` : ""));
+      toast.success(
+        `Deleted ${success} item(s)` + (fail ? `, ${fail} failed` : "")
+      );
       await loadWeekly();
     } catch (e) {
       console.error(e);
@@ -509,7 +527,8 @@ function WeeklyGrid({ rows, hidePast, onBulkDelete, reload }) {
     const byDegree = new Map();
     for (const r of rows) {
       const dId = r.degree_id ?? r.degree?.id ?? "unknown";
-      if (!byDegree.has(dId)) byDegree.set(dId, { degree: r.degree ?? null, items: [] });
+      if (!byDegree.has(dId))
+        byDegree.set(dId, { degree: r.degree ?? null, items: [] });
       byDegree.get(dId).items.push(r);
     }
     return Array.from(byDegree.values());
@@ -550,7 +569,13 @@ function WeeklyGrid({ rows, hidePast, onBulkDelete, reload }) {
   );
 }
 
-function DegreeTimetableMobile({ degree, items, hidePast, onBulkDelete, reload }) {
+function DegreeTimetableMobile({
+  degree,
+  items,
+  hidePast,
+  onBulkDelete,
+  reload,
+}) {
   const { rowsByDay, idsForDegree } = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     const today = new Date();
@@ -675,6 +700,7 @@ function DegreeTimetable({ degree, items, hidePast, onBulkDelete, reload }) {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     const today = new Date();
     const js = today.getDay();
+    thead: null;
     const todayIdx = js === 0 ? 7 : js;
     const nowMins = today.getHours() * 60 + today.getMinutes();
 
@@ -887,7 +913,7 @@ function CreateRowPanel({
           form.end_time || addMinutes(form.start_time, DEFAULT_CLASS_MINS)
         ),
         ...(form.room_id ? { room_id: Number(form.room_id) } : {}),
-        ...(weekStart ? { week_start: weekStart } : {}), // <— NEW: persist selected week to DB
+        ...(weekStart ? { week_start: weekStart } : {}), // <— persist selected week to DB
       };
 
       const res = await TimeTableApi.create(payload);
@@ -1070,7 +1096,7 @@ function CreateRowPanel({
           Créer aussi un plan (pour une semaine précise)
         </div>
 
-        {/* NEW: Week picker */}
+        {/* Week picker */}
         <div className="grid md:grid-cols-6 gap-3">
           <div className="md:col-span-2">
             <Input
@@ -1086,7 +1112,7 @@ function CreateRowPanel({
             />
           </div>
 
-          {/* Still allow manual month/day override if desired */}
+          {/* Manual month/day override if desired */}
           <div>
             <Input
               type="month"
@@ -1175,7 +1201,6 @@ function MonthlyPlanner({
 }) {
   const NONE = "__none__";
   const [openDate, setOpenDate] = useState(null);
-  // (Note: the per-cell form state lives inside DayCell now)
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
@@ -1212,13 +1237,13 @@ function MonthlyPlanner({
 
   const ymd = (d) => (d ? `${y}-${pad2(m)}-${pad2(d)}` : null);
 
-  // Accept the selected mini from DayCell (no stale state)
+  // Create a plan, now including times (optional)
   const quickAdd = async (dateStr, mini) => {
     if (degreeId === "__all__") {
       toast.error("Select a Niveau first.");
       return;
     }
-    const { subject_id, teacher_id, title } = mini || {};
+    const { subject_id, teacher_id, title, start_time, end_time } = mini || {};
     if (!subject_id) {
       toast.error("Matière is required");
       return;
@@ -1229,8 +1254,11 @@ function MonthlyPlanner({
         plan_date: dateStr,
         degree_id: Number(degreeId),
         subject_id: Number(subject_id),
-        teacher_id: teacher_id && teacher_id !== NONE ? Number(teacher_id) : null,
+        teacher_id:
+          teacher_id && teacher_id !== NONE ? Number(teacher_id) : null,
         title: title || null,
+        start_time: start_time ? fmtHHMM(start_time) : null,
+        end_time: end_time ? fmtHHMM(end_time) : null,
       });
       await reload();
       toast.success("Plan added");
@@ -1286,7 +1314,7 @@ function MonthlyPlanner({
                   <div
                     key={`b-${i}`}
                     className="min-h=[84px] md:min-h-[110px]"
-                  ></div>
+                  />
                 );
                 idx++;
               }
@@ -1312,7 +1340,7 @@ function MonthlyPlanner({
                   <div
                     key={`t-${idx}`}
                     className="min-h-[84px] md:min-h-[110px]"
-                  ></div>
+                  />
                 );
                 idx++;
               }
@@ -1343,7 +1371,13 @@ function DayCell({
 }) {
   const NONE = "__none__";
   const [open, setOpen] = useState(false);
-  const [mini, setMini] = useState({ subject_id: "", teacher_id: "", title: "" });
+  const [mini, setMini] = useState({
+    subject_id: "",
+    teacher_id: "",
+    title: "",
+    start_time: "",
+    end_time: "",
+  });
   const [saving, setSaving] = useState(false);
 
   return (
@@ -1368,6 +1402,7 @@ function DayCell({
         )}
       </div>
 
+      {/* Existing plans */}
       <div className="flex flex-col gap-1">
         {dayPlans.map((p) => {
           const key =
@@ -1375,7 +1410,13 @@ function DayCell({
           const color = key
             ? subjectColors[key] || `hsl(${goldenHue(key)} 70% 45%)`
             : `hsl(${goldenHue("subject")} 70% 45%)`;
-        return (
+
+          const st = getStartStr(p);
+          const et = getEndStr(p);
+          const timeStr =
+            st && et ? `(${fmtHHMM(st)}–${fmtHHMM(et)})` : "toute la journée";
+
+          return (
             <div
               key={p.id}
               className="inline-flex items-center gap-2 rounded-md px-2 py-1 bg-muted"
@@ -1390,6 +1431,9 @@ function DayCell({
               ) : null}
               <span className="text-xs text-foreground flex-1 truncate">
                 {p.title || ""}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {timeStr}
               </span>
               <button
                 className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-background/70"
@@ -1406,6 +1450,7 @@ function DayCell({
         )}
       </div>
 
+      {/* Quick add mini form */}
       {open && (
         <div className="mt-auto border rounded-md p-2 bg-background">
           <div className="text-[10px] md:text-[11px] mb-1 text-muted-foreground">
@@ -1456,6 +1501,30 @@ function DayCell({
               className="h-8"
             />
 
+            {/* Time pickers for monthly plans (optional) */}
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="time"
+                step={1800}
+                value={mini.start_time}
+                onChange={(e) =>
+                  setMini((s) => ({ ...s, start_time: e.target.value }))
+                }
+                placeholder="Début (optionnel)"
+                className="h-8"
+              />
+              <Input
+                type="time"
+                step={1800}
+                value={mini.end_time}
+                onChange={(e) =>
+                  setMini((s) => ({ ...s, end_time: e.target.value }))
+                }
+                placeholder="Fin (optionnel)"
+                className="h-8"
+              />
+            </div>
+
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -1465,8 +1534,14 @@ function DayCell({
                     return;
                   }
                   setSaving(true);
-                  await quickAdd(dateStr, mini); // pass the form values
-                  setMini({ subject_id: "", teacher_id: "", title: "" });
+                  await quickAdd(dateStr, mini);
+                  setMini({
+                    subject_id: "",
+                    teacher_id: "",
+                    title: "",
+                    start_time: "",
+                    end_time: "",
+                  });
                   setOpen(false);
                   setSaving(false);
                 }}

@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class TimetableController extends Controller
 {
@@ -26,6 +27,13 @@ class TimetableController extends Controller
 
         if ($t = $req->query('teacher_id')) $q->where('teacher_id', $t);
         if ($d = $req->query('degree_id'))  $q->where('degree_id', $d);
+
+        // NEW: optional filter by week_start (YYYY-MM-DD or ISO week YYYY-Www)
+        if (Schema::hasColumn('timetables', 'week_start')) {
+            if ($ws = $this->normalizeWeekStart($req->query('week_start'))) {
+                $q->whereDate('week_start', $ws);
+            }
+        }
 
         $perPage = max(1, min((int) $req->query('per_page', 100), 1000));
 
@@ -54,70 +62,89 @@ class TimetableController extends Controller
             ],
         ]);
     }
+
     public function student(Request $request)
     {
         $user = $request->user(); // role: student
-    
-        // Find the student's degree, trying several schemas (you already have this helper)
+
         $degreeId = $this->resolveStudentDegreeId($user->id);
         if (!$degreeId) {
             return response()->json([
                 'data' => ['lessons' => []],
             ]);
         }
-    
-        $lessons = \App\Models\Timetable::with([
+
+        $q = Timetable::with([
                 'subject:id,name',
                 'degree:id,name',
                 'room:id,name',
                 'teacher:id,firstname,lastname',
             ])
-            ->where('degree_id', $degreeId)
-            // sort safely only if columns exist
-            ->when(\Illuminate\Support\Facades\Schema::hasColumn('timetables','day_of_week'), fn($q) => $q->orderBy('day_of_week'))
-            ->when(\Illuminate\Support\Facades\Schema::hasColumn('timetables','start_time'), function ($q) {
+            ->where('degree_id', $degreeId);
+
+        // NEW: week_start filter
+        if (Schema::hasColumn('timetables', 'week_start')) {
+            if ($ws = $this->normalizeWeekStart($request->query('week_start'))) {
+                $q->whereDate('week_start', $ws);
+            }
+        }
+
+        // sort safely only if columns exist
+        $q->when(Schema::hasColumn('timetables','day_of_week'), fn($q) => $q->orderBy('day_of_week'))
+          ->when(Schema::hasColumn('timetables','start_time'), function ($q) {
                 $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END')
                   ->orderBy('start_time');
-            })
-            ->when(\Illuminate\Support\Facades\Schema::hasColumn('timetables','period'), fn($q) => $q->orderBy('period'))
-            ->get();
-        
+           })
+          ->when(Schema::hasColumn('timetables','period'), fn($q) => $q->orderBy('period'));
+
+        $lessons = $q->get();
+
         return response()->json([
-        'data' => [
-            'lessons' => $lessons, // <- plain collection (no Resource here)
-        ],
+            'data' => [
+                'lessons' => $lessons, // model appends add start/end/start_minutes/end_minutes
+            ],
         ]);
-        }
-    /** Teacher → lessons for the authenticated teacher (optional ?degree_id=...) */
+    }
+
+    /** Teacher → lessons for the authenticated teacher (optional ?degree_id=...&week_start=...) */
     public function teacher(Request $request)
     {
         $user = $request->user(); // role: teacher
         $degreeId = $request->query('degree_id');
 
-        $lessons = Timetable::with([
+        $q = Timetable::with([
                 'subject:id,name',
                 'degree:id,name',
                 'room:id,name',
                 'teacher:id,firstname,lastname',
             ])
             ->where('teacher_id', $user->id)
-            ->when($degreeId, fn($q) => $q->where('degree_id', $degreeId))
-            ->when(Schema::hasColumn('timetables', 'day_of_week'), fn($q) => $q->orderBy('day_of_week'))
-            ->when(Schema::hasColumn('timetables', 'start_time'), function ($q) {
+            ->when($degreeId, fn($q) => $q->where('degree_id', $degreeId));
+
+        // NEW: week_start filter
+        if (Schema::hasColumn('timetables', 'week_start')) {
+            if ($ws = $this->normalizeWeekStart($request->query('week_start'))) {
+                $q->whereDate('week_start', $ws);
+            }
+        }
+
+        $q->when(Schema::hasColumn('timetables', 'day_of_week'), fn($q) => $q->orderBy('day_of_week'))
+          ->when(Schema::hasColumn('timetables', 'start_time'), function ($q) {
                 $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END')
                   ->orderBy('start_time');
-            })
-            ->when(Schema::hasColumn('timetables', 'period'), fn($q) => $q->orderBy('period'))
-            ->get();
+           })
+          ->when(Schema::hasColumn('timetables', 'period'), fn($q) => $q->orderBy('period'));
+
+        $lessons = $q->get();
 
         return response()->json([
             'data' => [
-                'lessons' => $lessons, // <- plain collection (no Resource here)
+                'lessons' => $lessons,
             ],
         ]);
     }
 
-    /** Parent → lessons for a selected child (?child_id=…) */
+    /** Parent → lessons for a selected child (?child_id=…&week_start=…) */
     public function parent(Request $request)
     {
         $parent = $request->user(); // role: parent
@@ -131,24 +158,33 @@ class TimetableController extends Controller
             return response()->json(['message' => "Aucun niveau trouvé pour l'enfant sélectionné."], 404);
         }
 
-        $lessons = Timetable::with([
+        $q = Timetable::with([
                 'subject:id,name',
                 'degree:id,name',
                 'room:id,name',
                 'teacher:id,firstname,lastname',
             ])
-            ->where('degree_id', $degreeId)
-            ->when(Schema::hasColumn('timetables', 'day_of_week'), fn($q) => $q->orderBy('day_of_week'))
-            ->when(Schema::hasColumn('timetables', 'start_time'), function ($q) {
+            ->where('degree_id', $degreeId);
+
+        // NEW: week_start filter
+        if (Schema::hasColumn('timetables', 'week_start')) {
+            if ($ws = $this->normalizeWeekStart($request->query('week_start'))) {
+                $q->whereDate('week_start', $ws);
+            }
+        }
+
+        $q->when(Schema::hasColumn('timetables', 'day_of_week'), fn($q) => $q->orderBy('day_of_week'))
+          ->when(Schema::hasColumn('timetables', 'start_time'), function ($q) {
                 $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END')
                   ->orderBy('start_time');
-            })
-            ->when(Schema::hasColumn('timetables', 'period'), fn($q) => $q->orderBy('period'))
-            ->get();
+           })
+          ->when(Schema::hasColumn('timetables', 'period'), fn($q) => $q->orderBy('period'));
+
+        $lessons = $q->get();
 
         return response()->json([
             'data' => [
-                'lessons' => $lessons, // <- plain collection (no Resource here)
+                'lessons' => $lessons,
             ],
         ]);
     }
@@ -273,6 +309,36 @@ class TimetableController extends Controller
             $id = $this->safeValue($tbl, ['user_id' => $userId], 'degree_id');
             if ($id) return (int) $id;
         }
+        return null;
+    }
+
+    /**
+     * Normalize ?week_start= param:
+     *  - 'YYYY-MM-DD' -> same
+     *  - 'YYYY-Www'   -> Monday of that ISO week
+     * Returns null if input is empty or invalid.
+     */
+    private function normalizeWeekStart(?string $value): ?string
+    {
+        if (!$value) return null;
+
+        $value = trim($value);
+
+        // Exact date
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return $value;
+        }
+
+        // ISO week: YYYY-Wnn
+        if (preg_match('/^(\d{4})-W(\d{2})$/', $value, $m)) {
+            try {
+                $date = Carbon::now()->setISODate((int)$m[1], (int)$m[2], 1); // Monday
+                return $date->toDateString();
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
+
         return null;
     }
 }

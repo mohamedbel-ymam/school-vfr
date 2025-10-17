@@ -61,17 +61,17 @@ const DAYS = [
 ];
 
 // Fallback/parse constants
-const SCHOOL_START_MINS = 9 * 60;      // used only for parsing "period"
-const SCHOOL_END_MINS = 22 * 60;       // used only for parsing "period"
-const PERIOD_DURATION_MINS = 90;       // fallback when only "period" is given
+const SCHOOL_START_MINS = 9 * 60;
+const SCHOOL_END_MINS = 22 * 60;
+const PERIOD_DURATION_MINS = 90;
 
 // Hard clamps for dynamic window
-const HARD_MIN = 7 * 60;               // 07:00 earliest
-const HARD_MAX = 22 * 60;              // 22:00 latest
-const PAD_MINS = 30;                   // 30min headroom
+const HARD_MIN = 7 * 60;
+const HARD_MAX = 22 * 60;
+const PAD_MINS = 30;
 
 /* ---------------------------------- Helpers ----------------------------------- */
-const unwrap = (r) => r?.data?.data ?? r?.data ?? null;
+const unwrapLessons = (res) => res?.data?.data?.lessons ?? []; // <— CHANGED
 
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -152,6 +152,7 @@ const slugify = (s = "") =>
     .replace(/(^-|-$)/g, "");
 
 const subjectKey = (l) =>
+  l?.subject?.key ??
   l?.subject?.id ??
   l?.subject_id ??
   slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
@@ -179,9 +180,9 @@ const roomName = (l) =>
 
 // --- time extraction from any backend shape ---
 const getStartStr = (l) =>
-  l?.start_time ?? extractHHMM(l?.starts_at) ?? l?.start ?? null;
+  l?.start ?? l?.start_time ?? extractHHMM(l?.starts_at) ?? null; // <— CHANGED (prefer `start`)
 const getEndStr = (l) =>
-  l?.end_time ?? extractHHMM(l?.ends_at) ?? l?.end ?? null;
+  l?.end ?? l?.end_time ?? extractHHMM(l?.ends_at) ?? null;       // <— CHANGED (prefer `end`)
 
 const getStartMin = (l) =>
   Number.isFinite(l?.start_minutes) ? l.start_minutes : toMins(getStartStr(l));
@@ -274,16 +275,7 @@ export default function StudentTimeTable() {
     (async () => {
       try {
         const res = await TimeTableApi.student();
-        const payload = unwrap(res);
-        const raw = Array.isArray(payload?.lessons)
-          ? payload.lessons
-          : Array.isArray(payload?.lessons?.data)
-          ? payload.lessons.data
-          : Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.data)
-          ? payload.data
-          : [];
+        const raw = unwrapLessons(res); // <— CHANGED
 
         const normalized = (raw ?? []).map((l) => ({
           ...l,
@@ -294,6 +286,7 @@ export default function StudentTimeTable() {
               ? {
                   id: l.subject?.id ?? l.subject_id,
                   name: l.subject?.name ?? l.subject_name ?? "Matière",
+                  key: l?.subject?.key, // keep if provided
                 }
               : l?.subject?.name
               ? { id: null, name: l.subject.name }
@@ -306,7 +299,7 @@ export default function StudentTimeTable() {
           timetable:
             l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
 
-          // keep time info (any shape)
+          // normalized time fields preferred
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: Number.isFinite(l?.start_minutes)
@@ -316,16 +309,14 @@ export default function StudentTimeTable() {
             ? l.end_minutes
             : undefined,
 
-          // plan flags + anchor date
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD
 
-          // optional: weekly row only for a specific week
           week_start: l?.week_start ?? l?.weekStart ?? null, // YYYY-MM-DD
         }));
 
         setLessons(normalized);
-        setTimetable(payload?.timetable ?? payload?.plan ?? null);
+        setTimetable(null); // backend doesn’t return a single timetable record
       } catch (e) {
         console.error(e);
         setErr(
@@ -410,8 +401,8 @@ export default function StudentTimeTable() {
             value={subjectFilter}
             onChange={setSubjectFilter}
             options={[
-                { value: "", label: "Toutes les matières" },
-                ...subjects.map((s) => ({ value: s.id, label: s.name })),
+              { value: "", label: "Toutes les matières" },
+              ...subjects.map((s) => ({ value: s.id, label: s.name })),
             ]}
           />
           <ViewToggle value={view} onChange={setView} />
@@ -635,7 +626,6 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const hourMarks = useMemo(() => {
     const arr = [];
-    // align to hour
     const startHour = Math.ceil(minM / 60);
     const endHour = Math.floor(maxM / 60);
     for (let h = startHour; h <= endHour; h++) arr.push({ h, m: h * 60 });
@@ -872,7 +862,7 @@ function AgendaList({ lessons, weekOffset }) {
 
                   return (
                     <div
-                      key={l.id ?? `${d.val}-${i}`}
+                      key={l.id ?? `${d.val}-${i}` }
                       className="rounded-xl border p-3"
                       style={{ background: soft, borderColor: "transparent" }}
                     >

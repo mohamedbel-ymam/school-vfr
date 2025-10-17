@@ -5,9 +5,11 @@ import subjectColors from "../../config/subjectColors";
 
 /* ---------------- helpers & constants ---------------- */
 
-// unwrap common shapes: {data:{lessons:[...]}} | {lessons:[...]} | [...]
-const unwrap = (r) =>
-  r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data?.data ?? r?.data ?? [];
+// unwrap strictly to an array of lessons coming from { data: { lessons: [...] } }
+const unwrapLessons = (r) =>
+  r?.data?.data?.lessons ??
+  r?.data?.lessons ??
+  (Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []);
 
 // normalize 0..6 (Sun..Sat) → 1..7 (Mon..Sun)
 const normalizeDow = (v) => {
@@ -27,11 +29,11 @@ const extractHHMM = (v) => {
   return m ? `${m[1]}:${m[2]}` : null;
 };
 
-// Prefer normalized time fields
+// Prefer normalized time fields from backend
 const getStartStr = (l) =>
-  l?.start_time ?? extractHHMM(l?.starts_at) ?? l?.start ?? null;
+  l?.start ?? l?.start_time ?? extractHHMM(l?.starts_at) ?? null;
 const getEndStr = (l) =>
-  l?.end_time ?? extractHHMM(l?.ends_at) ?? l?.end ?? null;
+  l?.end ?? l?.end_time ?? extractHHMM(l?.ends_at) ?? null;
 
 const DAYS = [
   { label: "Lun", full: "Lundi", val: 1 },
@@ -140,15 +142,11 @@ const roomAbbr = (r) => {
   return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
 };
 
-// degree abbreviations (robust to accents/case)
 const degreeAbbr = (name = "") => {
   const n = _strip(name);
   if (!n) return "Niv.";
-  // 3e année collège → 3AC
   if (/(^|\s)3(\s|e|eme|ème).*(college|collegue|colle|ac)/i.test(n)) return "3AC";
-  // Tronc commun → TC
   if (/tronc\s*commun|^tc$/.test(n)) return "TC";
-  // 1/2 Bac (SM/SP/SVT/L, …)
   const bac = n.includes("bac");
   const one = /\b1\b|premiere|1ere|1re/.test(n);
   const two = /\b2\b|deuxieme|2eme|2e/.test(n);
@@ -194,7 +192,6 @@ const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.ro
 
 /* fixed vertical baseline for period fallback */
 const SCHOOL_START_MINS = 9 * 60;
-const SCHOOL_END_MINS = 22 * 60;
 const PERIOD_DURATION_MINS = 90;
 
 /* period parsing */
@@ -266,26 +263,25 @@ export default function TeacherTimetable() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await TimeTableApi.teacher();
-        const payload = unwrap(res);
-        const raw = Array.isArray(payload?.lessons)
-          ? payload.lessons
-          : Array.isArray(payload?.data)
-          ? payload.data
-          : Array.isArray(payload)
-          ? payload
-          : [];
+        const res = await TimeTableApi.teacher(); // server already filters by auth teacher
+        const raw = unwrapLessons(res);
+
         const normalized = (raw ?? []).map((l) => ({
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
+
+          // prefer normalized time fields
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
           end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
+
+          // plans/anchors (kept for compatibility in case they appear)
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null,
           week_start: l?.week_start ?? l?.weekStart ?? null,
         }));
+
         setLessons(normalized);
       } catch (e) {
         console.error(e);
@@ -296,10 +292,11 @@ export default function TeacherTimetable() {
     })();
   }, []);
 
+  // build filters
   const subjects = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
-      const id = l?.subject?.id ?? l?.subject_id ?? l?.subject?.name ?? "subject";
+      const id = String(subjectKey(l));
       const name = l?.subject?.name ?? l?.subject_name ?? "Matière";
       m.set(id, name);
     }
@@ -309,9 +306,8 @@ export default function TeacherTimetable() {
   const degrees = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
-      const d = l.timetable?.degree ?? l.degree ?? null;
-      const id = d?.id ?? l.degree_id ?? d?.name ?? "degree";
-      const name = d?.name ?? l.degree_name ?? "Niveau";
+      const id = l?.degree?.id ?? l?.degree_id ?? l?.timetable?.degree?.id ?? l?.timetable?.degree?.name ?? "degree";
+      const name = l?.degree?.name ?? l?.degree_name ?? l?.timetable?.degree?.name ?? "Niveau";
       m.set(id, name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
@@ -320,14 +316,12 @@ export default function TeacherTimetable() {
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
     if (subjectFilter) {
-      arr = arr.filter(
-        (l) => String(l?.subject?.id ?? l?.subject_id ?? l?.subject?.name) === String(subjectFilter)
-      );
+      arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
     }
     if (degreeFilter) {
       arr = arr.filter(
         (l) =>
-          String(l.timetable?.degree?.id ?? l.degree?.id ?? l.degree_id ?? l.timetable?.degree?.name ?? l.degree?.name) ===
+          String(l?.degree?.id ?? l?.degree_id ?? l?.timetable?.degree?.id ?? l?.timetable?.degree?.name) ===
           String(degreeFilter)
       );
     }
@@ -443,7 +437,7 @@ function WeekGrid({ lessons, weekOffset }) {
     return m;
   }, [lessons, monday]);
 
-  // 🔧 Dynamic vertical window from shown items (with padding & clamps)
+  // Dynamic vertical window with padding & clamps
   const { minM, maxM, range } = useMemo(() => {
     let min = Infinity, max = -Infinity;
     for (const d of DAYS) {
@@ -454,7 +448,7 @@ function WeekGrid({ lessons, weekOffset }) {
         max = Math.max(max, mins[1]);
       }
     }
-    if (!Number.isFinite(min)) min = 8 * 60; // defaults
+    if (!Number.isFinite(min)) min = 8 * 60;
     if (!Number.isFinite(max)) max = 18 * 60;
     const PAD = 30;
     min = Math.max(7 * 60, Math.floor((min - PAD) / 30) * 30);
@@ -549,7 +543,7 @@ function WeekGrid({ lessons, weekOffset }) {
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Cours";
                       const c = subjectBlockColors(l);
-                      const degreeFull = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
+                      const degreeFull = l.degree?.name ?? l.timetable?.degree?.name ?? "Niveau";
                       const degreeShort = degreeAbbr(degreeFull);
                       const room = roomName(l);
                       const startS = parseTimeLike(getStartStr(l));
@@ -570,7 +564,6 @@ function WeekGrid({ lessons, weekOffset }) {
                             boxShadow: `0 6px 16px ${c.accent}44`,
                           }}
                         >
-                          {/* Compact layout: 3 lines + degree tag */}
                           <div className="px-2 pt-1 font-semibold leading-tight truncate">
                             {subjectAbbr(subjName)}
                           </div>
@@ -580,8 +573,6 @@ function WeekGrid({ lessons, weekOffset }) {
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">
                             {roomAbbr(room)}
                           </div>
-
-                          {/* Degree tag pinned bottom-right (keeps within small cells) */}
                           <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">
                             {degreeShort}
                           </div>
@@ -601,7 +592,7 @@ function WeekGrid({ lessons, weekOffset }) {
   );
 }
 
-/* AGENDA (unchanged visual; still clear) */
+/* AGENDA */
 function AgendaList({ lessons, weekOffset }) {
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
@@ -646,7 +637,7 @@ function AgendaList({ lessons, weekOffset }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "Niveau";
+                  const degree = l.degree?.name ?? l.timetable?.degree?.name ?? "Niveau";
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})` : "";
@@ -695,7 +686,7 @@ function IcsButton({ lessons, weekOffset }) {
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
-      const degree = l.timetable?.degree?.name ?? l.degree?.name ?? "";
+      const degree = l.degree?.name ?? l.timetable?.degree?.name ?? "";
       const subj = l.subject?.name ?? l.subject_name ?? "Cours";
       const room = roomName(l);
 
