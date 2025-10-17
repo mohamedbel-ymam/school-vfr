@@ -327,6 +327,8 @@ export default function TeacherTimetable() {
     }
     return arr;
   }, [lessons, subjectFilter, degreeFilter]);
+  const hasTimed = useMemo(() => (filtered ?? []).some(resolveStartEndMins), [filtered]);
+
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;

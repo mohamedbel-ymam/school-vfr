@@ -359,6 +359,7 @@ export default function StudentTimeTable() {
       return okSubject && okPlan;
     });
   }, [lessons, subjectFilter, planFilter]);
+  const hasTimed = useMemo(() => (shownLessons ?? []).some(resolveStartEndMins), [shownLessons]);
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err)
