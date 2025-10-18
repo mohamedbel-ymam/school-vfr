@@ -22,18 +22,40 @@ const normalizeDow = (v) => {
 };
 
 // Extract HH:MM from "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"
+// (now allows 1- or 2-digit hours)
 const extractHHMM = (v) => {
   if (!v) return null;
   const s = String(v);
-  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
-  return m ? `${m[1]}:${m[2]}` : null;
+  const m = s.match(/(?:T|\s)?(\d{1,2}):(\d{2})(?::\d{2})?/);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
 };
 
-// Prefer normalized time fields from backend
+// pick first usable value
+const pickFirst = (...vals) =>
+  vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+
+// Prefer normalized time fields from backend, but accept common aliases too
 const getStartStr = (l) =>
-  l?.start ?? l?.start_time ?? extractHHMM(l?.starts_at) ?? null;
+  pickFirst(
+    l?.start,
+    l?.start_time,
+    l?.starts_at && extractHHMM(l?.starts_at),
+    l?.from,
+    l?.hour_from,
+    l?.begin,
+    l?.time_from
+  ) ?? null;
+
 const getEndStr = (l) =>
-  l?.end ?? l?.end_time ?? extractHHMM(l?.ends_at) ?? null;
+  pickFirst(
+    l?.end,
+    l?.end_time,
+    l?.ends_at && extractHHMM(l?.ends_at),
+    l?.to,
+    l?.hour_to,
+    l?.finish,
+    l?.time_to
+  ) ?? null;
 
 const DAYS = [
   { label: "Lun", full: "Lundi", val: 1 },
@@ -67,6 +89,14 @@ const toMins = (hhmm) => {
   if (!s) return null;
   const [h, m] = s.split(":").map(Number);
   return h * 60 + m;
+};
+
+// numeric (also accepts "480")
+const numOrNull = (v) => {
+  if (v === 0 || v === "0") return 0;
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 };
 
 const startOfWeekMonday = (base = new Date()) => {
@@ -212,16 +242,19 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-/** minutes resolver supports numeric minutes and strings */
+/** minutes resolver supports numeric minutes and numeric strings */
 const resolveStartEndMins = (l) => {
-  if (Number.isFinite(l?.start_minutes) && Number.isFinite(l?.end_minutes) && l.end_minutes > l.start_minutes) {
-    return [l.start_minutes, l.end_minutes];
-  }
+  const sm = numOrNull(l?.start_minutes);
+  const em = numOrNull(l?.end_minutes);
+  if (sm != null && em != null && em > sm) return [sm, em];
+
   const s = toMins(getStartStr(l));
   const e = toMins(getEndStr(l));
   if (s != null && e != null && e > s) return [s, e];
+
   const p = parsePeriodToMins(l?.period);
   if (p) return p;
+
   return null;
 };
 
@@ -270,11 +303,11 @@ export default function TeacherTimetable() {
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
 
-          // prefer normalized time fields
+          // tolerant time fields
           start_time: getStartStr(l),
           end_time: getEndStr(l),
-          start_minutes: Number.isFinite(l?.start_minutes) ? l.start_minutes : undefined,
-          end_minutes: Number.isFinite(l?.end_minutes) ? l.end_minutes : undefined,
+          start_minutes: numOrNull(l?.start_minutes) ?? undefined,
+          end_minutes: numOrNull(l?.end_minutes) ?? undefined,
 
           // plans/anchors (kept for compatibility in case they appear)
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),

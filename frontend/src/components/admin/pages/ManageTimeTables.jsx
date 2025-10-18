@@ -24,19 +24,40 @@ const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
 // --- time helpers ---
 const pad2 = (n) => String(n).padStart(2, "0");
 
-/** Extract "HH:MM" out of "YYYY-MM-DD HH:MM:SS" or "...THH:MM:SSZ" */
+// accept 1- or 2-digit hours + optional seconds
 const extractHHMM = (v) => {
   if (!v) return null;
   const s = String(v);
-  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
-  return m ? `${m[1]}:${m[2]}` : null;
+  const m = s.match(/(?:T|\s)?(\d{1,2}):(\d{2})(?::\d{2})?/);
+  return m ? `${pad2(+m[1])}:${pad2(+m[2])}` : null;
 };
 
-// Prefer backend-normalized fields (start/end, start_minutes/end_minutes)
+// small utility to pick first defined/usable value
+const pickFirst = (...vals) =>
+  vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+
+// Prefer backend-normalized fields (start/end...), but be tolerant with aliases
 const getStartStr = (row) =>
-  row?.start ?? row?.start_time ?? extractHHMM(row?.starts_at) ?? null;
+  pickFirst(
+    row?.start,
+    row?.start_time,
+    row?.starts_at && extractHHMM(row?.starts_at),
+    row?.from,
+    row?.hour_from,
+    row?.begin,
+    row?.time_from
+  ) ?? null;
+
 const getEndStr = (row) =>
-  row?.end ?? row?.end_time ?? extractHHMM(row?.ends_at) ?? null;
+  pickFirst(
+    row?.end,
+    row?.end_time,
+    row?.ends_at && extractHHMM(row?.ends_at),
+    row?.to,
+    row?.hour_to,
+    row?.finish,
+    row?.time_to
+  ) ?? null;
 
 /** Accepts "09", "9:30", "09:30:00", "9h30", "9.30" → "HH:MM" */
 const parseTimeLike = (v) => {
@@ -66,6 +87,23 @@ const addMinutes = (hhmm, mins) => {
   return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
 };
 
+// treat numeric strings as minutes too (e.g. "480" → 480)
+const numOrNull = (v) => {
+  if (v === 0 || v === "0") return 0;
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const getStartMin = (row) => {
+  const n = numOrNull(row?.start_minutes);
+  return n != null ? n : toMins(getStartStr(row));
+};
+const getEndMin = (row) => {
+  const n = numOrNull(row?.end_minutes);
+  return n != null ? n : toMins(getEndStr(row));
+};
+
 // ----- ISO week helpers (YYYY-Www → Monday date) -----
 const parseIsoWeek = (s) => {
   // "2025-W06" → { year: 2025, week: 6 }
@@ -84,11 +122,6 @@ const mondayFromIsoWeek = (year, week) => {
   monday.setHours(0, 0, 0, 0);
   return monday;
 };
-
-const getStartMin = (row) =>
-  Number.isFinite(row?.start_minutes) ? row.start_minutes : toMins(getStartStr(row));
-const getEndMin = (row) =>
-  Number.isFinite(row?.end_minutes) ? row.end_minutes : toMins(getEndStr(row));
 
 const DAYS = [
   { label: "Lun", val: 1 },
@@ -210,7 +243,6 @@ export default function ManageTimetables() {
   const [rooms, setRooms] = useState([]);
 
   // weekly data
-  
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
@@ -919,7 +951,7 @@ function CreateRowPanel({
           form.end_time || addMinutes(form.start_time, DEFAULT_CLASS_MINS)
         ),
         ...(form.room_id ? { room_id: Number(form.room_id) } : {}),
-        ...(weekStart ? { week_start: weekStart } : {}), // <— persist selected week to DB
+        ...(weekStart ? { week_start: weekStart } : {}), // persist selected week to DB
       };
 
       const res = await TimeTableApi.create(payload);
@@ -1388,7 +1420,7 @@ function DayCell({
 
   return (
     <div
-      className={`min-h-[84px] md:min-h-[110px] rounded-xl border p-2 md:p-3 transition-colors flex flex-col gap-2 ${
+      className={`min-h[84px] md:min-h-[110px] rounded-xl border p-2 md:p-3 transition-colors flex flex-col gap-2 ${
         open ? "bg-muted/60 ring-2 ring-primary/50" : "bg-muted/30 hover:bg-muted/50"
       }`}
     >
@@ -1570,4 +1602,3 @@ function DayCell({
     </div>
   );
 }
-

@@ -62,7 +62,6 @@ const DAYS = [
 
 // Fallback/parse constants
 const SCHOOL_START_MINS = 9 * 60;
-const SCHOOL_END_MINS = 22 * 60;
 const PERIOD_DURATION_MINS = 90;
 
 // Hard clamps for dynamic window
@@ -71,7 +70,7 @@ const HARD_MAX = 22 * 60;
 const PAD_MINS = 30;
 
 /* ---------------------------------- Helpers ----------------------------------- */
-const unwrapLessons = (res) => res?.data?.data?.lessons ?? []; // expects {data:{lessons:[...]}} from API
+const unwrapLessons = (res) => res?.data?.data?.lessons ?? []; // expects {data:{lessons:[...]}}
 
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -85,11 +84,12 @@ const normalizeDow = (v) => {
   return n;
 };
 
+// ✅ accept 1 or 2-digit hour, and optional seconds
 const extractHHMM = (v) => {
   if (!v) return null;
   const s = String(v);
-  const m = s.match(/(?:T|\s)?(\d{2}):(\d{2})(?::\d{2})?/);
-  return m ? `${m[1]}:${m[2]}` : null;
+  const m = s.match(/(?:T|\s)?(\d{1,2}):(\d{2})(?::\d{2})?/);
+  return m ? `${pad(+m[1])}:${pad(+m[2])}` : null;
 };
 
 /** Accepts "09", "9:30", "09:30:00", "9h30", "9.30" → "HH:MM" */
@@ -178,23 +178,53 @@ const subjectSoftBgFromKey = (key) => {
 const roomName = (l) =>
   l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
-// --- time extraction from any backend shape ---
-const getStartStr = (l) =>
-  l?.start ?? l?.start_time ?? extractHHMM(l?.starts_at) ?? null; // prefer normalized `start`
-const getEndStr = (l) =>
-  l?.end ?? l?.end_time ?? extractHHMM(l?.ends_at) ?? null;       // prefer normalized `end`
+/* ---------------- Time extraction (very tolerant) ---------------- */
+// ✅ accept many common API aliases for start/end
+const pickFirst = (...vals) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
 
-const getStartMin = (l) =>
-  Number.isFinite(l?.start_minutes) ? l.start_minutes : toMins(getStartStr(l));
-const getEndMin = (l) =>
-  Number.isFinite(l?.end_minutes) ? l.end_minutes : toMins(getEndStr(l));
+const getStartStr = (l) =>
+  pickFirst(
+    l?.start,
+    l?.start_time,
+    l?.starts_at && extractHHMM(l?.starts_at),
+    l?.from,
+    l?.hour_from,
+    l?.begin,
+    l?.time_from
+  ) ?? null;
+
+const getEndStr = (l) =>
+  pickFirst(
+    l?.end,
+    l?.end_time,
+    l?.ends_at && extractHHMM(l?.ends_at),
+    l?.to,
+    l?.hour_to,
+    l?.finish,
+    l?.time_to
+  ) ?? null;
+
+// ✅ treat numeric strings as minutes too
+const numOrNull = (v) => {
+  if (v === 0 || v === "0") return 0;
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const getStartMin = (l) => {
+  const n = numOrNull(l?.start_minutes);
+  return n != null ? n : toMins(getStartStr(l));
+};
+const getEndMin = (l) => {
+  const n = numOrNull(l?.end_minutes);
+  return n != null ? n : toMins(getEndStr(l));
+};
 
 const parsePeriodToMins = (period) => {
-  if (!period) return null;
+  if (!period && period !== 0) return null;
   const s = String(period).trim();
-  let m = s.match(
-    /(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i
-  );
+  let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
   if (m) {
     const sm = toMins(m[1]);
     const em = toMins(m[2]);
@@ -212,17 +242,9 @@ const parsePeriodToMins = (period) => {
 
 // minutes to render for any row (weekly or plan)
 const resolveStartEndMins = (row) => {
-  if (
-    Number.isFinite(row?.start_minutes) &&
-    Number.isFinite(row?.end_minutes)
-  ) {
-    const s = row.start_minutes,
-      e = row.end_minutes;
-    if (e > s) return [s, e];
-  }
-  const s = getStartMin(row);
-  const e = getEndMin(row);
-  if (s != null && e != null && e > s) return [s, e];
+  const sm = getStartMin(row);
+  const em = getEndMin(row);
+  if (sm != null && em != null && em > sm) return [sm, em];
   const p = parsePeriodToMins(row?.period);
   if (p) return p;
   return null;
@@ -299,15 +321,11 @@ export default function StudentTimeTable() {
           timetable:
             l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
 
-          // prefer normalized fields from backend
+          // normalized fields or tolerant aliases
           start_time: getStartStr(l),
           end_time: getEndStr(l),
-          start_minutes: Number.isFinite(l?.start_minutes)
-            ? l.start_minutes
-            : undefined,
-          end_minutes: Number.isFinite(l?.end_minutes)
-            ? l.end_minutes
-            : undefined,
+          start_minutes: numOrNull(l?.start_minutes) ?? undefined,
+          end_minutes: numOrNull(l?.end_minutes) ?? undefined,
 
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD
@@ -539,7 +557,7 @@ function WeekGrid({ lessons, weekOffset }) {
     [weekOffset]
   );
 
-  // safe grouping, supports monthly plans and weekly rows restricted by week_start
+  // group by day; show monthly plans only on their week/date; weekly rows may restrict with week_start
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
 
@@ -547,14 +565,12 @@ function WeekGrid({ lessons, weekOffset }) {
       let day = null;
 
       if (l.is_plan) {
-        // show a plan only in its actual week
         if (!l.plan_date) continue;
         const date = new Date(`${l.plan_date}T00:00:00`);
         if (Number.isNaN(date.getTime()) || !inWeek(date, monday)) continue;
         const js = date.getDay(); // 0..6
         day = js === 0 ? 7 : js; // 1..7
       } else {
-        // weekly row; if week_start exists, only display on that chosen week
         if (l.week_start) {
           const ws = new Date(`${l.week_start}T00:00:00`);
           if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
@@ -564,11 +580,10 @@ function WeekGrid({ lessons, weekOffset }) {
 
       if (!day) continue;
 
-      const mins = resolveStartEndMins(l); // timed only
+      const mins = resolveStartEndMins(l); // grid requires timed items
       if (!mins) continue;
 
-      if (!m.has(day)) m.set(day, []);
-      m.get(day).push(l);
+      m.get(day)?.push(l);
     }
 
     for (const [, arr] of m) {
@@ -594,11 +609,9 @@ function WeekGrid({ lessons, weekOffset }) {
       }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
-      // default window if nothing to show
-      min = 9 * 60;  // 09:00
-      max = 12 * 60; // 12:00
+      min = 9 * 60;  // default window
+      max = 12 * 60;
     }
-    // pad and clamp
     min = Math.floor((min - PAD_MINS) / 30) * 30;
     max = Math.ceil((max + PAD_MINS) / 30) * 30;
     min = clamp(min, HARD_MIN, HARD_MAX - 30);
