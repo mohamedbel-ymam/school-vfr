@@ -444,14 +444,7 @@ export default function StudentTimeTable() {
 
       {/* Contenu */}
       {view === "grid" ? (
-        hasTimed ? (
-          <WeekGrid lessons={shownLessons} weekOffset={weekOffset} />
-        ) : (
-          <div className="rounded-md border p-3 text-sm text-muted-foreground">
-            Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
-            ou basculez en vue <b>Agenda</b>.
-          </div>
-        )
+        <WeekGrid lessons={shownLessons} weekOffset={weekOffset} />
       ) : (
         <AgendaList lessons={shownLessons} weekOffset={weekOffset} />
       )}
@@ -551,13 +544,14 @@ function Legend({ subjects }) {
 }
 
 /* ----------------------------- Grille hebdomadaire ---------------------------- */
+/* ----------------------------- Grille hebdomadaire ---------------------------- */
 function WeekGrid({ lessons, weekOffset }) {
   const monday = useMemo(
     () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
     [weekOffset]
   );
 
-  // group by day; show monthly plans only on their week/date; weekly rows may restrict with week_start
+  // group ALL items per day (timed + untimed), respecting plans & week_start
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
 
@@ -568,8 +562,7 @@ function WeekGrid({ lessons, weekOffset }) {
         if (!l.plan_date) continue;
         const date = new Date(`${l.plan_date}T00:00:00`);
         if (Number.isNaN(date.getTime()) || !inWeek(date, monday)) continue;
-        const js = date.getDay(); // 0..6
-        day = js === 0 ? 7 : js; // 1..7
+        const js = date.getDay(); day = js === 0 ? 7 : js;
       } else {
         if (l.week_start) {
           const ws = new Date(`${l.week_start}T00:00:00`);
@@ -577,26 +570,28 @@ function WeekGrid({ lessons, weekOffset }) {
         }
         day = normalizeDow(l?.day_of_week);
       }
-
       if (!day) continue;
 
-      const mins = resolveStartEndMins(l); // grid requires timed items
-      if (!mins) continue;
-
+      // push even if untimed (we’ll render a synthetic slot)
       m.get(day)?.push(l);
     }
 
-    for (const [, arr] of m) {
+    // timed first (by start), then untimed
+    for (const [k, arr] of m) {
       arr.sort((a, b) => {
-        const A = resolveStartEndMins(a)?.[0] ?? 0;
-        const B = resolveStartEndMins(b)?.[0] ?? 0;
-        return A - B;
+        const A = resolveStartEndMins(a)?.[0];
+        const B = resolveStartEndMins(b)?.[0];
+        if (A != null && B != null) return A - B;
+        if (A != null) return -1;
+        if (B != null) return 1;
+        return 0;
       });
+      m.set(k, arr);
     }
     return m;
   }, [lessons, monday]);
 
-  // --- Dynamic vertical time window (auto-fit to dataset) ---
+  // dynamic vertical window from TIMED items only (nice fallback if none)
   const { minM, maxM } = useMemo(() => {
     let min = Infinity, max = -Infinity;
     for (const d of DAYS) {
@@ -609,9 +604,10 @@ function WeekGrid({ lessons, weekOffset }) {
       }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
-      min = 9 * 60;  // default window
-      max = 12 * 60;
+      min = 9 * 60;  // 09:00
+      max = 12 * 60; // 12:00
     }
+    // pad and hard clamp
     min = Math.floor((min - PAD_MINS) / 30) * 30;
     max = Math.ceil((max + PAD_MINS) / 30) * 30;
     min = clamp(min, HARD_MIN, HARD_MAX - 30);
@@ -621,39 +617,52 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const range = maxM - minM;
 
+  // build lanes for timed; add a synthetic lane with tiny “untimed” pills at the top
   const lanesByDay = useMemo(() => {
     const out = new Map();
-    for (const d of DAYS) {
-      const items = (byDay.get(d.val) ?? []).map((l) => {
-        const mins = resolveStartEndMins(l);
-        return { l, s: mins?.[0] ?? null, e: mins?.[1] ?? null };
-      });
-      const timed = items.filter((it) => it.s != null && it.e != null && it.e > it.s);
-      timed.sort((a, b) => a.s - b.s || a.e - b.e);
+    const UNT_SLOT = 30; // minutes height per untimed pill
 
+    for (const d of DAYS) {
+      const dayItems = byDay.get(d.val) ?? [];
+
+      const timed = [];
+      const untimed = [];
+      for (const l of dayItems) {
+        const mins = resolveStartEndMins(l);
+        if (mins) timed.push({ l, s: mins[0], e: mins[1], synthetic: false });
+        else untimed.push(l);
+      }
+
+      // normal lane packing for timed
+      timed.sort((a, b) => a.s - b.s || a.e - b.e);
       const lanes = [];
       for (const it of timed) {
         let placed = false;
         for (const lane of lanes) {
           const last = lane[lane.length - 1];
-          if (!last || it.s >= last.e) {
-            lane.push(it);
-            placed = true;
-            break;
-          }
+          if (!last || it.s >= last.e) { lane.push(it); placed = true; break; }
         }
         if (!placed) lanes.push([it]);
       }
+
+      // synthetic lane for untimed at the very top (compact pills)
+      if (untimed.length) {
+        const pillLane = untimed.map((l, idx) => {
+          const s = Math.max(minM, maxM - (idx + 1) * UNT_SLOT);
+          const e = Math.min(s + Math.max(UNT_SLOT - 5, 15), maxM);
+          return { l, s, e, synthetic: true };
+        });
+        lanes.unshift(pillLane);
+      }
+
       out.set(d.val, { lanes });
     }
     return out;
-  }, [byDay]);
+  }, [byDay, minM, maxM]);
 
   const hourMarks = useMemo(() => {
     const arr = [];
-    const startHour = Math.ceil(minM / 60);
-    const endHour = Math.floor(maxM / 60);
-    for (let h = startHour; h <= endHour; h++) arr.push({ h, m: h * 60 });
+    for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
     return arr;
   }, [minM, maxM]);
 
@@ -662,6 +671,18 @@ function WeekGrid({ lessons, weekOffset }) {
     for (let m = minM + 30; m < maxM; m += 60) arr.push(m);
     return arr;
   }, [minM, maxM]);
+
+  const hasAny = useMemo(
+    () => DAYS.some((d) => (byDay.get(d.val) ?? []).length),
+    [byDay]
+  );
+  if (!hasAny) {
+    return (
+      <div className="rounded-md border p-3 text-sm text-muted-foreground">
+        Aucune séance pour cette semaine.
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border overflow-hidden">
@@ -674,20 +695,13 @@ function WeekGrid({ lessons, weekOffset }) {
             </div>
             {DAYS.map((d, idx) => {
               const date = addDays(monday, idx);
-              const isToday =
-                isSameDayIndex(new Date(), d.val) && weekOffset === 0;
+              const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
               return (
-                <div
-                  key={d.val}
-                  className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}
-                >
+                <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
                   <div className="hidden sm:block">{d.full}</div>
                   <div className="sm:hidden">{d.label}</div>
                   <div className="text-[11px] sm:text-xs text-muted-foreground">
-                    {date.toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}
+                    {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                   </div>
                 </div>
               );
@@ -701,21 +715,13 @@ function WeekGrid({ lessons, weekOffset }) {
               {hourMarks.map(({ h, m }) => {
                 const pct = ((m - minM) / range) * 100;
                 return (
-                  <div
-                    key={m}
-                    className="absolute left-0 right-0"
-                    style={{ top: `${pct}%`, transform: "translateY(-50%)" }}
-                  >
-                    <div className="text-[11px] sm:text-xs text-muted-foreground px-2">
-                      {pad(h)}:00
-                    </div>
+                  <div key={m} className="absolute left-0 right-0" style={{ top: `${pct}%`, transform: "translateY(-50%)" }}>
+                    <div className="text-[11px] sm:text-xs text-muted-foreground px-2">{pad(h)}:00</div>
                     <div className="h-px bg-border/70" />
                   </div>
                 );
               })}
-              <div style={{ paddingTop: `${range}px` }} className="opacity-0">
-                .
-              </div>
+              <div style={{ paddingTop: `${range}px` }} className="opacity-0">.</div>
             </div>
 
             {/* colonnes jour */}
@@ -723,46 +729,29 @@ function WeekGrid({ lessons, weekOffset }) {
               const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
               return (
                 <div key={d.val} className="relative border-l bg-background/50">
-                  {/* lignes heures */}
+                  {/* lignes d’aide */}
                   {hourMarks.map(({ m }) => {
                     const pct = ((m - minM) / range) * 100;
-                    return (
-                      <div
-                        key={`h-${m}`}
-                        className="absolute left-0 right-0 h-px bg-border/50"
-                        style={{ top: `${pct}%` }}
-                      />
-                    );
+                    return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
                   })}
-                  {/* demi-heures */}
                   {halfHourMarks.map((m) => {
                     const pct = ((m - minM) / range) * 100;
-                    return (
-                      <div
-                        key={`hh-${m}`}
-                        className="absolute left-0 right-0 h-px bg-border/30"
-                        style={{ top: `${pct}%` }}
-                      />
-                    );
+                    return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
                   })}
 
                   {/* séances */}
                   {lanes.map((lane, laneIndex) =>
-                    lane.map(({ l, s, e }, i) => {
+                    lane.map(({ l, s, e, synthetic }, i) => {
                       const s2 = clamp(s, minM, maxM);
                       const e2 = clamp(e, minM, maxM);
                       if (e2 <= minM || s2 >= maxM) return null;
 
                       const topPct = ((s2 - minM) / range) * 100;
-                      const heightPct = Math.max(
-                        ((e2 - s2) / range) * 100,
-                        0.8
-                      );
+                      const heightPct = Math.max(((e2 - s2) / range) * 100, synthetic ? 0.6 : 0.8);
                       const widthPct = Math.max(100 / lanes.length, 25);
                       const leftPct = laneIndex * (100 / lanes.length);
 
-                      const subjName =
-                        l?.subject?.name ?? l?.subject_name ?? "Matière";
+                      const subjName = l?.subject?.name ?? l?.subject_name ?? "Matière";
                       const solid = subjectSolidColor(l);
                       const rName = roomName(l);
                       const sText = parseTimeLike(getStartStr(l));
@@ -771,10 +760,8 @@ function WeekGrid({ lessons, weekOffset }) {
                       return (
                         <div
                           key={`${l.id ?? `${d.val}-${i}`}`}
-                          className="absolute rounded-lg text-[11px] sm:text-sm overflow-hidden"
-                          title={`${subjName} ${
-                            sText && eText ? `(${sText}–${eText})` : ""
-                          }${rName ? ` • ${rName}` : ""}`}
+                          className={`absolute rounded-lg text-[11px] sm:text-sm overflow-hidden ${synthetic ? "ring-1 ring-white/60" : ""}`}
+                          title={`${subjName}${rName ? ` • ${rName}` : ""}${sText && eText ? ` (${sText}–${eText})` : ""}`}
                           style={{
                             top: `${topPct}%`,
                             height: `${heightPct}%`,
@@ -783,14 +770,14 @@ function WeekGrid({ lessons, weekOffset }) {
                             backgroundColor: solid,
                             color: "#fff",
                             boxShadow: `0 6px 14px rgba(0,0,0,0.18)`,
+                            opacity: synthetic ? 0.9 : 1,
                           }}
                         >
-                          {/* 3 compact lines: Subject (abbr) / Time / Room (abbr) */}
                           <div className="px-2 py-1 font-semibold leading-tight truncate">
                             {subjectAbbr(subjName)}
                           </div>
                           <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
-                            {sText && eText ? `${sText}–${eText}` : ""}
+                            {sText && eText ? `${sText}–${eText}` : (synthetic ? "Sans horaire" : "")}
                           </div>
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">
                             {roomAbbr(rName)}
