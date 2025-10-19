@@ -1,21 +1,18 @@
+// src/services/api/admin/TimeTableApi.js
 import { axiosClient } from "../../../api/axios";
 
 const TimeTableApi = {
-  adminList: (params)         => axiosClient.get("/admin/timetables", { params }),
-  create:    (data)           => axiosClient.post("/admin/timetables", data),
-  update:    (id, data)       => axiosClient.put(`/admin/timetables/${id}`, data),
-  delete:    (id)             => axiosClient.delete(`/admin/timetables/${id}`),
+  // Admin list for a specific week (Monday date)
+  week: (params = {}) => axiosClient.get("/admin/timetables", { params }), // expects ?week_start=YYYY-MM-DD
 
-  // views
-  student: (params={}) => axiosClient.get('/eleve/emploi-du-temps', { params }),
-  teacher: (params={}) => axiosClient.get('/enseignant/emploi-du-temps', { params }),
-  parent:  (params={}) => axiosClient.get('/parent/emploi-du-temps',  { params }),
+  // CRUD
+  create: (payload) => axiosClient.post("/admin/timetables", payload),
+  update: (id, payload) => axiosClient.put(`/admin/timetables/${id}`, payload),
+  remove: (id) => axiosClient.delete(`/admin/timetables/${id}`),
 
-  studentPlans:  (params={}) => axiosClient.get('/eleve/monthly-plans',     { params }),
-  teacherPlans:  (params={}) => axiosClient.get('/enseignant/monthly-plans',{ params }),
-  parentPlans:   (params={}) => axiosClient.get('/parent/monthly-plans',    { params }),
-
-  unwrap:    (r)              => r?.data?.data ?? r?.data ?? [],
+  // (existing)
+  student: (params = {}) => axiosClient.get("/eleve/timetable", { params }),
+  teacher: (params = {}) => axiosClient.get("/enseignant/timetable", { params }),
 };
 
 export default TimeTableApi;

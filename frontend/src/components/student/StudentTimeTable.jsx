@@ -266,7 +266,6 @@ const unwrapPlans = (r) => r?.data?.data ?? r?.data ?? [];
 /* ============================================================================ */
 
 export default function StudentTimeTable() {
-  const [timetable, setTimetable] = useState(null);
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -281,6 +280,12 @@ export default function StudentTimeTable() {
   // compute months covering the visible week
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
   const sunday = useMemo(() => addDays(monday, 6), [monday]);
+  const mondayIso = useMemo(() => {
+    const y = monday.getFullYear();
+    const m = pad(monday.getMonth() + 1);
+    const d = pad(monday.getDate());
+    return `${y}-${m}-${d}`;
+  }, [monday]);
   const monthsForWeek = useMemo(() => {
     const m1 = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}`;
     const m2 = `${sunday.getFullYear()}-${pad(sunday.getMonth() + 1)}`;
@@ -292,8 +297,8 @@ export default function StudentTimeTable() {
     (async () => {
       setLoading(true);
       try {
-        // 1) weekly lessons
-        const res = await TimeTableApi.student();
+        // 1) weekly lessons (ask backend to filter by Monday if supported)
+        const res = await TimeTableApi.student({ week_start: mondayIso });
         const raw = unwrapLessons(res);
 
         const weekly = (raw ?? []).map((l) => ({
@@ -306,9 +311,8 @@ export default function StudentTimeTable() {
               ? { id: null, name: l.subject.name }
               : l?.subject,
           room: l?.room ?? (l?.room_id ? null : undefined),
-          timetable_id: l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
-          timetable: l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
 
+          // normalize time fields for UI (we still prefer *_minutes when provided)
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: numOrNull(l?.start_minutes) ?? undefined,
@@ -316,7 +320,7 @@ export default function StudentTimeTable() {
 
           is_plan: false,
           plan_date: null,
-          week_start: l?.week_start ?? l?.weekStart ?? null,
+          week_start: l?.week_start ?? l?.weekStart ?? mondayIso,
         }));
 
         // 2) monthly plans for visible week (merge)
@@ -336,8 +340,6 @@ export default function StudentTimeTable() {
           plan_date: p.plan_date, // YYYY-MM-DD
           subject: p.subject ? { id: p.subject.id, name: p.subject.name } : null,
           room: null,
-          timetable_id: p.id,
-          timetable: p.title ? { id: p.id, title: p.title } : null,
 
           start_time: p.start_time ?? null,
           end_time: p.end_time ?? null,
@@ -346,11 +348,12 @@ export default function StudentTimeTable() {
 
           day_of_week: null,
           week_start: null,
+          timetable_id: p.id,
+          timetable: p.title ? { id: p.id, title: p.title } : null,
         }));
 
         if (!mounted) return;
         setLessons([...weekly, ...plans]);
-        setTimetable(null);
         setErr("");
       } catch (e) {
         console.error(e);
@@ -361,7 +364,7 @@ export default function StudentTimeTable() {
       }
     })();
     return () => { mounted = false; };
-  }, [weekOffset, monthsForWeek, monday]);
+  }, [weekOffset, monthsForWeek, mondayIso, monday]);
 
   // filters data
   const subjects = useMemo(() => {
@@ -400,12 +403,16 @@ export default function StudentTimeTable() {
       {/* En-tête */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <div className="text-xl font-semibold">{timetable?.title ?? "Mon emploi du temps"}</div>
+          <div className="text-xl font-semibold">Mon emploi du temps</div>
           <ToolbarSubtitle weekOffset={weekOffset} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <WeekToolbar onPrev={() => setWeekOffset((w) => w - 1)} onToday={() => setWeekOffset(0)} onNext={() => setWeekOffset((w) => w + 1)} />
+          <WeekToolbar
+            onPrev={() => setWeekOffset((w) => w - 1)}
+            onToday={() => setWeekOffset(0)}
+            onNext={() => setWeekOffset((w) => w + 1)}
+          />
           {plans.length > 0 && (
             <Select
               value={planFilter}
@@ -446,18 +453,18 @@ function ToolbarSubtitle({ weekOffset }) {
 }
 function WeekToolbar({ onPrev, onToday, onNext }) {
   return (
-    <div className="inline-flex rounded-md border overflow-hidden">
-      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">←</button>
-      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Aujourd’hui</button>
-      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">→</button>
+    <div className="inline-flex rounded-md border overflow-hidden" role="toolbar" aria-label="Semaine">
+      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60" aria-label="Semaine précédente">←</button>
+      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x" aria-label="Revenir à cette semaine">Aujourd’hui</button>
+      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60" aria-label="Semaine suivante">→</button>
     </div>
   );
 }
 function ViewToggle({ value, onChange }) {
   return (
-    <div className="inline-flex rounded-md border overflow-hidden">
-      <button className={`px-3 py-1.5 text-sm ${value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("grid")}>Grille</button>
-      <button className={`px-3 py-1.5 text-sm border-l ${value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("agenda")}>Agenda</button>
+    <div className="inline-flex rounded-md border overflow-hidden" role="tablist" aria-label="Vue">
+      <button className={`px-3 py-1.5 text-sm ${value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("grid")} role="tab" aria-selected={value === "grid"}>Grille</button>
+      <button className={`px-3 py-1.5 text-sm border-l ${value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("agenda")} role="tab" aria-selected={value === "agenda"}>Agenda</button>
     </div>
   );
 }
@@ -643,6 +650,7 @@ function WeekGrid({ lessons, weekOffset }) {
             {/* colonnes jour */}
             {DAYS.map((d) => {
               const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
+              const laneCount = Math.max(1, lanes.length);
               return (
                 <div key={d.val} className="relative border-l bg-background/50">
                   {hourMarks.map(({ m }) => {
@@ -663,8 +671,8 @@ function WeekGrid({ lessons, weekOffset }) {
 
                       const topPct = ((s2 - minM) / range) * 100;
                       const heightPct = Math.max(((e2 - s2) / range) * 100, synthetic ? 0.6 : 0.8);
-                      const widthPct = Math.max(100 / lanes.length, 25);
-                      const leftPct = laneIndex * (100 / lanes.length);
+                      const widthPct = 100 / laneCount;
+                      const leftPct = laneIndex * widthPct;
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Matière";
                       const solid = subjectSolidColor(l);

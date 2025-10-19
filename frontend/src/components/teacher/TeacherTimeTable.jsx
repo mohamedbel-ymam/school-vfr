@@ -3,59 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import subjectColors from "../../config/subjectColors";
 
-/* ---------------- helpers & constants ---------------- */
-
-// unwrap strictly to an array of lessons coming from { data: { lessons: [...] } }
-const unwrapLessons = (r) =>
-  r?.data?.data?.lessons ??
-  r?.data?.lessons ??
-  (Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []);
-
-// normalize 0..6 (Sun..Sat) → 1..7 (Mon..Sun)
-const normalizeDow = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  if (n === 0) return 7;
-  if (n < 0) return null;
-  if (n > 7) return (n % 7) || 7;
-  return n;
-};
-
-// Extract HH:MM from "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"
-// (now allows 1- or 2-digit hours)
-const extractHHMM = (v) => {
-  if (!v) return null;
-  const s = String(v);
-  const m = s.match(/(?:T|\s)?(\d{1,2}):(\d{2})(?::\d{2})?/);
-  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
-};
-
-// pick first usable value
-const pickFirst = (...vals) =>
-  vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
-
-// Prefer normalized time fields from backend, but accept common aliases too
-const getStartStr = (l) =>
-  pickFirst(
-    l?.start,
-    l?.start_time,
-    l?.starts_at && extractHHMM(l?.starts_at),
-    l?.from,
-    l?.hour_from,
-    l?.begin,
-    l?.time_from
-  ) ?? null;
-
-const getEndStr = (l) =>
-  pickFirst(
-    l?.end,
-    l?.end_time,
-    l?.ends_at && extractHHMM(l?.ends_at),
-    l?.to,
-    l?.hour_to,
-    l?.finish,
-    l?.time_to
-  ) ?? null;
+/* ───────────────────── Utilities & constants ───────────────────── */
 
 const DAYS = [
   { label: "Lun", full: "Lundi", val: 1 },
@@ -70,38 +18,18 @@ const DAYS = [
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-/** 09, 9:30, 09:30:00, 9h30, 9.30 → "HH:MM" */
-const parseTimeLike = (v) => {
-  if (!v && v !== 0) return null;
-  const s = String(v).trim();
-  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
-  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
-  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
-  if (m) return `${pad(+m[1])}:${pad(+(m[2] ?? 0))}`;
-  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
-  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
-  m = s.match(/^(\d{1,2})$/);
-  if (m) return `${pad(+m[1])}:00`;
-  return null;
-};
-const toMins = (hhmm) => {
-  const s = parseTimeLike(hhmm);
-  if (!s) return null;
-  const [h, m] = s.split(":").map(Number);
-  return h * 60 + m;
-};
-
-// numeric (also accepts "480")
-const numOrNull = (v) => {
-  if (v === 0 || v === "0") return 0;
-  if (v == null || v === "") return null;
+const normalizeDow = (v) => {
   const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 7;
+  if (n < 0) return null;
+  if (n > 7) return (n % 7) || 7;
+  return n;
 };
 
 const startOfWeekMonday = (base = new Date()) => {
   const d = new Date(base);
-  const js = d.getDay();
+  const js = d.getDay(); // 0..6
   const delta = js === 0 ? -6 : 1 - js;
   d.setDate(d.getDate() + delta);
   d.setHours(0, 0, 0, 0);
@@ -112,9 +40,10 @@ const addDays = (date, n) => {
   d.setDate(d.getDate() + n);
   return d;
 };
-const sameMonday = (a, b) => startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+const sameMonday = (a, b) =>
+  startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
 const isSameDayIndex = (date, dow1to7) => {
-  const js = date.getDay();
+  const js = date.getDay(); // 0..6
   const ours = js === 0 ? 7 : js;
   return ours === dow1to7;
 };
@@ -126,10 +55,10 @@ const inWeek = (date, monday) => {
   return date >= start && date <= end;
 };
 
-/* ---------- SUBJECT/ROOM/DEGREE abbreviations ---------- */
 const _strip = (s = "") =>
   s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+/** “FR/MA/AN…” or initials up to 4 chars */
 const SUBJECT_ABBR = {
   "physique & chimie": "PC",
   "physique et chimie": "PC",
@@ -201,14 +130,14 @@ const degreeAbbr = (name = "") => {
   return name.length > 10 ? name.slice(0, 10) + "…" : name;
 };
 
-/* ---------- SUBJECT colors ---------- */
 const slugify = (s = "") =>
   s.normalize?.("NFD")?.replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
 const goldenHue = (k) => (hashInt(k) * 137.508) % 360;
 const subjectKey = (l) =>
-  l?.subject?.key ?? (l?.subject?.name ? slugify(l.subject.name) : null) ??
+  l?.subject?.key ??
+  (l?.subject?.name ? slugify(l.subject.name) : null) ??
   (l?.subject?.id ?? l?.subject_id ?? "subject");
 const subjectBlockColors = (l) => {
   const key = String(subjectKey(l) ?? "subject");
@@ -217,16 +146,53 @@ const subjectBlockColors = (l) => {
   const hue = goldenHue(key);
   return { bg: `hsla(${hue},85%,45%,0.20)`, border: `hsl(${hue},65%,45%)`, accent: `hsl(${hue},85%,45%)` };
 };
-
 const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
-/* fixed vertical baseline for period fallback */
+/* time parsing */
+const extractHHMM = (v) => {
+  if (!v) return null;
+  const s = String(v);
+  const m = s.match(/(?:T|\s)?(\d{1,2}):(\d{2})(?::\d{2})?/);
+  return m ? `${pad(+m[1])}:${pad(+m[2])}` : null;
+};
+const pickFirst = (...vals) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+const getStartStr = (l) =>
+  pickFirst(l?.start, l?.start_time, l?.starts_at && extractHHMM(l?.starts_at), l?.from, l?.hour_from, l?.begin, l?.time_from) ?? null;
+const getEndStr = (l) =>
+  pickFirst(l?.end, l?.end_time, l?.ends_at && extractHHMM(l?.ends_at), l?.to, l?.hour_to, l?.finish, l?.time_to) ?? null;
+
+const parseTimeLike = (v) => {
+  if (!v && v !== 0) return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
+  if (m) return `${pad(+m[1])}:${pad(+(m[2] ?? 0))}`;
+  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
+  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  m = s.match(/^(\d{1,2})$/);
+  if (m) return `${pad(+m[1])}:00`;
+  return null;
+};
+const toMins = (hhmm) => {
+  const s = parseTimeLike(hhmm);
+  if (!s) return null;
+  const [h, m] = s.split(":").map(Number);
+  return h * 60 + m;
+};
+const numOrNull = (v) => {
+  if (v === 0 || v === "0") return 0;
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/* baseline for period fallback */
 const SCHOOL_START_MINS = 9 * 60;
 const PERIOD_DURATION_MINS = 90;
 
-/* period parsing */
 const parsePeriodToMins = (period) => {
-  if (!period) return null;
+  if (!period && period !== 0) return null;
   const s = String(period).trim();
   let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
   if (m) {
@@ -242,7 +208,6 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-/** minutes resolver supports numeric minutes and numeric strings */
 const resolveStartEndMins = (l) => {
   const sm = numOrNull(l?.start_minutes);
   const em = numOrNull(l?.end_minutes);
@@ -258,7 +223,13 @@ const resolveStartEndMins = (l) => {
   return null;
 };
 
-/* ---------------- ICS export ---------------- */
+/* unwrap lessons array from various response shapes */
+const unwrapLessons = (r) =>
+  r?.data?.data?.lessons ??
+  r?.data?.lessons ??
+  (Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []);
+
+/* ICS helpers */
 const toIcsDate = (d) =>
   `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
 const buildIcs = (events) => {
@@ -280,7 +251,7 @@ const buildIcs = (events) => {
   return lines.filter(Boolean).join("\r\n");
 };
 
-/* ===================== main component ===================== */
+/* ───────────────────── Main component ───────────────────── */
 
 export default function TeacherTimetable() {
   const [lessons, setLessons] = useState([]);
@@ -293,39 +264,56 @@ export default function TeacherTimetable() {
   const [subjectFilter, setSubjectFilter] = useState("");
   const [degreeFilter, setDegreeFilter] = useState("");
 
+  const monday = useMemo(
+    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
+    [weekOffset]
+  );
+  const mondayIso = useMemo(() => {
+    const y = monday.getFullYear();
+    const m = pad(monday.getMonth() + 1);
+    const d = pad(monday.getDate());
+    return `${y}-${m}-${d}`;
+  }, [monday]);
+
   useEffect(() => {
+    let mounted = true;
     (async () => {
+      setLoading(true);
       try {
-        const res = await TimeTableApi.teacher(); // server already filters by auth teacher
+        // Ask backend for the visible week
+        const res = await TimeTableApi.teacher({ week_start: mondayIso });
         const raw = unwrapLessons(res);
 
         const normalized = (raw ?? []).map((l) => ({
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
 
-          // tolerant time fields
+          // normalize time fields (prefer minutes)
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: numOrNull(l?.start_minutes) ?? undefined,
           end_minutes: numOrNull(l?.end_minutes) ?? undefined,
 
-          // plans/anchors (kept for compatibility in case they appear)
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null,
-          week_start: l?.week_start ?? l?.weekStart ?? null,
+          week_start: l?.week_start ?? l?.weekStart ?? mondayIso,
         }));
 
+        if (!mounted) return;
         setLessons(normalized);
+        setErr("");
       } catch (e) {
         console.error(e);
+        if (!mounted) return;
         setErr(e?.response?.data?.message || "Échec du chargement de l’emploi du temps");
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
-  }, []);
+    return () => { mounted = false; };
+  }, [mondayIso]);
 
-  // build filters
+  // Filters
   const subjects = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
@@ -372,23 +360,34 @@ export default function TeacherTimetable() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="text-xl font-semibold">Mes cours (semaine)</div>
-          <ToolbarSubtitle weekOffset={weekOffset} />
+          <ToolbarSubtitle monday={monday} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <WeekToolbar onPrev={() => setWeekOffset((w) => w - 1)} onToday={() => setWeekOffset(0)} onNext={() => setWeekOffset((w) => w + 1)} />
-          <Select value={degreeFilter} onChange={setDegreeFilter} options={[{ value: "", label: "Tous les niveaux" }, ...degrees.map((d) => ({ value: d.id, label: d.name }))]} />
-          <Select value={subjectFilter} onChange={setSubjectFilter} options={[{ value: "", label: "Toutes les matières" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]} />
+          <WeekToolbar
+            onPrev={() => setWeekOffset((w) => w - 1)}
+            onToday={() => setWeekOffset(0)}
+            onNext={() => setWeekOffset((w) => w + 1)}
+          />
+          <Select
+            value={degreeFilter}
+            onChange={setDegreeFilter}
+            options={[{ value: "", label: "Tous les niveaux" }, ...degrees.map((d) => ({ value: d.id, label: d.name }))]}
+          />
+          <Select
+            value={subjectFilter}
+            onChange={setSubjectFilter}
+            options={[{ value: "", label: "Toutes les matières" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]}
+          />
           <ViewToggle value={view} onChange={setView} />
-          <IcsButton lessons={filtered} weekOffset={weekOffset} />
+          <IcsButton lessons={filtered} monday={monday} />
           <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Imprimer</button>
         </div>
       </div>
 
-      {/* Proper conditional: grid vs agenda, with clear empty-hours notice */}
       {view === "grid" ? (
         hasTimed ? (
-          <WeekGrid lessons={filtered} weekOffset={weekOffset} />
+          <WeekGrid lessons={filtered} monday={monday} />
         ) : (
           <div className="rounded-md border p-3 text-sm text-muted-foreground">
             Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
@@ -396,25 +395,24 @@ export default function TeacherTimetable() {
           </div>
         )
       ) : (
-        <AgendaList lessons={filtered} weekOffset={weekOffset} />
+        <AgendaList lessons={filtered} monday={monday} />
       )}
     </div>
   );
 }
 
-/* UI bits */
-function ToolbarSubtitle({ weekOffset }) {
-  const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
+/* ───────────────────── Small UI bits ───────────────────── */
+function ToolbarSubtitle({ monday }) {
   const sunday = addDays(monday, 6);
   const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return <div className="text-sm text-muted-foreground">Semaine du {fmt(monday)} – {fmt(sunday)}</div>;
 }
 function WeekToolbar({ onPrev, onToday, onNext }) {
   return (
-    <div className="inline-flex rounded-md border overflow-hidden">
-      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">←</button>
-      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Aujourd’hui</button>
-      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">→</button>
+    <div className="inline-flex rounded-md border overflow-hidden" role="toolbar" aria-label="Semaine">
+      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60" aria-label="Semaine précédente">←</button>
+      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x" aria-label="Revenir à cette semaine">Aujourd’hui</button>
+      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60" aria-label="Semaine suivante">→</button>
     </div>
   );
 }
@@ -427,29 +425,19 @@ function Select({ value, onChange, options }) {
 }
 function ViewToggle({ value, onChange }) {
   return (
-    <div className="inline-flex rounded-md border overflow-hidden">
-      <button className={`px-3 py-1.5 text-sm ${value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("grid")}>Grille</button>
-      <button className={`px-3 py-1.5 text-sm border-l ${value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("agenda")}>Agenda</button>
+    <div className="inline-flex rounded-md border overflow-hidden" role="tablist" aria-label="Vue">
+      <button className={`px-3 py-1.5 text-sm ${value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("grid")} role="tab" aria-selected={value === "grid"}>Grille</button>
+      <button className={`px-3 py-1.5 text-sm border-l ${value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("agenda")} role="tab" aria-selected={value === "agenda"}>Agenda</button>
     </div>
   );
 }
 
-/* GRID */
-/* GRID */
-/* GRID */
-function WeekGrid({ lessons, weekOffset }) {
-  const monday = useMemo(
-    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
-    [weekOffset]
-  );
-
-  // 1) Collect ALL items (timed + untimed) per day, respecting plans & week_start
+/* ───────────────────── Grid view ───────────────────── */
+function WeekGrid({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
-
     for (const l of lessons ?? []) {
       let day = null;
-
       if (l.is_plan) {
         if (!l.plan_date) continue;
         const date = new Date(`${l.plan_date}T00:00:00`);
@@ -462,12 +450,9 @@ function WeekGrid({ lessons, weekOffset }) {
         }
         day = normalizeDow(l?.day_of_week);
       }
-
       if (!day) continue;
       m.get(day)?.push(l);
     }
-
-    // Sort: timed first by start, then untimed (so layout is stable)
     for (const [k, arr] of m) {
       arr.sort((a, b) => {
         const A = resolveStartEndMins(a)?.[0];
@@ -482,45 +467,40 @@ function WeekGrid({ lessons, weekOffset }) {
     return m;
   }, [lessons, monday]);
 
-  // 2) Compute vertical window from REAL timed items (falls back nicely if none)
-  const { minM, maxM, range } = useMemo(() => {
+  const { minM, maxM } = useMemo(() => {
     let min = Infinity, max = -Infinity;
     for (const d of DAYS) {
-      for (const l of (byDay.get(d.val) ?? [])) {
+      const arr = byDay.get(d.val) ?? [];
+      for (const l of arr) {
         const mins = resolveStartEndMins(l);
         if (!mins) continue;
         min = Math.min(min, mins[0]);
         max = Math.max(max, mins[1]);
       }
     }
-    if (!Number.isFinite(min)) min = 9 * 60;   // default 09:00
-    if (!Number.isFinite(max)) max = 12 * 60;  // default 12:00
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+      min = 9 * 60; max = 12 * 60;
+    }
     const PAD = 30;
     min = Math.max(7 * 60, Math.floor((min - PAD) / 30) * 30);
     max = Math.min(22 * 60, Math.ceil((max + PAD) / 30) * 30);
     if (max - min < 60) max = min + 60;
-    return { minM: min, maxM: max, range: max - min };
+    return { minM: min, maxM: max };
   }, [byDay]);
 
-  // 3) Build lanes for timed; auto-slot untimed so they still appear in the grid
-  //    Untimed items are stacked from the very top of the day window in small 30-min slices.
+  const range = maxM - minM;
+
   const lanesByDay = useMemo(() => {
     const out = new Map();
-    const UNT_SLOT = 30; // minutes height for each untimed badge
-
+    const UNT_SLOT = 30;
     for (const d of DAYS) {
       const dayItems = byDay.get(d.val) ?? [];
-
-      // split
-      const timed = [];
-      const untimed = [];
+      const timed = [], untimed = [];
       for (const l of dayItems) {
         const mins = resolveStartEndMins(l);
         if (mins) timed.push({ l, s: mins[0], e: mins[1], synthetic: false });
         else untimed.push(l);
       }
-
-      // lane placement for timed
       timed.sort((a, b) => a.s - b.s || a.e - b.e);
       const lanes = [];
       for (const it of timed) {
@@ -531,18 +511,14 @@ function WeekGrid({ lessons, weekOffset }) {
         }
         if (!placed) lanes.push([it]);
       }
-
-      // auto place untimed at top (synthetic times so they render)
-      // we place them in a dedicated "untimed lane" block so they don't collide with real lessons
-      // They won’t display any time text; just the subject/room/degree.
-      const syntheticLane = [];
-      untimed.forEach((l, idx) => {
-        const s = minM + idx * UNT_SLOT;
-        const e = Math.min(s + Math.max(UNT_SLOT - 5, 15), maxM); // tiny pills
-        syntheticLane.push({ l, s, e, synthetic: true });
-      });
-      if (syntheticLane.length) lanes.unshift(syntheticLane);
-
+      if (untimed.length) {
+        const pillLane = untimed.map((l, idx) => {
+          const s = Math.max(minM, maxM - (idx + 1) * UNT_SLOT);
+          const e = Math.min(s + Math.max(UNT_SLOT - 5, 15), maxM);
+          return { l, s, e, synthetic: true };
+        });
+        lanes.unshift(pillLane);
+      }
       out.set(d.val, { lanes });
     }
     return out;
@@ -550,9 +526,7 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const hourMarks = useMemo(() => {
     const arr = [];
-    for (let m = minM; m <= maxM; m += 60) {
-      arr.push({ h: Math.floor(m / 60), m });
-    }
+    for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
     return arr;
   }, [minM, maxM]);
   const halfHourMarks = useMemo(() => {
@@ -561,16 +535,9 @@ function WeekGrid({ lessons, weekOffset }) {
     return arr;
   }, [minM, maxM]);
 
-  const hasAny = useMemo(
-    () => DAYS.some((d) => (byDay.get(d.val) ?? []).length),
-    [byDay]
-  );
+  const hasAny = useMemo(() => DAYS.some((d) => (byDay.get(d.val) ?? []).length), [byDay]);
   if (!hasAny) {
-    return (
-      <div className="rounded-md border p-3 text-sm text-muted-foreground">
-        Aucune séance pour cette semaine.
-      </div>
-    );
+    return <div className="rounded-md border p-3 text-sm text-muted-foreground">Aucune séance pour cette semaine.</div>;
   }
 
   return (
@@ -582,7 +549,7 @@ function WeekGrid({ lessons, weekOffset }) {
             <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">Heure</div>
             {DAYS.map((d, idx) => {
               const date = addDays(monday, idx);
-              const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
+              const isToday = isSameDayIndex(new Date(), d.val) && sameMonday(new Date(), monday);
               return (
                 <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
                   <div className="hidden sm:block">{d.full}</div>
@@ -614,9 +581,9 @@ function WeekGrid({ lessons, weekOffset }) {
             {/* day columns */}
             {DAYS.map((d) => {
               const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
+              const laneCount = Math.max(1, lanes.length);
               return (
                 <div key={d.val} className="relative border-l bg-background/50">
-                  {/* grid lines */}
                   {hourMarks.map(({ m }) => {
                     const pct = ((m - minM) / range) * 100;
                     return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
@@ -626,7 +593,6 @@ function WeekGrid({ lessons, weekOffset }) {
                     return <div key={`hh-${m}`} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: `${pct}%` }} />;
                   })}
 
-                  {/* lessons */}
                   {lanes.map((lane, laneIndex) =>
                     lane.map(({ l, s, e, synthetic }, i) => {
                       const s2 = clamp(s, minM, maxM);
@@ -635,8 +601,8 @@ function WeekGrid({ lessons, weekOffset }) {
 
                       const topPct = ((s2 - minM) / range) * 100;
                       const heightPct = Math.max(((e2 - s2) / range) * 100, synthetic ? 0.6 : 0.8);
-                      const widthPct = Math.max(100 / lanes.length, 25);
-                      const leftPct = laneIndex * (100 / lanes.length);
+                      const widthPct = 100 / laneCount;
+                      const leftPct = laneIndex * widthPct;
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Cours";
                       const c = subjectBlockColors(l);
@@ -662,18 +628,12 @@ function WeekGrid({ lessons, weekOffset }) {
                             opacity: synthetic ? 0.9 : 1,
                           }}
                         >
-                          <div className="px-2 pt-1 font-semibold leading-tight truncate">
-                            {subjectAbbr(subjName)}
-                          </div>
+                          <div className="px-2 pt-1 font-semibold leading-tight truncate">{subjectAbbr(subjName)}</div>
                           <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
                             {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
                           </div>
-                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">
-                            {roomAbbr(room)}
-                          </div>
-                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">
-                            {degreeShort}
-                          </div>
+                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
+                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
                         </div>
                       );
                     })
@@ -690,15 +650,10 @@ function WeekGrid({ lessons, weekOffset }) {
   );
 }
 
-
-
-/* AGENDA */
-function AgendaList({ lessons, weekOffset }) {
-  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
-
+/* ───────────────────── Agenda view ───────────────────── */
+function AgendaList({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
-
     for (const l of lessons ?? []) {
       if (l.is_plan && l.plan_date) {
         const date = new Date(`${l.plan_date}T00:00:00`);
@@ -716,7 +671,6 @@ function AgendaList({ lessons, weekOffset }) {
       if (!day) continue;
       m.get(day)?.push(l);
     }
-
     for (const [k, arr] of m) {
       arr.sort((a, b) => (resolveStartEndMins(a)?.[0] ?? 0) - (resolveStartEndMins(b)?.[0] ?? 0));
       m.set(k, arr);
@@ -766,10 +720,9 @@ function AgendaList({ lessons, weekOffset }) {
   );
 }
 
-/* ICS (respects week_start; ignores plans) */
-function IcsButton({ lessons, weekOffset }) {
+/* ───────────────────── ICS (ignores plans) ───────────────────── */
+function IcsButton({ lessons, monday }) {
   const download = () => {
-    const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
       if (l.is_plan) continue;
@@ -779,12 +732,12 @@ function IcsButton({ lessons, weekOffset }) {
       }
       const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
+
       const date = addDays(monday, dow - 1);
       const mins = resolveStartEndMins(l);
       if (!mins) continue;
 
-      const start = new Date(date);
-      const end = new Date(date);
+      const start = new Date(date), end = new Date(date);
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
