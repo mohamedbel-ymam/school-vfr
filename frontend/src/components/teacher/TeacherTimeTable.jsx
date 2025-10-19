@@ -436,6 +436,7 @@ function ViewToggle({ value, onChange }) {
 
 /* GRID */
 /* GRID */
+/* GRID */
 function WeekGrid({ lessons, weekOffset }) {
   const monday = useMemo(
     () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
@@ -536,7 +537,7 @@ function WeekGrid({ lessons, weekOffset }) {
       // They won’t display any time text; just the subject/room/degree.
       const syntheticLane = [];
       untimed.forEach((l, idx) => {
-        const s = Math.max(minM, maxM - (idx + 1) * UNT_SLOT);
+        const s = minM + idx * UNT_SLOT;
         const e = Math.min(s + Math.max(UNT_SLOT - 5, 15), maxM); // tiny pills
         syntheticLane.push({ l, s, e, synthetic: true });
       });
@@ -688,6 +689,7 @@ function WeekGrid({ lessons, weekOffset }) {
     </div>
   );
 }
+
 
 
 /* AGENDA */

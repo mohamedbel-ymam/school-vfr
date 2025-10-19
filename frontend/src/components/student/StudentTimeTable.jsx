@@ -1,6 +1,7 @@
 // src/components/student/StudentTimeTable.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
+import { axiosClient } from "../../api/axios";
 import subjectColors from "../../config/subjectColors";
 
 /* --------------------------------- Abbreviations --------------------------------- */
@@ -70,7 +71,7 @@ const HARD_MAX = 22 * 60;
 const PAD_MINS = 30;
 
 /* ---------------------------------- Helpers ----------------------------------- */
-const unwrapLessons = (res) => res?.data?.data?.lessons ?? []; // expects {data:{lessons:[...]}}
+const unwrapLessons = (res) => res?.data?.data?.lessons ?? res?.data?.lessons ?? [];
 
 const pad = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -84,7 +85,7 @@ const normalizeDow = (v) => {
   return n;
 };
 
-// ✅ accept 1 or 2-digit hour, and optional seconds
+// accept 1 or 2-digit hour, and optional seconds
 const extractHHMM = (v) => {
   if (!v) return null;
   const s = String(v);
@@ -142,14 +143,9 @@ const inWeek = (date, monday) => {
   return date >= start && date <= end;
 };
 
-// ---- Subject colors (fixed-by-key with safe fallback) ----
+// ---- Subject colors ----
 const slugify = (s = "") =>
-  s
-    .normalize?.("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
 const subjectKey = (l) =>
   l?.subject?.key ??
@@ -157,11 +153,7 @@ const subjectKey = (l) =>
   l?.subject_id ??
   slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
 
-const hashInt = (str) => {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  return h;
-};
+const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
 const hueForSubject = (key) => (hashInt(String(key)) * 137.508) % 360;
 
 const subjectSolidColor = (l) => {
@@ -175,11 +167,9 @@ const subjectSoftBgFromKey = (key) => {
   return `hsl(${hue} 65% 45% / 0.14)`;
 };
 
-const roomName = (l) =>
-  l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
+const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
-/* ---------------- Time extraction (very tolerant) ---------------- */
-// ✅ accept many common API aliases for start/end
+/* ---------------- Time extraction (tolerant) ---------------- */
 const pickFirst = (...vals) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
 
 const getStartStr = (l) =>
@@ -204,7 +194,6 @@ const getEndStr = (l) =>
     l?.time_to
   ) ?? null;
 
-// ✅ treat numeric strings as minutes too
 const numOrNull = (v) => {
   if (v === 0 || v === "0") return 0;
   if (v == null || v === "") return null;
@@ -240,7 +229,6 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-// minutes to render for any row (weekly or plan)
 const resolveStartEndMins = (row) => {
   const sm = getStartMin(row);
   const em = getEndMin(row);
@@ -251,16 +239,9 @@ const resolveStartEndMins = (row) => {
 };
 
 /* ----------------------------------- ICS ------------------------------------- */
-const toIcsDate = (d) =>
-  `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(
-    d.getUTCDate()
-  )}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+const toIcsDate = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
 const buildIcs = (events) => {
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Takwa Etablissement//Élève Emploi du temps//EN",
-  ];
+  const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Takwa Etablissement//Élève Emploi du temps//EN"];
   for (const ev of events) {
     lines.push(
       "BEGIN:VEVENT",
@@ -278,6 +259,10 @@ const buildIcs = (events) => {
   return lines.filter(Boolean).join("\r\n");
 };
 
+/* =============================== API helpers =============================== */
+const PLANS_ENDPOINT = "/eleve/plans-mensuels"; // ← change if your route differs
+const unwrapPlans = (r) => r?.data?.data ?? r?.data ?? [];
+
 /* ============================================================================ */
 
 export default function StudentTimeTable() {
@@ -293,59 +278,90 @@ export default function StudentTimeTable() {
   const [subjectFilter, setSubjectFilter] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
 
+  // compute months covering the visible week
+  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
+  const sunday = useMemo(() => addDays(monday, 6), [monday]);
+  const monthsForWeek = useMemo(() => {
+    const m1 = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}`;
+    const m2 = `${sunday.getFullYear()}-${pad(sunday.getMonth() + 1)}`;
+    return m1 === m2 ? [m1] : [m1, m2];
+  }, [monday, sunday]);
+
   useEffect(() => {
+    let mounted = true;
     (async () => {
+      setLoading(true);
       try {
+        // 1) weekly lessons
         const res = await TimeTableApi.student();
         const raw = unwrapLessons(res);
 
-        const normalized = (raw ?? []).map((l) => ({
+        const weekly = (raw ?? []).map((l) => ({
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
-
           subject:
             l?.subject?.id || l?.subject_id
-              ? {
-                  id: l.subject?.id ?? l.subject_id,
-                  name: l.subject?.name ?? l.subject_name ?? "Matière",
-                  key: l?.subject?.key,
-                }
+              ? { id: l.subject?.id ?? l.subject_id, name: l.subject?.name ?? l.subject_name ?? "Matière", key: l?.subject?.key }
               : l?.subject?.name
               ? { id: null, name: l.subject.name }
               : l?.subject,
-
           room: l?.room ?? (l?.room_id ? null : undefined),
+          timetable_id: l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
+          timetable: l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
 
-          timetable_id:
-            l?.timetable_id ?? l?.plan_id ?? l?.timetable?.id ?? null,
-          timetable:
-            l?.timetable ?? (l?.plan ? { id: l.plan.id, title: l.plan.title } : null),
-
-          // normalized fields or tolerant aliases
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: numOrNull(l?.start_minutes) ?? undefined,
           end_minutes: numOrNull(l?.end_minutes) ?? undefined,
 
-          is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
-          plan_date: l?.plan_date ?? l?.date ?? null, // YYYY-MM-DD
-
-          week_start: l?.week_start ?? l?.weekStart ?? null, // YYYY-MM-DD
+          is_plan: false,
+          plan_date: null,
+          week_start: l?.week_start ?? l?.weekStart ?? null,
         }));
 
-        setLessons(normalized);
+        // 2) monthly plans for visible week (merge)
+        const planPages = await Promise.all(
+          monthsForWeek.map((month) => axiosClient.get(PLANS_ENDPOINT, { params: { month } }))
+        );
+        const rawPlans = planPages.flatMap((p) => unwrapPlans(p));
+
+        const plansInWeek = (rawPlans ?? []).filter((p) => {
+          const d = new Date(`${p?.plan_date}T00:00:00`);
+          return !Number.isNaN(d) && inWeek(d, monday);
+        });
+
+        const plans = plansInWeek.map((p) => ({
+          id: p.id,
+          is_plan: true,
+          plan_date: p.plan_date, // YYYY-MM-DD
+          subject: p.subject ? { id: p.subject.id, name: p.subject.name } : null,
+          room: null,
+          timetable_id: p.id,
+          timetable: p.title ? { id: p.id, title: p.title } : null,
+
+          start_time: p.start_time ?? null,
+          end_time: p.end_time ?? null,
+          start_minutes: numOrNull(p?.start_minutes) ?? undefined,
+          end_minutes: numOrNull(p?.end_minutes) ?? undefined,
+
+          day_of_week: null,
+          week_start: null,
+        }));
+
+        if (!mounted) return;
+        setLessons([...weekly, ...plans]);
         setTimetable(null);
+        setErr("");
       } catch (e) {
         console.error(e);
-        setErr(
-          e?.response?.data?.message ||
-            "Échec du chargement de l’emploi du temps"
-        );
+        if (!mounted) return;
+        setErr(e?.response?.data?.message || "Échec du chargement de l’emploi du temps");
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
-  }, []);
+    return () => { mounted = false; };
+  }, [weekOffset, monthsForWeek, monday]);
 
   // filters data
   const subjects = useMemo(() => {
@@ -362,80 +378,49 @@ export default function StudentTimeTable() {
     const p = new Map();
     for (const l of lessons) {
       const pid = l?.timetable_id;
-      if (pid != null)
-        p.set(String(pid), l?.timetable?.title ?? `Plan #${pid}`);
+      if (pid != null) p.set(String(pid), l?.timetable?.title ?? `Plan #${pid}`);
     }
     return [...p.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
   const shownLessons = useMemo(() => {
     return lessons.filter((l) => {
-      const okSubject =
-        !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
-      const okPlan =
-        planFilter === "all" || String(l?.timetable_id) === String(planFilter);
+      const okSubject = !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
+      const okPlan = planFilter === "all" || String(l?.timetable_id) === String(planFilter);
       return okSubject && okPlan;
     });
   }, [lessons, subjectFilter, planFilter]);
 
-  const hasTimed = useMemo(
-    () => (shownLessons ?? []).some((x) => Boolean(resolveStartEndMins(x))),
-    [shownLessons]
-  );
-
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
-  if (err)
-    return (
-      <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>
-    );
-  if (!lessons?.length)
-    return (
-      <div className="p-4 text-center">Aucun emploi du temps pour le moment.</div>
-    );
+  if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
+  if (!lessons?.length) return <div className="p-4 text-center">Aucun emploi du temps pour le moment.</div>;
 
   return (
     <div className="p-4 space-y-4">
       {/* En-tête */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <div className="text-xl font-semibold">
-            {timetable?.title ?? "Mon emploi du temps"}
-          </div>
+          <div className="text-xl font-semibold">{timetable?.title ?? "Mon emploi du temps"}</div>
           <ToolbarSubtitle weekOffset={weekOffset} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <WeekToolbar
-            onPrev={() => setWeekOffset((w) => w - 1)}
-            onToday={() => setWeekOffset(0)}
-            onNext={() => setWeekOffset((w) => w + 1)}
-          />
+          <WeekToolbar onPrev={() => setWeekOffset((w) => w - 1)} onToday={() => setWeekOffset(0)} onNext={() => setWeekOffset((w) => w + 1)} />
           {plans.length > 0 && (
             <Select
               value={planFilter}
               onChange={setPlanFilter}
-              options={[
-                { value: "all", label: "Tous les plans" },
-                ...plans.map((p) => ({ value: p.id, label: p.name })),
-              ]}
+              options={[{ value: "all", label: "Tous les plans" }, ...plans.map((p) => ({ value: p.id, label: p.name }))]}
             />
           )}
           <Select
             value={subjectFilter}
             onChange={setSubjectFilter}
-            options={[
-              { value: "", label: "Toutes les matières" },
-              ...subjects.map((s) => ({ value: s.id, label: s.name })),
-            ]}
+            options={[{ value: "", label: "Toutes les matières" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]}
           />
           <ViewToggle value={view} onChange={setView} />
           <IcsButton lessons={shownLessons} weekOffset={weekOffset} />
-          <button
-            onClick={() => window.print()}
-            className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
-          >
-            Imprimer
-          </button>
+          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Imprimer</button>
         </div>
       </div>
 
@@ -456,66 +441,30 @@ export default function StudentTimeTable() {
 function ToolbarSubtitle({ weekOffset }) {
   const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
   const sunday = addDays(monday, 6);
-  const fmt = (d) =>
-    d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return (
-    <div className="text-sm text-muted-foreground">
-      Semaine du {fmt(monday)} – {fmt(sunday)}
-    </div>
-  );
+  const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return <div className="text-sm text-muted-foreground">Semaine du {fmt(monday)} – {fmt(sunday)}</div>;
 }
 function WeekToolbar({ onPrev, onToday, onNext }) {
   return (
     <div className="inline-flex rounded-md border overflow-hidden">
-      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">
-        ←
-      </button>
-      <button
-        onClick={onToday}
-        className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x"
-      >
-        Aujourd’hui
-      </button>
-      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">
-        →
-      </button>
+      <button onClick={onPrev} className="px-3 py-1.5 text-sm hover:bg-muted/60">←</button>
+      <button onClick={onToday} className="px-3 py-1.5 text-sm hover:bg-muted/60 border-x">Aujourd’hui</button>
+      <button onClick={onNext} className="px-3 py-1.5 text-sm hover:bg-muted/60">→</button>
     </div>
   );
 }
 function ViewToggle({ value, onChange }) {
   return (
     <div className="inline-flex rounded-md border overflow-hidden">
-      <button
-        className={`px-3 py-1.5 text-sm ${
-          value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"
-        }`}
-        onClick={() => onChange("grid")}
-      >
-        Grille
-      </button>
-      <button
-        className={`px-3 py-1.5 text-sm border-l ${
-          value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"
-        }`}
-        onClick={() => onChange("agenda")}
-      >
-        Agenda
-      </button>
+      <button className={`px-3 py-1.5 text-sm ${value === "grid" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("grid")}>Grille</button>
+      <button className={`px-3 py-1.5 text-sm border-l ${value === "agenda" ? "bg-primary/10" : "hover:bg-muted/60"}`} onClick={() => onChange("agenda")}>Agenda</button>
     </div>
   );
 }
 function Select({ value, onChange, options }) {
   return (
-    <select
-      className="px-3 py-1.5 rounded-md border bg-background text-sm"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {options.map((o) => (
-        <option key={String(o.value)} value={o.value}>
-          {o.label}
-        </option>
-      ))}
+    <select className="px-3 py-1.5 rounded-md border bg-background text-sm" value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => <option key={String(o.value)} value={o.value}>{o.label}</option>)}
     </select>
   );
 }
@@ -525,15 +474,10 @@ function Legend({ subjects }) {
     <div className="flex flex-wrap gap-2 text-xs">
       {subjects.map((s) => {
         const key = s.id;
-        const solid =
-          subjectColors[key] || `hsl(${hueForSubject(key)} 65% 45%)`;
+        const solid = subjectColors[key] || `hsl(${hueForSubject(key)} 65% 45%)`;
         const soft = subjectSoftBgFromKey(key);
         return (
-          <span
-            key={s.id}
-            className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-2 py-0.5 border"
-            style={{ borderColor: "transparent", background: soft }}
-          >
+          <span key={s.id} className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-2 py-0.5 border" style={{ borderColor: "transparent", background: soft }}>
             <span className="h-3 w-3 rounded-full" style={{ background: solid }} />
             <span className="text-foreground/80">{s.name}</span>
           </span>
@@ -544,20 +488,14 @@ function Legend({ subjects }) {
 }
 
 /* ----------------------------- Grille hebdomadaire ---------------------------- */
-/* ----------------------------- Grille hebdomadaire ---------------------------- */
 function WeekGrid({ lessons, weekOffset }) {
-  const monday = useMemo(
-    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
-    [weekOffset]
-  );
+  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
   // group ALL items per day (timed + untimed), respecting plans & week_start
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
-
     for (const l of lessons ?? []) {
       let day = null;
-
       if (l.is_plan) {
         if (!l.plan_date) continue;
         const date = new Date(`${l.plan_date}T00:00:00`);
@@ -571,12 +509,9 @@ function WeekGrid({ lessons, weekOffset }) {
         day = normalizeDow(l?.day_of_week);
       }
       if (!day) continue;
-
-      // push even if untimed (we’ll render a synthetic slot)
       m.get(day)?.push(l);
     }
-
-    // timed first (by start), then untimed
+    // timed first
     for (const [k, arr] of m) {
       arr.sort((a, b) => {
         const A = resolveStartEndMins(a)?.[0];
@@ -591,7 +526,7 @@ function WeekGrid({ lessons, weekOffset }) {
     return m;
   }, [lessons, monday]);
 
-  // dynamic vertical window from TIMED items only (nice fallback if none)
+  // dynamic vertical window from TIMED items
   const { minM, maxM } = useMemo(() => {
     let min = Infinity, max = -Infinity;
     for (const d of DAYS) {
@@ -604,10 +539,8 @@ function WeekGrid({ lessons, weekOffset }) {
       }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
-      min = 9 * 60;  // 09:00
-      max = 12 * 60; // 12:00
+      min = 9 * 60; max = 12 * 60;
     }
-    // pad and hard clamp
     min = Math.floor((min - PAD_MINS) / 30) * 30;
     max = Math.ceil((max + PAD_MINS) / 30) * 30;
     min = clamp(min, HARD_MIN, HARD_MAX - 30);
@@ -617,23 +550,18 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const range = maxM - minM;
 
-  // build lanes for timed; add a synthetic lane with tiny “untimed” pills at the top
+  // lanes: timed packed; untimed as compact pills lane
   const lanesByDay = useMemo(() => {
     const out = new Map();
     const UNT_SLOT = 30; // minutes height per untimed pill
-
     for (const d of DAYS) {
       const dayItems = byDay.get(d.val) ?? [];
-
-      const timed = [];
-      const untimed = [];
+      const timed = [], untimed = [];
       for (const l of dayItems) {
         const mins = resolveStartEndMins(l);
         if (mins) timed.push({ l, s: mins[0], e: mins[1], synthetic: false });
         else untimed.push(l);
       }
-
-      // normal lane packing for timed
       timed.sort((a, b) => a.s - b.s || a.e - b.e);
       const lanes = [];
       for (const it of timed) {
@@ -644,8 +572,6 @@ function WeekGrid({ lessons, weekOffset }) {
         }
         if (!placed) lanes.push([it]);
       }
-
-      // synthetic lane for untimed at the very top (compact pills)
       if (untimed.length) {
         const pillLane = untimed.map((l, idx) => {
           const s = Math.max(minM, maxM - (idx + 1) * UNT_SLOT);
@@ -654,7 +580,6 @@ function WeekGrid({ lessons, weekOffset }) {
         });
         lanes.unshift(pillLane);
       }
-
       out.set(d.val, { lanes });
     }
     return out;
@@ -672,16 +597,9 @@ function WeekGrid({ lessons, weekOffset }) {
     return arr;
   }, [minM, maxM]);
 
-  const hasAny = useMemo(
-    () => DAYS.some((d) => (byDay.get(d.val) ?? []).length),
-    [byDay]
-  );
+  const hasAny = useMemo(() => DAYS.some((d) => (byDay.get(d.val) ?? []).length), [byDay]);
   if (!hasAny) {
-    return (
-      <div className="rounded-md border p-3 text-sm text-muted-foreground">
-        Aucune séance pour cette semaine.
-      </div>
-    );
+    return <div className="rounded-md border p-3 text-sm text-muted-foreground">Aucune séance pour cette semaine.</div>;
   }
 
   return (
@@ -690,9 +608,7 @@ function WeekGrid({ lessons, weekOffset }) {
         <div className="min-w-[900px] md:min-w-0">
           {/* entêtes */}
           <div className="grid grid-cols-8 bg-muted/50 text-xs sm:text-sm sticky top-0 z-20">
-            <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">
-              Heure
-            </div>
+            <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">Heure</div>
             {DAYS.map((d, idx) => {
               const date = addDays(monday, idx);
               const isToday = isSameDayIndex(new Date(), d.val) && weekOffset === 0;
@@ -729,7 +645,6 @@ function WeekGrid({ lessons, weekOffset }) {
               const { lanes } = lanesByDay.get(d.val) ?? { lanes: [] };
               return (
                 <div key={d.val} className="relative border-l bg-background/50">
-                  {/* lignes d’aide */}
                   {hourMarks.map(({ m }) => {
                     const pct = ((m - minM) / range) * 100;
                     return <div key={`h-${m}`} className="absolute left-0 right-0 h-px bg-border/50" style={{ top: `${pct}%` }} />;
@@ -800,15 +715,10 @@ function WeekGrid({ lessons, weekOffset }) {
 
 /* ------------------------------------- Agenda --------------------------------- */
 function AgendaList({ lessons, weekOffset }) {
-  const monday = useMemo(
-    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
-    [weekOffset]
-  );
+  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
 
-  // weekly rows by day_of_week; monthly plans only on plan_date within the displayed week
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
-
     for (const l of lessons ?? []) {
       if (l.is_plan && l.plan_date) {
         const date = new Date(`${l.plan_date}T00:00:00`);
@@ -819,18 +729,14 @@ function AgendaList({ lessons, weekOffset }) {
         }
         continue;
       }
-
-      // weekly row; if week_start exists, only display on that chosen week
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
         if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
       }
-
       const day = normalizeDow(l?.day_of_week);
       if (!day) continue;
       m.get(day)?.push(l);
     }
-
     for (const [k, arr] of m) {
       arr.sort((a, b) => {
         const A = resolveStartEndMins(a)?.[0] ?? 0;
@@ -850,11 +756,7 @@ function AgendaList({ lessons, weekOffset }) {
         return (
           <div key={d.val}>
             <div className="text-sm font-semibold text-foreground/90 mb-2">
-              {d.full} •{" "}
-              {date.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
+              {d.full} • {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
             </div>
             <div className="space-y-2">
               {list.length ? (
@@ -867,29 +769,15 @@ function AgendaList({ lessons, weekOffset }) {
                   const timeStr = times
                     ? `(${pad(Math.floor(times[0] / 60))}:${pad(times[0] % 60)}–${pad(Math.floor(times[1] / 60))}:${pad(times[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
-
                   return (
-                    <div
-                      key={l.id ?? `${d.val}-${i}` }
-                      className="rounded-xl border p-3"
-                      style={{ background: soft, borderColor: "transparent" }}
-                    >
+                    <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3" style={{ background: soft, borderColor: "transparent" }}>
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        <span
-                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-                          style={{ background: solid, color: "#fff" }}
-                        >
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: solid, color: "#fff" }}>
                           {l?.subject?.name ?? l?.subject_name ?? "Matière"}
                         </span>
-                        {timeStr ? (
-                          <span className="text-muted-foreground">
-                            {timeStr}
-                          </span>
-                        ) : null}
+                        {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
-                      <div className="text-xs text-foreground/80">
-                        {rName ? rName : ""}
-                      </div>
+                      <div className="text-xs text-foreground/80">{rName ? rName : ""}</div>
                     </div>
                   );
                 })
@@ -911,13 +799,10 @@ function IcsButton({ lessons, weekOffset }) {
     const events = [];
     for (const l of lessons ?? []) {
       if (l.is_plan) continue; // skip monthly plans in calendar export
-
-      // respect optional week_start on weekly rows
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
         if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
       }
-
       const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
 
@@ -925,8 +810,7 @@ function IcsButton({ lessons, weekOffset }) {
       const mins = resolveStartEndMins(l);
       if (!mins) continue;
 
-      const start = new Date(date),
-        end = new Date(date);
+      const start = new Date(date), end = new Date(date);
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
@@ -935,8 +819,7 @@ function IcsButton({ lessons, weekOffset }) {
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
-        start,
-        end,
+        start, end,
         title: subj,
         location: room,
         desc: "",
@@ -951,12 +834,5 @@ function IcsButton({ lessons, weekOffset }) {
     a.click();
     URL.revokeObjectURL(url);
   };
-  return (
-    <button
-      onClick={download}
-      className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
-    >
-      Export .ics
-    </button>
-  );
+  return <button onClick={download} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Export .ics</button>;
 }

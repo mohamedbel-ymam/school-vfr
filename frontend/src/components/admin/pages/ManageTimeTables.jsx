@@ -348,11 +348,11 @@ export default function ManageTimetables() {
   /* ---------------------- Robust bulk delete ---------------------- */
   const bulkDeleteRows = async (ids, label = "rows") => {
     if (!ids?.length) {
-      toast.message("Nothing to delete.");
+      toast.message("Aucun plan à supprimer");
       return;
     }
     const ok = window.confirm(
-      `This will permanently delete ${ids.length} ${label}. Continue?`
+      `Action supprimera le plan ${ids.length} ${label}. Continue?`
     );
     if (!ok) return;
 
@@ -374,7 +374,7 @@ export default function ManageTimetables() {
       await loadWeekly();
     } catch (e) {
       console.error(e);
-      toast.error("Failed while deleting timetables");
+      toast.error("echoue l'hors de suppression de l'emploi du temps");
     } finally {
       setCleaning(false);
     }
@@ -383,7 +383,7 @@ export default function ManageTimetables() {
   // Clean button (all currently loaded & filtered)
   const cleanWeekly = async () => {
     const ids = (rows ?? []).map((r) => r?.id).filter(Boolean);
-    await bulkDeleteRows(ids, "loaded weekly rows");
+    await bulkDeleteRows(ids, "Chargement de rangée de semaine");
   };
 
   return (
@@ -391,13 +391,13 @@ export default function ManageTimetables() {
       {/* View switch */}
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          variant={view === "weekly" ? "default" : "secondary"}
+          variant={view === "hebdomadaire" ? "default" : "secondary"}
           onClick={() => setView("weekly")}
         >
           Semaines
         </Button>
         <Button
-          variant={view === "monthly" ? "default" : "secondary"}
+          variant={view === "mensuel" ? "default" : "secondary"}
           onClick={() => setView("monthly")}
         >
           Mois
@@ -409,7 +409,7 @@ export default function ManageTimetables() {
         <div className="min-w-[180px]">
           <Select value={degreeId} onValueChange={setDegreeId}>
             <SelectTrigger>
-              <SelectValue placeholder="Filtrer by degree" />
+              <SelectValue placeholder="Filtrer par Niveau" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Tous les Niveaux</SelectItem>
@@ -427,7 +427,7 @@ export default function ManageTimetables() {
             <div className="min-w-[200px]">
               <Select value={teacherId} onValueChange={setTeacherId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Filtrer by enseignant" />
+                  <SelectValue placeholder="Filtrer par enseignant" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">Tous les Enseignants</SelectItem>
@@ -454,13 +454,13 @@ export default function ManageTimetables() {
                 + Nouvelle rangée
               </Button>
               <Button onClick={loadWeekly} disabled={loading}>
-                {loading ? "Loading…" : "Apply"}
+                {loading ? "Chargement…" : "Appliquée"}
               </Button>
               <Button
                 variant="destructive"
                 onClick={cleanWeekly}
                 disabled={cleaning || loading || rows.length === 0}
-                title="Supprimer all loaded rows"
+                title="Supprimer tous les rangées chargées"
               >
                 {cleaning ? "Entrain de Nettoyer" : "Nettoyer"}
               </Button>
@@ -527,7 +527,7 @@ export default function ManageTimetables() {
           goMonthly={goMonthly}
           onCreated={async () => {
             await loadWeekly();
-            toast.success("Row created");
+            toast.success("rangé creé avec succés");
             setShowCreate(false);
           }}
         />
@@ -967,6 +967,9 @@ function CreateRowPanel({
             subject_id: payload.subject_id,
             teacher_id: payload.teacher_id,
             title: monthlyTitle || null,
+            // NEW: keep the same time as the weekly row
+            start_time: payload.start_time,
+            end_time: payload.end_time,
           });
           toast.success("Plan mensuel créé");
           goMonthly?.({
@@ -1315,10 +1318,10 @@ function MonthlyPlanner({
     try {
       await axiosClient.delete(`/admin/monthly-plans/${planId}`);
       await reload();
-      toast.success("Plan deleted");
+      toast.success("Plan supprimer");
     } catch (e) {
       console.error(e);
-      toast.error(e?.response?.data?.message || "Failed to delete plan");
+      toast.error(e?.response?.data?.message || "echoue suppression de plan");
     } finally {
       setDeletingId(null);
     }
@@ -1328,7 +1331,7 @@ function MonthlyPlanner({
     <div className="rounded-2xl p-4 shadow-sm bg-card text-card-foreground border">
       <div className="flex items-center justify-between mb-3">
         <div className="font-semibold text-foreground">
-          Monthly Subject Plans {degreeId !== "__all__" ? "" : "(select a degree)"}
+          Plans Mensuel des matieres{degreeId !== "__all__" ? "" : "(select a degree)"}
         </div>
       </div>
 
@@ -1388,7 +1391,7 @@ function MonthlyPlanner({
 
           {degreeId === "__all__" && (
             <div className="mt-3 text-xs text-muted-foreground">
-              Select a degree to view or add monthly subject plans.
+              Choisis un niveau ou change au vue de mois.
             </div>
           )}
         </div>
@@ -1420,7 +1423,7 @@ function DayCell({
 
   return (
     <div
-      className={`min-h[84px] md:min-h-[110px] rounded-xl border p-2 md:p-3 transition-colors flex flex-col gap-2 ${
+      className={`min-h-[84px] md:min-h-[110px] rounded-xl border p-2 md:p-3 transition-colors flex flex-col gap-2 ${
         open ? "bg-muted/60 ring-2 ring-primary/50" : "bg-muted/30 hover:bg-muted/50"
       }`}
     >
@@ -1475,7 +1478,7 @@ function DayCell({
               </span>
               <button
                 className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-background/70"
-                title="Supprimer plan"
+                title="Supprimer le plan"
                 onClick={() => deletePlan(p.id)}
               >
                 <Trash2 className="h-4 w-4" />
@@ -1518,7 +1521,7 @@ function DayCell({
               }
             >
               <SelectTrigger className="h-8">
-                <SelectValue placeholder="Enseignant (optional)" />
+                <SelectValue placeholder="Enseignant (optionel)" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE}>— None —</SelectItem>
@@ -1568,7 +1571,7 @@ function DayCell({
                 size="sm"
                 onClick={async () => {
                   if (!mini.subject_id) {
-                    toast.error("Matière is required");
+                    toast.error("Matière est obligatoire");
                     return;
                   }
                   setSaving(true);
@@ -1593,7 +1596,7 @@ function DayCell({
                 onClick={() => setOpen(false)}
                 disabled={saving}
               >
-                Cancel
+                Annuler
               </Button>
             </div>
           </div>

@@ -11,6 +11,10 @@ const TimeTableApi = {
   teacher: (params={}) => axiosClient.get('/enseignant/emploi-du-temps', { params }),
   parent:  (params={}) => axiosClient.get('/parent/emploi-du-temps',  { params }),
 
+  studentPlans:  (params={}) => axiosClient.get('/eleve/monthly-plans',     { params }),
+  teacherPlans:  (params={}) => axiosClient.get('/enseignant/monthly-plans',{ params }),
+  parentPlans:   (params={}) => axiosClient.get('/parent/monthly-plans',    { params }),
+
   unwrap:    (r)              => r?.data?.data ?? r?.data ?? [],
 };
 
