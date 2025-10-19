@@ -66,6 +66,11 @@ const addDays = (date, n) => {
 };
 const sameMonday = (a, b) =>
   startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+const isSameDayIndex = (date, dow1to7) => {
+  const js = date.getDay(); // 0..6
+  const ours = js === 0 ? 7 : js; // 1..7
+  return ours === dow1to7;
+};
 const inWeek = (date, monday) => {
   const start = new Date(monday);
   const end = addDays(monday, 6);
@@ -113,13 +118,19 @@ const subjectSolid = (l) => {
 };
 const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 
-/* ────────────────────────── Admin options endpoints (adjust if needed) ────────────────────────── */
+/* ────────────────────────── Admin options endpoints ────────────────────────── */
 const ENDPOINTS = {
   degrees: "/admin/degrees",
   subjects: "/admin/subjects",
   rooms: "/admin/rooms",
-  teachers: "/admin/teachers", // or '/admin/users?role=teacher'
 };
+
+// Teachers come from /admin/users?role=teacher (per your routes)
+async function fetchTeachers() {
+  const res = await axiosClient.get("/admin/users", { params: { role: "teacher", per_page: 1000 } });
+  const arr = res?.data?.data ?? res?.data ?? [];
+  return (Array.isArray(arr) ? arr : []).map(simpleUser);
+}
 
 /* ────────────────────────── Main component ────────────────────────── */
 export default function ManageTimeTables() {
@@ -167,12 +178,12 @@ export default function ManageTimeTables() {
     (async () => {
       try {
         setLoading(true);
-        const [deg, sub, roo, tea, wk] = await Promise.all([
+        const [deg, sub, roo, teachersList, wk] = await Promise.all([
           axiosClient.get(ENDPOINTS.degrees),
           axiosClient.get(ENDPOINTS.subjects),
           axiosClient.get(ENDPOINTS.rooms),
-          axiosClient.get(ENDPOINTS.teachers),
-          TimeTableApi.week({ week_start: mondayIso }), // see snippet below if you need to add this
+          fetchTeachers(),                                 // <-- correct teachers source
+          TimeTableApi.week({ week_start: mondayIso }),
         ]);
 
         if (!mounted) return;
@@ -180,7 +191,7 @@ export default function ManageTimeTables() {
         setDegrees((deg?.data?.data ?? deg?.data ?? []).map(simpleOpt));
         setSubjects((sub?.data?.data ?? sub?.data ?? []).map(simpleOpt));
         setRooms((roo?.data?.data ?? roo?.data ?? []).map(simpleOpt));
-        setTeachers((tea?.data?.data ?? tea?.data ?? []).map(simpleUser));
+        setTeachers(teachersList);
 
         const raw = unwrapLessons(wk);
         const normalized = (raw ?? []).map((l) => ({
@@ -375,6 +386,14 @@ export default function ManageTimeTables() {
           </button>
         </div>
       </div>
+
+      {/* small heads-up if no teachers */}
+      {!teachers.length && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 p-2 text-xs">
+          Aucun enseignant trouvé via <code>/admin/users?role=teacher</code>. Ajoutez des enseignants
+          ou vérifiez les rôles côté admin.
+        </div>
+      )}
 
       {err ? <div className="rounded-md border border-red-300/50 bg-red-100/40 text-red-700 p-2 text-sm">{err}</div> : null}
 
@@ -719,13 +738,16 @@ function minsToTime(m) {
 /* ────────────────────────── Option mappers ────────────────────────── */
 function simpleOpt(it) {
   // supports shapes: {id, name} or {id, title}
-  return { id: it.id ?? it.value ?? "", name: it.name ?? it.title ?? it.label ?? `#${it.id}` };
+  return { id: it?.id ?? it?.value ?? "", name: it?.name ?? it?.title ?? it?.label ?? `#${it?.id}` };
 }
 function simpleUser(u) {
-  const id = u.id ?? u.value ?? "";
-  const name = u.name ?? (
-    [u.firstname, u.lastname].filter(Boolean).join(" ") || u.email || `#${id}`
-  );  return { id, name };
+  const id = u?.id ?? u?.value ?? "";
+  const first = u?.firstname ?? u?.first_name ?? u?.first ?? "";
+  const last  = u?.lastname  ?? u?.last_name  ?? u?.last  ?? "";
+  const fullFromParts = [first, last].filter(Boolean).join(" ");
+  const fallback = u?.name ?? (fullFromParts || u?.fullname || u?.full_name || u?.email || `#${id}`);
+  const name = fallback;
+  return { id, name };
 }
 function asOption(o) {
   return { value: o.id, label: o.name };
