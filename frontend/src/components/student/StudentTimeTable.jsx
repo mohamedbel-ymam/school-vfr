@@ -260,7 +260,7 @@ const buildIcs = (events) => {
 };
 
 /* =============================== API helpers =============================== */
-const PLANS_ENDPOINT = "/eleve/plans-mensuels"; // ← change if your route differs
+const PLANS_ENDPOINT = "/eleve/monthly-plans"; // ← change if your route differs
 const unwrapPlans = (r) => r?.data?.data ?? r?.data ?? [];
 
 /* ============================================================================ */
