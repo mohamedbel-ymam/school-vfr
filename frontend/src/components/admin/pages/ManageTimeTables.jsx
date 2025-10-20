@@ -66,18 +66,6 @@ const addDays = (date, n) => {
 };
 const sameMonday = (a, b) =>
   startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
-const isSameDayIndex = (date, dow1to7) => {
-  const js = date.getDay(); // 0..6
-  const ours = js === 0 ? 7 : js; // 1..7
-  return ours === dow1to7;
-};
-const inWeek = (date, monday) => {
-  const start = new Date(monday);
-  const end = addDays(monday, 6);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
-  return date >= start && date <= end;
-};
 
 /* period fallback (if no times) */
 const SCHOOL_START_MINS = 9 * 60;
@@ -124,6 +112,8 @@ const ENDPOINTS = {
   subjects: "/admin/subjects",
   rooms: "/admin/rooms",
 };
+
+/* Validation helper (pure) */
 const missingFields = (f) => {
   const miss = [];
   if (!f.degree_id) miss.push("Niveau");
@@ -131,7 +121,6 @@ const missingFields = (f) => {
   if (!f.teacher_id) miss.push("Enseignant");
   return miss;
 };
-const requiredMissing = useMemo(() => missingFields(form), [form]);
 
 // Teachers come from /admin/users?role=teacher (per your routes)
 async function fetchTeachers() {
@@ -174,6 +163,10 @@ export default function ManageTimeTables() {
     title: "",
   };
   const [form, setForm] = useState(blank);
+
+  // compute required-missing **inside** the component (form is defined)
+  const requiredMissing = useMemo(() => missingFields(form), [form]);
+
   const [editingId, setEditingId] = useState(null);
 
   // filters
@@ -190,7 +183,7 @@ export default function ManageTimeTables() {
           axiosClient.get(ENDPOINTS.degrees),
           axiosClient.get(ENDPOINTS.subjects),
           axiosClient.get(ENDPOINTS.rooms),
-          fetchTeachers(),                                 // <-- correct teachers source
+          fetchTeachers(),
           TimeTableApi.week({ week_start: mondayIso }),
         ]);
 
@@ -273,48 +266,48 @@ export default function ManageTimeTables() {
 
   /* ─────────────── Save / Update / Delete ─────────────── */
   const normalizePayload = (state) => {
-  const day_of_week = normalizeDow(state.day_of_week);
-  const degree_id  = state.degree_id || null;
-  const subject_id = state.subject_id || null;
-  const teacher_id = state.teacher_id || null;
-  const room_id    = state.room_id || null;
+    const day_of_week = normalizeDow(state.day_of_week);
+    const degree_id  = state.degree_id || null;
+    const subject_id = state.subject_id || null;
+    const teacher_id = state.teacher_id || null;
+    const room_id    = state.room_id || null;
 
-  const start = parseTimeLike(state.start_time);
-  const end   = parseTimeLike(state.end_time);
-  const sm = toMins(start);
-  const em = toMins(end);
+    const start = parseTimeLike(state.start_time);
+    const end   = parseTimeLike(state.end_time);
+    const sm = toMins(start);
+    const em = toMins(end);
 
-  let start_minutes = null, end_minutes = null, period = null;
-  if (sm != null && em != null && em > sm) {
-    start_minutes = sm; end_minutes = em;
-  } else if (state.period) {
-    const p = parsePeriodToMins(state.period);
-    if (p) { start_minutes = p[0]; end_minutes = p[1]; period = state.period; }
-  }
+    let start_minutes = null, end_minutes = null, period = null;
+    if (sm != null && em != null && em > sm) {
+      start_minutes = sm; end_minutes = em;
+    } else if (state.period) {
+      const p = parsePeriodToMins(state.period);
+      if (p) { start_minutes = p[0]; end_minutes = p[1]; period = state.period; }
+    }
 
-  if (!day_of_week) throw new Error("Jour de la semaine invalide.");
+    if (!day_of_week) throw new Error("Jour de la semaine invalide.");
 
-  const miss = [];
-  if (!degree_id)  miss.push("Niveau");
-  if (!subject_id) miss.push("Matière");
-  if (!teacher_id) miss.push("Enseignant");
-  if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
+    const miss = [];
+    if (!degree_id)  miss.push("Niveau");
+    if (!subject_id) miss.push("Matière");
+    if (!teacher_id) miss.push("Enseignant");
+    if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
 
-  if (!(start_minutes != null && end_minutes != null)) {
-    throw new Error("Indiquez des heures valides ou une période.");
-  }
+    if (!(start_minutes != null && end_minutes != null)) {
+      throw new Error("Indiquez des heures valides ou une période.");
+    }
 
-  return {
-    degree_id, subject_id, teacher_id, room_id,
-    day_of_week,
-    start_time: start ?? minsToTime(start_minutes),
-    end_time:   end   ?? minsToTime(end_minutes),
-    start_minutes, end_minutes,
-    period: period ?? String(state.period || ""),
-    title: state.title?.trim() || null,
-    week_start: mondayIso,
+    return {
+      degree_id, subject_id, teacher_id, room_id,
+      day_of_week,
+      start_time: start ?? minsToTime(start_minutes),
+      end_time:   end   ?? minsToTime(end_minutes),
+      start_minutes, end_minutes,
+      period: period ?? String(state.period || ""),
+      title: state.title?.trim() || null,
+      week_start: mondayIso,
+    };
   };
-};
 
   const onSubmit = async (e) => {
     e?.preventDefault?.();
@@ -419,37 +412,40 @@ export default function ManageTimeTables() {
           <form onSubmit={onSubmit} className="rounded-xl border p-4 bg-background/60 space-y-3">
             <div className="text-sm font-semibold">{editingId ? "Modifier la séance" : "Ajouter une séance"}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <LabeledSelect
-                  label="Niveau"
-                  value={form.degree_id}
-                  onChange={(v) => setForm({ ...form, degree_id: v === "" ? "" : Number(v) })}
-                  options={degrees.map(asOption)}
-                  required
-                />
-                    
-                <LabeledSelect
-                  label="Matière"
-                  value={form.subject_id}
-                  onChange={(v) => setForm({ ...form, subject_id: v === "" ? "" : Number(v) })}
-                  options={subjects.map(asOption)}
-                  required
-                />
-                    
-                <LabeledSelect
-                  label="Enseignant"
-                  value={form.teacher_id}
-                  onChange={(v) => setForm({ ...form, teacher_id: v === "" ? "" : Number(v) })}
-                  options={teachers.map(asOption)}
-                  required
-                />
-
-                  <LabeledSelect
-                    label="Salle"
-                    value={form.room_id}
-                    onChange={(v) => setForm({ ...form, room_id: v === "" ? "" : Number(v) })}
-                    options={[{ id: "", name: "—" }, ...rooms].map(asOption)}
-                  />              <LabeledSelect label="Jour" value={form.day_of_week} onChange={(v) => setForm({ ...form, day_of_week: v })}
-                             options={DAYS.map((d) => ({ value: String(d.val), label: d.full }))} required />
+              <LabeledSelect
+                label="Niveau"
+                value={form.degree_id}
+                onChange={(v) => setForm({ ...form, degree_id: v === "" ? "" : Number(v) })}
+                options={degrees.map(asOption)}
+                required
+              />
+              <LabeledSelect
+                label="Matière"
+                value={form.subject_id}
+                onChange={(v) => setForm({ ...form, subject_id: v === "" ? "" : Number(v) })}
+                options={subjects.map(asOption)}
+                required
+              />
+              <LabeledSelect
+                label="Enseignant"
+                value={form.teacher_id}
+                onChange={(v) => setForm({ ...form, teacher_id: v === "" ? "" : Number(v) })}
+                options={teachers.map(asOption)}
+                required
+              />
+              <LabeledSelect
+                label="Salle"
+                value={form.room_id}
+                onChange={(v) => setForm({ ...form, room_id: v === "" ? "" : Number(v) })}
+                options={[{ id: "", name: "—" }, ...rooms].map(asOption)}
+              />
+              <LabeledSelect
+                label="Jour"
+                value={form.day_of_week}
+                onChange={(v) => setForm({ ...form, day_of_week: v })}
+                options={DAYS.map((d) => ({ value: String(d.val), label: d.full }))}
+                required
+              />
               <LabeledInput label="Titre (facultatif)" value={form.title} onChange={(v) => setForm({ ...form, title: v })} placeholder="Ex: Interro, TP, …" />
             </div>
 
@@ -476,12 +472,6 @@ export default function ManageTimeTables() {
                 {editingId ? "Enregistrer" : "Ajouter"}
               </button>
 
-              {requiredMissing.length > 0 && (
-                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded mt-2 p-2">
-                  Veuillez sélectionner : <b>{requiredMissing.join(", ")}</b>.
-                </div>
-              )}
-
               {editingId ? (
                 <button type="button" onClick={() => { setEditingId(null); setForm(blank); }}
                         className="px-3 py-2 rounded-md border text-sm hover:bg-muted/60">
@@ -489,6 +479,13 @@ export default function ManageTimeTables() {
                 </button>
               ) : null}
             </div>
+
+            {/* Inline validation tip */}
+            {requiredMissing.length > 0 && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded mt-2 p-2">
+                Veuillez sélectionner : <b>{requiredMissing.join(", ")}</b>.
+              </div>
+            )}
 
             {/* Live minute preview (helps avoid mistakes) */}
             <TimePreview start={form.start_time} end={form.end_time} period={form.period} />
@@ -588,7 +585,11 @@ function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete }) {
             <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">Heure</div>
             {DAYS.map((d, idx) => {
               const date = addDays(monday, idx);
-              const isToday = isSameDayIndex(new Date(), d.val) && sameMonday(new Date(), monday);
+              const isToday = (() => {
+                const now = new Date();
+                const js = now.getDay(); const ours = js === 0 ? 7 : js;
+                return ours === d.val && sameMonday(now, monday);
+              })();
               return (
                 <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
                   <div className="hidden sm:block">{d.full}</div>
