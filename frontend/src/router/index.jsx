@@ -38,6 +38,7 @@ import ManageTeachers    from "@/components/admin/pages/ManageTeachers.jsx";
 import ManageTimetables  from "@/components/admin/pages/ManageTimeTables.jsx"; // file is ManageTimeTables.jsx
 import ManageEvents      from "@/components/admin/pages/ManageEvents.jsx";
 import AdminsPage        from "@/components/admin/pages/AdminsPage.jsx";
+import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans";
 
 /* Settings */
 import AccountSettings from "@/components/settings/Account.jsx";
@@ -234,7 +235,9 @@ export const router = createBrowserRouter([
       { path: "manage-parents",     element: <ManageParents /> },
       { path: "manage-élèves",      element: <ManageStudents /> },
       { path: "manage-enseignants", element: <ManageTeachers /> },
-      { path: "manage-timetables",  element: <ManageTimetables /> }, // correct filename
+      { path: "manage-timetables",  element: <ManageTimetables /> },
+      { path: "plans",              element: <ManageMonthlyPlans /> },
+       // correct filename
       { path: "manage-événements",  element: <ManageEvents /> },
       { path: "notifications",      element: <SendNotification /> },
       { path: "documents",          element: <AdminDocuments /> },
