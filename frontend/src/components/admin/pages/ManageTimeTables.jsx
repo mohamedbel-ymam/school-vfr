@@ -66,6 +66,11 @@ const addDays = (date, n) => {
 };
 const sameMonday = (a, b) =>
   startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+const isSameDayIndex = (date, dow1to7) => {
+  const js = date.getDay(); // 0..6
+  const ours = js === 0 ? 7 : js; // 1..7
+  return ours === dow1to7;
+};
 
 /* period fallback (if no times) */
 const SCHOOL_START_MINS = 9 * 60;
@@ -113,7 +118,6 @@ const ENDPOINTS = {
   rooms: "/admin/rooms",
 };
 
-/* Validation helper (pure) */
 const missingFields = (f) => {
   const miss = [];
   if (!f.degree_id) miss.push("Niveau");
@@ -163,11 +167,10 @@ export default function ManageTimeTables() {
     title: "",
   };
   const [form, setForm] = useState(blank);
-
-  // compute required-missing **inside** the component (form is defined)
-  const requiredMissing = useMemo(() => missingFields(form), [form]);
-
   const [editingId, setEditingId] = useState(null);
+
+  // derived: which required are missing (now INSIDE the component)
+  const requiredMissing = useMemo(() => missingFields(form), [form]);
 
   // filters
   const [degreeFilter, setDegreeFilter] = useState("");
@@ -183,7 +186,7 @@ export default function ManageTimeTables() {
           axiosClient.get(ENDPOINTS.degrees),
           axiosClient.get(ENDPOINTS.subjects),
           axiosClient.get(ENDPOINTS.rooms),
-          fetchTeachers(),
+          fetchTeachers(),                                 // teachers source
           TimeTableApi.week({ week_start: mondayIso }),
         ]);
 
@@ -229,7 +232,7 @@ export default function ManageTimeTables() {
     for (const l of filtered) {
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
-        if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
+        if (Number.isNaN(ws.getTime()) || sameMonday(ws, monday) === false) continue;
       }
       const dow = normalizeDow(l?.day_of_week);
       if (!dow) continue;
@@ -267,10 +270,10 @@ export default function ManageTimeTables() {
   /* ─────────────── Save / Update / Delete ─────────────── */
   const normalizePayload = (state) => {
     const day_of_week = normalizeDow(state.day_of_week);
-    const degree_id  = state.degree_id || null;
-    const subject_id = state.subject_id || null;
-    const teacher_id = state.teacher_id || null;
-    const room_id    = state.room_id || null;
+    const degree_id  = state.degree_id === "" ? null : Number(state.degree_id);
+    const subject_id = state.subject_id === "" ? null : Number(state.subject_id);
+    const teacher_id = state.teacher_id === "" ? null : Number(state.teacher_id);
+    const room_id    = state.room_id === "" ? null : Number(state.room_id);
 
     const start = parseTimeLike(state.start_time);
     const end   = parseTimeLike(state.end_time);
@@ -480,7 +483,6 @@ export default function ManageTimeTables() {
               ) : null}
             </div>
 
-            {/* Inline validation tip */}
             {requiredMissing.length > 0 && (
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded mt-2 p-2">
                 Veuillez sélectionner : <b>{requiredMissing.join(", ")}</b>.
@@ -585,11 +587,7 @@ function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete }) {
             <div className="px-2 py-2 text-muted-foreground sticky left-0 bg-muted/50 z-30">Heure</div>
             {DAYS.map((d, idx) => {
               const date = addDays(monday, idx);
-              const isToday = (() => {
-                const now = new Date();
-                const js = now.getDay(); const ours = js === 0 ? 7 : js;
-                return ours === d.val && sameMonday(now, monday);
-              })();
+              const isToday = isSameDayIndex(new Date(), d.val) && sameMonday(new Date(), monday);
               return (
                 <div key={d.val} className={`px-2 py-2 font-medium ${isToday ? "text-primary" : ""}`}>
                   <div className="hidden sm:block">{d.full}</div>
