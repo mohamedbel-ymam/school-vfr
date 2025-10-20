@@ -124,6 +124,14 @@ const ENDPOINTS = {
   subjects: "/admin/subjects",
   rooms: "/admin/rooms",
 };
+const missingFields = (f) => {
+  const miss = [];
+  if (!f.degree_id) miss.push("Niveau");
+  if (!f.subject_id) miss.push("Matière");
+  if (!f.teacher_id) miss.push("Enseignant");
+  return miss;
+};
+const requiredMissing = useMemo(() => missingFields(form), [form]);
 
 // Teachers come from /admin/users?role=teacher (per your routes)
 async function fetchTeachers() {
@@ -265,40 +273,48 @@ export default function ManageTimeTables() {
 
   /* ─────────────── Save / Update / Delete ─────────────── */
   const normalizePayload = (state) => {
-    const day_of_week = normalizeDow(state.day_of_week);
-    const degree_id = state.degree_id ? Number(state.degree_id) : null;
-    const subject_id = state.subject_id ? Number(state.subject_id) : null;
-    const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
-    const room_id = state.room_id ? Number(state.room_id) : null;
+  const day_of_week = normalizeDow(state.day_of_week);
+  const degree_id  = state.degree_id || null;
+  const subject_id = state.subject_id || null;
+  const teacher_id = state.teacher_id || null;
+  const room_id    = state.room_id || null;
 
-    const start = parseTimeLike(state.start_time);
-    const end = parseTimeLike(state.end_time);
-    const sm = toMins(start);
-    const em = toMins(end);
+  const start = parseTimeLike(state.start_time);
+  const end   = parseTimeLike(state.end_time);
+  const sm = toMins(start);
+  const em = toMins(end);
 
-    let start_minutes = null, end_minutes = null, period = null;
-    if (sm != null && em != null && em > sm) {
-      start_minutes = sm; end_minutes = em;
-    } else if (state.period) {
-      const p = parsePeriodToMins(state.period);
-      if (p) { start_minutes = p[0]; end_minutes = p[1]; period = state.period; }
-    }
+  let start_minutes = null, end_minutes = null, period = null;
+  if (sm != null && em != null && em > sm) {
+    start_minutes = sm; end_minutes = em;
+  } else if (state.period) {
+    const p = parsePeriodToMins(state.period);
+    if (p) { start_minutes = p[0]; end_minutes = p[1]; period = state.period; }
+  }
 
-    if (!day_of_week) throw new Error("Jour de la semaine invalide.");
-    if (!degree_id || !subject_id || !teacher_id) throw new Error("Niveau, matière et enseignant sont requis.");
-    if (!(start_minutes != null && end_minutes != null)) throw new Error("Indiquez des heures valides ou une période.");
+  if (!day_of_week) throw new Error("Jour de la semaine invalide.");
 
-    return {
-      degree_id, subject_id, teacher_id, room_id,
-      day_of_week,
-      start_time: start ?? minsToTime(start_minutes),
-      end_time: end ?? minsToTime(end_minutes),
-      start_minutes, end_minutes,
-      period: period ?? String(state.period || ""),
-      title: state.title?.trim() || null,
-      week_start: mondayIso,
-    };
+  const miss = [];
+  if (!degree_id)  miss.push("Niveau");
+  if (!subject_id) miss.push("Matière");
+  if (!teacher_id) miss.push("Enseignant");
+  if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
+
+  if (!(start_minutes != null && end_minutes != null)) {
+    throw new Error("Indiquez des heures valides ou une période.");
+  }
+
+  return {
+    degree_id, subject_id, teacher_id, room_id,
+    day_of_week,
+    start_time: start ?? minsToTime(start_minutes),
+    end_time:   end   ?? minsToTime(end_minutes),
+    start_minutes, end_minutes,
+    period: period ?? String(state.period || ""),
+    title: state.title?.trim() || null,
+    week_start: mondayIso,
   };
+};
 
   const onSubmit = async (e) => {
     e?.preventDefault?.();
@@ -403,11 +419,36 @@ export default function ManageTimeTables() {
           <form onSubmit={onSubmit} className="rounded-xl border p-4 bg-background/60 space-y-3">
             <div className="text-sm font-semibold">{editingId ? "Modifier la séance" : "Ajouter une séance"}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <LabeledSelect label="Niveau" value={form.degree_id} onChange={(v) => setForm({ ...form, degree_id: v })} options={degrees.map(asOption)} required />
-              <LabeledSelect label="Matière" value={form.subject_id} onChange={(v) => setForm({ ...form, subject_id: v })} options={subjects.map(asOption)} required />
-              <LabeledSelect label="Enseignant" value={form.teacher_id} onChange={(v) => setForm({ ...form, teacher_id: v })} options={teachers.map(asOption)} required />
-              <LabeledSelect label="Salle" value={form.room_id} onChange={(v) => setForm({ ...form, room_id: v })} options={[{ id: "", name: "—" }, ...rooms].map(asOption)} />
-              <LabeledSelect label="Jour" value={form.day_of_week} onChange={(v) => setForm({ ...form, day_of_week: v })}
+                <LabeledSelect
+                  label="Niveau"
+                  value={form.degree_id}
+                  onChange={(v) => setForm({ ...form, degree_id: v === "" ? "" : Number(v) })}
+                  options={degrees.map(asOption)}
+                  required
+                />
+                    
+                <LabeledSelect
+                  label="Matière"
+                  value={form.subject_id}
+                  onChange={(v) => setForm({ ...form, subject_id: v === "" ? "" : Number(v) })}
+                  options={subjects.map(asOption)}
+                  required
+                />
+                    
+                <LabeledSelect
+                  label="Enseignant"
+                  value={form.teacher_id}
+                  onChange={(v) => setForm({ ...form, teacher_id: v === "" ? "" : Number(v) })}
+                  options={teachers.map(asOption)}
+                  required
+                />
+
+                  <LabeledSelect
+                    label="Salle"
+                    value={form.room_id}
+                    onChange={(v) => setForm({ ...form, room_id: v === "" ? "" : Number(v) })}
+                    options={[{ id: "", name: "—" }, ...rooms].map(asOption)}
+                  />              <LabeledSelect label="Jour" value={form.day_of_week} onChange={(v) => setForm({ ...form, day_of_week: v })}
                              options={DAYS.map((d) => ({ value: String(d.val), label: d.full }))} required />
               <LabeledInput label="Titre (facultatif)" value={form.title} onChange={(v) => setForm({ ...form, title: v })} placeholder="Ex: Interro, TP, …" />
             </div>
@@ -427,10 +468,20 @@ export default function ManageTimeTables() {
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-2">
-              <button type="submit" disabled={saving}
-                      className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50">
+              <button
+                type="submit"
+                disabled={saving || requiredMissing.length > 0}
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+              >
                 {editingId ? "Enregistrer" : "Ajouter"}
               </button>
+
+              {requiredMissing.length > 0 && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded mt-2 p-2">
+                  Veuillez sélectionner : <b>{requiredMissing.join(", ")}</b>.
+                </div>
+              )}
+
               {editingId ? (
                 <button type="button" onClick={() => { setEditingId(null); setForm(blank); }}
                         className="px-3 py-2 rounded-md border text-sm hover:bg-muted/60">
