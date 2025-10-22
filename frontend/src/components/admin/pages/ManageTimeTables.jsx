@@ -428,7 +428,7 @@ export default function ManageTimeTables() {
                    options={subjects.map(asOption)}
                    required
                  />
-              + <LabeledSelect
+               <LabeledSelect
                    label="Enseignant"
                    value={form.teacher_id}
                    onChange={(v) => setForm({ ...form, teacher_id: v })}
