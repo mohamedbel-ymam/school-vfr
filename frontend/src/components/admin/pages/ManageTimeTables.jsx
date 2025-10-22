@@ -160,16 +160,17 @@ export default function ManageTimeTables() {
 
   // form state
   const blank = {
-    id: null,
-    degree_id: "",
-    subject_id: "",
-    teacher_id: "",
-    room_id: "",
-    day_of_week: "1",
-    period: "",
-    start_time: "",
-    end_time: "",
-    title: "",
+    
+  degree_id:  "…",    // required
+  subject_id: "…",    // required
+  teacher_id: "…",    // required
+  room_id:    "…",    // optional
+  day:        "1",    // 1..7 (or send day_of_week)
+  hour_from:  "09:00",// H:i  (or send start_time)
+  hour_to:    "10:30",// H:i  (or send end_time)
+  week_start: "2025-10-20",
+  title:      "…"
+
   };
   const [form, setForm] = useState(blank);
   const [editingId, setEditingId] = useState(null);
