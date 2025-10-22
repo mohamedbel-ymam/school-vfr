@@ -118,11 +118,15 @@ const ENDPOINTS = {
   rooms: "/admin/rooms",
 };
 
+const isEmpty = (v) => {
+  const s = String(v ?? "").trim().toLowerCase();
+  return s === "" || s === "null" || s === "undefined";
+};
 const missingFields = (f) => {
   const miss = [];
-  if (!f.degree_id) miss.push("Niveau");
-  if (!f.subject_id) miss.push("Matière");
-  if (!f.teacher_id) miss.push("Enseignant");
+  if (isEmpty(f.degree_id))  miss.push("Niveau");
+  if (isEmpty(f.subject_id)) miss.push("Matière");
+  if (isEmpty(f.teacher_id)) miss.push("Enseignant");
   return miss;
 };
 
@@ -418,21 +422,21 @@ export default function ManageTimeTables() {
                  label="Niveau"
                  value={form.degree_id}
                  onChange={(v) => setForm({ ...form, degree_id: v })}   // keep as string
-                 options={degrees.map(asOption)}
+                  options={[{ value: "", label: "— choisir —" }, ...degrees.map(asOption)]}
                  required
                />
                <LabeledSelect
                    label="Matière"
                    value={form.subject_id}
                    onChange={(v) => setForm({ ...form, subject_id: v })}
-                   options={subjects.map(asOption)}
+                   options={[{ value: "", label: "— choisir —" }, ...subjects.map(asOption)]}
                    required
                  />
                <LabeledSelect
                    label="Enseignant"
                    value={form.teacher_id}
                    onChange={(v) => setForm({ ...form, teacher_id: v })}
-                   options={teachers.map(asOption)}
+                   options={[{ value: "", label: "— choisir —" }, ...teachers.map(asOption)]}
                    required
                  />
               <LabeledSelect
@@ -468,7 +472,7 @@ export default function ManageTimeTables() {
             <div className="flex items-center justify-between gap-2 pt-2">
             <div className="text-xs text-muted-foreground">
             debug → degree:{String(form.degree_id)} | subject:{String(form.subject_id)} | teacher:{String(form.teacher_id)}
-</           div>
+            </div>
               <button
                 type="submit"
                 disabled={saving || requiredMissing.length > 0}
