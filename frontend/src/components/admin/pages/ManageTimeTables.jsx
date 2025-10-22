@@ -270,11 +270,10 @@ export default function ManageTimeTables() {
   /* ─────────────── Save / Update / Delete ─────────────── */
   const normalizePayload = (state) => {
     const day_of_week = normalizeDow(state.day_of_week);
-    const degree_id  = state.degree_id === "" ? null : Number(state.degree_id);
-    const subject_id = state.subject_id === "" ? null : Number(state.subject_id);
-    const teacher_id = state.teacher_id === "" ? null : Number(state.teacher_id);
-    const room_id    = state.room_id === "" ? null : Number(state.room_id);
-
+    const degree_id  = state.degree_id ? Number(state.degree_id) : null;
+    const subject_id = state.subject_id ? Number(state.subject_id) : null;
+    const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
+    const room_id    = state.room_id ? Number(state.room_id) : null;
     const start = parseTimeLike(state.start_time);
     const end   = parseTimeLike(state.end_time);
     const sm = toMins(start);
@@ -416,32 +415,32 @@ export default function ManageTimeTables() {
             <div className="text-sm font-semibold">{editingId ? "Modifier la séance" : "Ajouter une séance"}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <LabeledSelect
-                label="Niveau"
-                value={form.degree_id}
-                onChange={(v) => setForm({ ...form, degree_id: v === "" ? "" : Number(v) })}
-                options={degrees.map(asOption)}
-                required
-              />
+                 label="Niveau"
+                 value={form.degree_id}
+                 onChange={(v) => setForm({ ...form, degree_id: v })}   // keep as string
+                 options={degrees.map(asOption)}
+                 required
+               />
+              + <LabeledSelect
+                   label="Matière"
+                   value={form.subject_id}
+                   onChange={(v) => setForm({ ...form, subject_id: v })}
+                   options={subjects.map(asOption)}
+                   required
+                 />
+              + <LabeledSelect
+                   label="Enseignant"
+                   value={form.teacher_id}
+                   onChange={(v) => setForm({ ...form, teacher_id: v })}
+                   options={teachers.map(asOption)}
+                   required
+                 />
               <LabeledSelect
-                label="Matière"
-                value={form.subject_id}
-                onChange={(v) => setForm({ ...form, subject_id: v === "" ? "" : Number(v) })}
-                options={subjects.map(asOption)}
-                required
-              />
-              <LabeledSelect
-                label="Enseignant"
-                value={form.teacher_id}
-                onChange={(v) => setForm({ ...form, teacher_id: v === "" ? "" : Number(v) })}
-                options={teachers.map(asOption)}
-                required
-              />
-              <LabeledSelect
-                label="Salle"
-                value={form.room_id}
-                onChange={(v) => setForm({ ...form, room_id: v === "" ? "" : Number(v) })}
-                options={[{ id: "", name: "—" }, ...rooms].map(asOption)}
-              />
+                 label="Salle"
+                 value={form.room_id}
+                 onChange={(v) => setForm({ ...form, room_id: v })}
+                 options={[{ id: "", name: "—" }, ...rooms].map(asOption)}
+               />
               <LabeledSelect
                 label="Jour"
                 value={form.day_of_week}
@@ -467,11 +466,15 @@ export default function ManageTimeTables() {
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-2">
+            <div className="text-xs text-muted-foreground">
+            debug → degree:{String(form.degree_id)} | subject:{String(form.subject_id)} | teacher:{String(form.teacher_id)}
+</           div>
               <button
                 type="submit"
                 disabled={saving || requiredMissing.length > 0}
                 className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
               >
+
                 {editingId ? "Enregistrer" : "Ajouter"}
               </button>
 
@@ -529,13 +532,22 @@ function Select({ value, onChange, options }) {
 function LabeledSelect({ label, value, onChange, options, required }) {
   return (
     <label className="block">
-      <div className="text-[11px] text-muted-foreground mb-1">{label}{required ? " *" : ""}</div>
-      <select className="w-full px-3 py-2 rounded-md border bg-background text-sm" value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => <option key={String(o.value)} value={o.value}>{o.label}</option>)}
+      <div className="text-[11px] text-muted-foreground mb-1">
+        {label}{required ? " *" : ""}
+      </div>
+      <select
+        className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}  // returns string
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
       </select>
     </label>
   );
 }
+
 function LabeledInput({ label, value, onChange, placeholder }) {
   return (
     <label className="block">
@@ -799,6 +811,7 @@ function simpleUser(u) {
   const name = fallback;
   return { id, name };
 }
-function asOption(o) {
-  return { value: o.id, label: o.name };
-}
+ function asOption(o) {
+   // always return string values for <option />
+   return { value: String(o.id ?? ""), label: o.name ?? "" };
+ }
