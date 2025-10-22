@@ -288,54 +288,82 @@ export default function ManageTimeTables() {
   }, [byDay]);
   const range = maxM - minM;
 
+
   /* ─────────────── Save / Update / Delete ─────────────── */
-  const normalizePayload = (state) => {
-    const day_of_week = normalizeDow(state.day_of_week);
-    const degree_id  = state.degree_id ? Number(state.degree_id) : null;
-    const subject_id = state.subject_id ? Number(state.subject_id) : null;
-    const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
-    const room_id    = state.room_id ? Number(state.room_id) : null;
+  const hhmm = (v) => {
+  const s = parseTimeLike(v);
+  if (!s) return null;
+  const [h, m] = s.split(":");
+  return `${PAD(h)}:${PAD(m)}`;
+};
 
-    const start = parseTimeLike(state.start_time);
-    const end   = parseTimeLike(state.end_time);
-    const sm = toMins(start);
-    const em = toMins(end);
+// replace your normalizePayload with this version
+const normalizePayload = (state) => {
+  const day_of_week = normalizeDow(state.day_of_week);
 
-    let start_minutes = null, end_minutes = null, period = null;
-    if (sm != null && em != null && em > sm) {
-      start_minutes = sm; end_minutes = em;
-    } else if (state.period) {
-      const p = parsePeriodToMins(state.period);
-      if (p) { start_minutes = p[0]; end_minutes = p[1]; period = String(state.period).trim(); }
+  const degree_id  = state.degree_id ? Number(state.degree_id) : null;
+  const subject_id = state.subject_id ? Number(state.subject_id) : null;
+  const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
+  const room_id    = state.room_id ? Number(state.room_id) : null;
+
+  // Accept either explicit times or a "period"
+  const startParsed = hhmm(state.start_time);
+  const endParsed   = hhmm(state.end_time);
+
+  let start_time = startParsed;
+  let end_time   = endParsed;
+  let period     = null;
+
+  if (!(start_time && end_time)) {
+    // fallback to "period" like "1" or "09:00-10:30"
+    const p = parsePeriodToMins(state.period);
+    if (p) {
+      const [sm, em] = p;
+      start_time = hhmm(`${Math.floor(sm/60)}:${PAD(sm%60)}`);
+      end_time   = hhmm(`${Math.floor(em/60)}:${PAD(em%60)}`);
+      period = String(state.period).trim();
     }
+  } else {
+    period = String(state.period || "").trim();
+  }
 
-    if (!day_of_week) throw new Error("Jour de la semaine invalide.");
+  if (!day_of_week) throw new Error("Jour de la semaine invalide.");
 
-    const miss = [];
-    if (!degree_id)  miss.push("Niveau");
-    if (!subject_id) miss.push("Matière");
-    if (!teacher_id) miss.push("Enseignant");
-    if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
+  const miss = [];
+  if (!degree_id)  miss.push("Niveau");
+  if (!subject_id) miss.push("Matière");
+  if (!teacher_id) miss.push("Enseignant");
+  if (!start_time || !end_time) miss.push("Heure (début/fin ou période)");
+  if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
 
-    if (!(start_minutes != null && end_minutes != null)) {
-      throw new Error("Indiquez des heures valides ou une période.");
-    }
-
-    // prefer SQL times with seconds
-    const start_time_sql = toSqlTime(start ?? minsToTime(start_minutes));
-    const end_time_sql   = toSqlTime(end   ?? minsToTime(end_minutes));
-
-    return {
-      degree_id, subject_id, teacher_id, room_id,
-      day_of_week,
-      start_time: start_time_sql,
-      end_time: end_time_sql,
-      start_minutes, end_minutes,
-      period: period && period.length ? period : null,
-      title: state.title?.trim() || null,
-      week_start: mondayIso,
-    };
+  // Build payload (no start_minutes/end_minutes). Also include aliases
+  // to satisfy various backend validators.
+  const base = {
+    degree_id,
+    subject_id,
+    teacher_id,
+    room_id,
+    day_of_week,
+    // primary keys the API *likely* validates against:
+    start_time,     // "H:i"
+    end_time,       // "H:i"
+    title: state.title?.trim() || null,
+    week_start: mondayIso,
+    period: period && period.length ? period : null,
   };
+
+  // Common aliases (harmless if ignored, lifesaver if required by validator)
+  const aliases = {
+    day: day_of_week,
+    start: start_time,
+    end: end_time,
+    week_start_date: mondayIso,
+    week: mondayIso,
+    user_id: teacher_id, // some APIs use user_id for teacher
+  };
+
+  return { ...aliases, ...base };
+};
 
   const onSubmit = async (e) => {
     e?.preventDefault?.();
@@ -366,20 +394,29 @@ export default function ManageTimeTables() {
       setForm(blank);
       setEditingId(null);
     } catch (e2) {
-      console.error(e2);
-      // Try to extract Laravel validation errors
-      const msg = e2?.response?.data?.message;
-      const errors = e2?.response?.data?.errors;
-      let friendly = msg || e2?.message || "Échec de l’enregistrement";
-      if (errors && typeof errors === "object") {
-        const lines = [];
-        Object.entries(errors).forEach(([k, arr]) => {
-          if (Array.isArray(arr) && arr.length) lines.push(`• ${arr[0]}`);
-        });
-        if (lines.length) friendly = `${friendly}\n${lines.join("\n")}`;
-      }
-      setErr(friendly);
-    } finally {
+        console.error("Timetable create failed:", e2?.response?.data || e2);
+        // Show everything we can from the server
+        const data = e2?.response?.data;
+        let friendly = "Échec de l’enregistrement (422)";
+          
+        if (data) {
+          if (typeof data === "string") {
+            friendly = data;
+          } else if (data.message) {
+            friendly = data.message;
+          }
+        
+          if (data.errors && typeof data.errors === "object") {
+            const lines = [];
+            for (const [field, arr] of Object.entries(data.errors)) {
+              if (Array.isArray(arr) && arr.length) lines.push(`• ${arr[0]}`);
+            }
+            if (lines.length) friendly += "\n" + lines.join("\n");
+          }
+        }
+      
+        setErr(friendly);
+      } finally {
       setSaving(false);
     }
   };
