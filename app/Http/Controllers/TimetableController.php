@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\StoreTimetableRequest;
 use App\Http\Resources\TimetableResource;
 use App\Models\Timetable;
 use App\Models\Subject;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+
 
 class TimetableController extends Controller
 {
@@ -190,34 +192,60 @@ class TimetableController extends Controller
     }
 
     /** Create */
-    public function store(Request $request)
-    {
-        // normalize any incoming time fields into start_time/end_time (HH:MM)
-        $this->normalizeTimeInputs($request);
+ public function store(StoreTimetableRequest $request)
+{
+    $data = $request->validated();
 
-        $data = $request->validate([
-            'degree_id'   => ['required','exists:degrees,id'],
-            'subject_id'  => ['required','exists:subjects,id'],
-            'teacher_id'  => ['required','exists:users,id'],
-            'room_id'     => ['nullable','exists:rooms,id'],
-            'day_of_week' => ['required','integer', Rule::in([1,2,3,4,5,6,7])],
-            'period'      => ['nullable','integer','min:1','max:50','required_without_all:start_time,end_time'],
-            'start_time'  => ['nullable','date_format:H:i','required_without:period'],
-            'end_time'    => ['nullable','date_format:H:i','required_with:start_time','after:start_time'],
-            'title'       => ['sometimes','nullable','string','max:255'],
-            'week_start'  => ['sometimes','nullable','date'],
-        ]);
+    // Canonical values from the request (the request already normalized them)
+    $day        = $data['day'] ?? $data['day_of_week'] ?? null;     // 1..7
+    $start_time = $data['hour_from'] ?? $data['start_time'] ?? null; // H:i
+    $end_time   = $data['hour_to']   ?? $data['end_time']   ?? null; // H:i
+    $week_start = $data['week_start'] ?? null;
 
-        if (empty($data['title'])) {
-            $data['title'] = $this->composeTitle($data);
-        }
+    // Start with FK & misc fields (same in both schemas)
+    $insert = [
+        'degree_id'  => $data['degree_id'],
+        'subject_id' => $data['subject_id'],
+        'teacher_id' => $data['teacher_id'],
+        'room_id'    => $data['room_id'] ?? null,
+        'title'      => $data['title']   ?? null,
+    ];
 
-        $row = Timetable::create($data)->load([
-            'subject:id,name','degree:id,name','room:id,name','teacher:id,firstname,lastname',
-        ]);
-
-        return response()->json(['data' => new TimetableResource($row)], 201);
+    // Conditionally map to the columns your table actually has
+    if (Schema::hasColumn('timetables', 'day_of_week')) {
+        $insert['day_of_week'] = (int) $day;
+    } elseif (Schema::hasColumn('timetables', 'day')) {
+        $insert['day'] = (int) $day;
     }
+
+    if (Schema::hasColumn('timetables', 'start_time')) {
+        $insert['start_time'] = $start_time;
+    } elseif (Schema::hasColumn('timetables', 'hour_from')) {
+        $insert['hour_from'] = $start_time;
+    }
+
+    if (Schema::hasColumn('timetables', 'end_time')) {
+        $insert['end_time'] = $end_time;
+    } elseif (Schema::hasColumn('timetables', 'hour_to')) {
+        $insert['hour_to'] = $end_time;
+    }
+
+    if (Schema::hasColumn('timetables', 'week_start')) {
+        $insert['week_start'] = $week_start;
+    } elseif (Schema::hasColumn('timetables', 'week_start_date')) {
+        $insert['week_start_date'] = $week_start;
+    }
+
+    $timetable = \App\Models\Timetable::create($insert);
+
+    // Load relations for consistency with your resources
+    $fresh = $timetable->fresh()->load([
+        'subject:id,name','degree:id,name','room:id,name','teacher:id,firstname,lastname'
+    ]);
+
+    return response()->json(['data' => new \App\Http\Resources\TimetableResource($fresh)], 201);
+}
+
 
     /** Update */
     public function update(Request $request, Timetable $timetable)

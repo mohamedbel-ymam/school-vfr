@@ -290,136 +290,102 @@ export default function ManageTimeTables() {
 
 
   /* ─────────────── Save / Update / Delete ─────────────── */
-  const hhmm = (v) => {
+const hhmm = (v) => {
   const s = parseTimeLike(v);
   if (!s) return null;
   const [h, m] = s.split(":");
   return `${PAD(h)}:${PAD(m)}`;
 };
 
-// replace your normalizePayload with this version
 const normalizePayload = (state) => {
-  const day_of_week = normalizeDow(state.day_of_week);
+  const day = normalizeDow(state.day_of_week);
 
-  const degree_id  = state.degree_id ? Number(state.degree_id) : null;
+  // cast to numbers or null (backend often uses integer rules)
+  const degree_id  = state.degree_id  ? Number(state.degree_id)  : null;
   const subject_id = state.subject_id ? Number(state.subject_id) : null;
   const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
-  const room_id    = state.room_id ? Number(state.room_id) : null;
+  const room_id    = state.room_id    ? Number(state.room_id)    : null;
 
-  // Accept either explicit times or a "period"
-  const startParsed = hhmm(state.start_time);
-  const endParsed   = hhmm(state.end_time);
+  // accept either explicit times OR a "period"
+  let hour_from = hhmm(state.start_time);
+  let hour_to   = hhmm(state.end_time);
 
-  let start_time = startParsed;
-  let end_time   = endParsed;
-  let period     = null;
-
-  if (!(start_time && end_time)) {
-    // fallback to "period" like "1" or "09:00-10:30"
+  if (!(hour_from && hour_to) && state.period) {
     const p = parsePeriodToMins(state.period);
     if (p) {
       const [sm, em] = p;
-      start_time = hhmm(`${Math.floor(sm/60)}:${PAD(sm%60)}`);
-      end_time   = hhmm(`${Math.floor(em/60)}:${PAD(em%60)}`);
-      period = String(state.period).trim();
+      hour_from = hhmm(`${Math.floor(sm/60)}:${PAD(sm%60)}`);
+      hour_to   = hhmm(`${Math.floor(em/60)}:${PAD(em%60)}`);
     }
-  } else {
-    period = String(state.period || "").trim();
   }
 
-  if (!day_of_week) throw new Error("Jour de la semaine invalide.");
-
   const miss = [];
+  if (!day) miss.push("Jour");
   if (!degree_id)  miss.push("Niveau");
   if (!subject_id) miss.push("Matière");
   if (!teacher_id) miss.push("Enseignant");
-  if (!start_time || !end_time) miss.push("Heure (début/fin ou période)");
+  if (!(hour_from && hour_to)) miss.push("Heures (début/fin ou période)");
   if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
 
-  // Build payload (no start_minutes/end_minutes). Also include aliases
-  // to satisfy various backend validators.
-  const base = {
-    degree_id,
-    subject_id,
-    teacher_id,
-    room_id,
-    day_of_week,
-    // primary keys the API *likely* validates against:
-    start_time,     // "H:i"
-    end_time,       // "H:i"
+  // 🔴 IMPORTANT: send only the keys many Laravel backends validate on
+  return {
+    degree_id,        // required|exists:degrees,id
+    subject_id,       // required|exists:subjects,id
+    teacher_id,       // required|exists:users,id (role:teacher)
+    room_id,          // nullable|exists:rooms,id
+    day,              // required|integer|between:1,7
+    hour_from,        // required|date_format:H:i
+    hour_to,          // required|date_format:H:i|after:hour_from
+    week_start: mondayIso, // required|date_format:Y-m-d
     title: state.title?.trim() || null,
-    week_start: mondayIso,
-    period: period && period.length ? period : null,
   };
-
-  // Common aliases (harmless if ignored, lifesaver if required by validator)
-  const aliases = {
-    day: day_of_week,
-    start: start_time,
-    end: end_time,
-    week_start_date: mondayIso,
-    week: mondayIso,
-    user_id: teacher_id, // some APIs use user_id for teacher
-  };
-
-  return { ...aliases, ...base };
 };
 
+
   const onSubmit = async (e) => {
-    e?.preventDefault?.();
-    try {
-      setSaving(true);
-      setErr("");
+  e?.preventDefault?.();
+  try {
+    setSaving(true);
+    const payload = normalizePayload(form);
+    console.log("POST /admin/timetables payload →", payload);
 
-      const payload = normalizePayload(form);
-      // console.debug("POST /timetables payload →", payload);
-
-      if (editingId) {
-        await TimeTableApi.update(editingId, payload);
-      } else {
-        await TimeTableApi.create(payload);
-      }
-
-      // reload
-      const res = await TimeTableApi.week({ week_start: mondayIso });
-      setLessons((unwrapLessons(res) ?? []).map((l) => ({
-        ...l,
-        day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
-        start_time: parseTimeLike(l?.start ?? l?.start_time ?? l?.from ?? l?.hour_from),
-        end_time: parseTimeLike(l?.end ?? l?.end_time ?? l?.to ?? l?.hour_to),
-        start_minutes: numOrNull(l?.start_minutes) ?? undefined,
-        end_minutes: numOrNull(l?.end_minutes) ?? undefined,
-        week_start: l?.week_start ?? mondayIso,
-      })));
-      setForm(blank);
-      setEditingId(null);
-    } catch (e2) {
-        console.error("Timetable create failed:", e2?.response?.data || e2);
-        // Show everything we can from the server
-        const data = e2?.response?.data;
-        let friendly = "Échec de l’enregistrement (422)";
-          
-        if (data) {
-          if (typeof data === "string") {
-            friendly = data;
-          } else if (data.message) {
-            friendly = data.message;
-          }
-        
-          if (data.errors && typeof data.errors === "object") {
-            const lines = [];
-            for (const [field, arr] of Object.entries(data.errors)) {
-              if (Array.isArray(arr) && arr.length) lines.push(`• ${arr[0]}`);
-            }
-            if (lines.length) friendly += "\n" + lines.join("\n");
-          }
-        }
-      
-        setErr(friendly);
-      } finally {
-      setSaving(false);
+    if (editingId) {
+      await TimeTableApi.update(editingId, payload);
+    } else {
+      await TimeTableApi.create(payload);
     }
-  };
+
+    const res = await TimeTableApi.week({ week_start: mondayIso });
+    setLessons((unwrapLessons(res) ?? []).map((l) => ({
+      ...l,
+      day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
+      start_time: parseTimeLike(l?.start ?? l?.start_time ?? l?.from ?? l?.hour_from),
+      end_time: parseTimeLike(l?.end ?? l?.end_time ?? l?.to ?? l?.hour_to),
+      start_minutes: numOrNull(l?.start_minutes) ?? undefined,
+      end_minutes: numOrNull(l?.end_minutes) ?? undefined,
+      week_start: l?.week_start ?? mondayIso,
+    })));
+    setForm(blank);
+    setEditingId(null);
+    setErr("");
+  } catch (e2) {
+    const data = e2?.response?.data;
+    console.error("Timetable create failed (422):", data || e2);
+    let friendly = "Échec de l’enregistrement (422)";
+    if (data?.message) friendly = data.message;
+    if (data?.errors && typeof data.errors === "object") {
+      const lines = [];
+      for (const [field, arr] of Object.entries(data.errors)) {
+        if (Array.isArray(arr) && arr.length) lines.push(`• ${field}: ${arr[0]}`);
+      }
+      if (lines.length) friendly += "\n" + lines.join("\n");
+    }
+    setErr(friendly);
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const onEdit = (l) => {
     setEditingId(l.id);
