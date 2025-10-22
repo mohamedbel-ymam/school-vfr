@@ -421,7 +421,7 @@ export default function ManageTimeTables() {
                  options={degrees.map(asOption)}
                  required
                />
-              + <LabeledSelect
+               <LabeledSelect
                    label="Matière"
                    value={form.subject_id}
                    onChange={(v) => setForm({ ...form, subject_id: v })}
