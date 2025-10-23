@@ -240,9 +240,7 @@ export default function ManagePresence() {
       <div className="rounded-2xl border overflow-hidden">
         {/* Desktop header */}
         <div className="hidden md:grid grid-cols-12 bg-muted/40 p-3 text-sm font-medium">
-          <div className="col-span-4">Élève </div>
-          <div className="col-span-4">Statut </div>
-          
+          <div className="col-span-4">Élève       Statut </div>
           <div className="col-span-2">Classe</div>
           <div className="col-span-2">Absences</div>
           <div className="col-span-2">Abs. justifiées</div>
