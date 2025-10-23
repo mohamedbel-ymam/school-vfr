@@ -1,5 +1,5 @@
 // src/services/api/admin/AttendanceApi.js
-import { axiosClient } from "../../../api/axios";
+import { axiosClient } from "../../api/axios";
 
 const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
 
