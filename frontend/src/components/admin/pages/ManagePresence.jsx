@@ -1,5 +1,7 @@
+// src/components/Admin/Pages/ManagePresence.jsx
 import { useEffect, useMemo, useState } from "react";
-import AttendanceApi from "../../../services/api/AttendanceApi"; // ✅ fixed path
+import AttendanceApi from "../../../services/api/AttendanceApi";
+import { axiosClient } from "../../../api/axios";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "../../ui/select";
@@ -30,6 +32,8 @@ function useDebounced(value, ms = 400) {
   return v;
 }
 
+const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
+
 /* ------------------------------- component ------------------------------ */
 export default function ManagePresence() {
   const [loading, setLoading] = useState(true);
@@ -39,13 +43,40 @@ export default function ManagePresence() {
   const [q, setQ] = useState("");
   const [period, setPeriod] = useState("overall"); // overall | month | week
   const debouncedQ = useDebounced(q, 500);
+
+  // Degrees (classes) filter
+  const [degrees, setDegrees] = useState([]);
+  const [degreeId, setDegreeId] = useState("all"); // "all" | <id>
+
   // drafts: { [student_id]: { absences, justified_absences, presences } }
   const [edits, setEdits] = useState({});
+
+  const loadDegrees = async () => {
+    try {
+      // Adjust if your endpoint differs; this one is common in your admin APIs
+      const res = await axiosClient.get("/admin/degrees", { params: { per_page: 500 } });
+      const items = unwrap(res);
+      // accept either array or {items}
+      const list = Array.isArray(items) ? items : (items.items ?? []);
+      setDegrees(list.map(d => ({ id: d.id, name: d.name })));
+    } catch (e) {
+      console.error(e);
+      toast.error("Impossible de charger la liste des classes.");
+    }
+  };
 
   const fetchRows = async (page = 1) => {
     setLoading(true);
     try {
-      const data = await AttendanceApi.list({ q: debouncedQ, page, per_page: meta.per_page, period });
+      const params = {
+        q: debouncedQ,
+        page,
+        per_page: meta.per_page,
+        period,
+      };
+      if (degreeId !== "all") params.degree_id = degreeId;
+
+      const data = await AttendanceApi.list(params);
       const items = data.items ?? data ?? [];
       setRows(items);
       setMeta({
@@ -62,8 +93,12 @@ export default function ManagePresence() {
   };
 
   useEffect(() => {
+    loadDegrees();
+  }, []);
+
+  useEffect(() => {
     fetchRows(1); // eslint-disable-next-line
-  }, [debouncedQ, period]);
+  }, [debouncedQ, period, degreeId]);
 
   const pendingCount = useMemo(() => Object.keys(edits).length, [edits]);
 
@@ -147,12 +182,15 @@ export default function ManagePresence() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">Gestion des présences</h1>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Search */}
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Rechercher élève, email, classe…"
             className="w-64"
           />
+
+          {/* Period */}
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Période" />
@@ -161,6 +199,21 @@ export default function ManagePresence() {
               <SelectItem value="overall">Global</SelectItem>
               <SelectItem value="month">Ce mois</SelectItem>
               <SelectItem value="week">Cette semaine</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Degree filter */}
+          <Select value={String(degreeId)} onValueChange={(v) => setDegreeId(v)}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Classe / degré" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes les classes</SelectItem>
+              {degrees.map((d) => (
+                <SelectItem key={d.id} value={String(d.id)}>
+                  {d.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
