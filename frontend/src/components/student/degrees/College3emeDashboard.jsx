@@ -15,10 +15,17 @@ export default function College3emeDashboard() {
   return (
     <DashboardScaffold
       title="3ème année collège — Tableau de bord"
-      images={["./images/bac1-se/1.jpg","./images/bac1-se/2.jpg","./images/bac1-se/3.jpg"]}
-      stats={stats}
+      images={[]}
+      stats={[]} // optional extra cards
       shortcuts={shortcuts}
-      onBack={()=>{ setSelectedDegree?.(null); nav("/élève/select-degree"); }}
+      onBack={() => { setSelectedDegree?.(null); nav("/élève/select-degree"); }}
+      
+      attendance={{
+        a, j, p, rate, range, // from AttendanceApi.me()
+      }}
+      attendanceLoading={loading}
+      period={period}
+      onPeriodChange={setPeriod}
     />
   );
 }
