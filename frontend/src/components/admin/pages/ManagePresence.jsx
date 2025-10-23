@@ -53,12 +53,10 @@ export default function ManagePresence() {
 
   const loadDegrees = async () => {
     try {
-      // Adjust if your endpoint differs; this one is common in your admin APIs
       const res = await axiosClient.get("/admin/degrees", { params: { per_page: 500 } });
       const items = unwrap(res);
-      // accept either array or {items}
       const list = Array.isArray(items) ? items : (items.items ?? []);
-      setDegrees(list.map(d => ({ id: d.id, name: d.name })));
+      setDegrees(list.map((d) => ({ id: d.id, name: d.name })));
     } catch (e) {
       console.error(e);
       toast.error("Impossible de charger la liste des classes.");
@@ -68,12 +66,7 @@ export default function ManagePresence() {
   const fetchRows = async (page = 1) => {
     setLoading(true);
     try {
-      const params = {
-        q: debouncedQ,
-        page,
-        per_page: meta.per_page,
-        period,
-      };
+      const params = { q: debouncedQ, page, per_page: meta.per_page, period };
       if (degreeId !== "all") params.degree_id = degreeId;
 
       const data = await AttendanceApi.list(params);
@@ -128,16 +121,8 @@ export default function ManagePresence() {
     });
   };
 
-  const inc = (r, field, step = 1) => {
-    const next = valueFor(r, field) + step;
-    applyEdit(r.id, { [field]: next });
-  };
-
-  const dec = (r, field, step = 1) => {
-    const next = Math.max(0, valueFor(r, field) - step);
-    applyEdit(r.id, { [field]: next });
-  };
-
+  const inc = (r, field, step = 1) => applyEdit(r.id, { [field]: valueFor(r, field) + step });
+  const dec = (r, field, step = 1) => applyEdit(r.id, { [field]: Math.max(0, valueFor(r, field) - step) });
   const resetEdits = () => setEdits({});
 
   const saveAll = async () => {
@@ -177,86 +162,286 @@ export default function ManagePresence() {
     return { sumA, sumJ, sumP, rate };
   }, [rows, edits]);
 
-  return (
-    <div className="p-4 sm:p-6">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold">Gestion des présences</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Search */}
+  /* ----------------------------- UI ----------------------------------- */
+  const Toolbar = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <h1 className="text-xl sm:text-2xl font-semibold">Gestion des présences</h1>
+
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 w-full sm:w-auto">
+        {/* Search full-width on mobile */}
+        <div className="sm:col-span-2">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Rechercher élève, email, classe…"
-            className="w-64"
+            placeholder="Rechercher (élève, email, classe)"
+            className="w-full"
           />
+        </div>
 
-          {/* Period */}
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Période" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="overall">Global</SelectItem>
-              <SelectItem value="month">Ce mois</SelectItem>
-              <SelectItem value="week">Cette semaine</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Period */}
+        <Select value={period} onValueChange={setPeriod}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Période" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="overall">Global</SelectItem>
+            <SelectItem value="month">Ce mois</SelectItem>
+            <SelectItem value="week">Cette semaine</SelectItem>
+          </SelectContent>
+        </Select>
 
-          {/* Degree filter */}
-          <Select value={String(degreeId)} onValueChange={(v) => setDegreeId(v)}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Classe / degré" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes les classes</SelectItem>
-              {degrees.map((d) => (
-                <SelectItem key={d.id} value={String(d.id)}>
-                  {d.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Degree */}
+        <Select value={String(degreeId)} onValueChange={(v) => setDegreeId(v)}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Classe / degré" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les classes</SelectItem>
+            {degrees.map((d) => (
+              <SelectItem key={d.id} value={String(d.id)}>
+                {d.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-          <Button variant="secondary" onClick={() => fetchRows(meta.page)} disabled={loading}>
-            <RefreshCw className="h-4 w-4 mr-2" /> Rafraîchir
+        {/* Actions */}
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => fetchRows(meta.page)} disabled={loading} className="w-full">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Rafraîchir</span>
+            <span className="sm:hidden">Rafraîchir</span>
           </Button>
-
-          <Button onClick={saveAll} disabled={saving || !pendingCount}>
+          <Button onClick={saveAll} disabled={saving || !pendingCount} className="w-full">
             {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-            Enregistrer ({pendingCount})
+            <span className="hidden sm:inline">Enregistrer</span> ({pendingCount})
           </Button>
+        </div>
+      </div>
 
-          {pendingCount > 0 && (
-            <Button variant="outline" onClick={resetEdits} disabled={saving}>
-              Réinitialiser
+      {pendingCount > 0 && (
+        <div className="sm:hidden">
+          <Button variant="outline" onClick={resetEdits} disabled={saving} className="w-full">
+            Réinitialiser
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
+  const SummaryCards = (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="rounded-2xl border p-4">
+        <div className="text-xs sm:text-sm text-muted-foreground">Absences (non just.)</div>
+        <div className="text-lg sm:text-2xl font-semibold">{totals.sumA}</div>
+      </div>
+      <div className="rounded-2xl border p-4">
+        <div className="text-xs sm:text-sm text-muted-foreground">Absences justifiées</div>
+        <div className="text-lg sm:text-2xl font-semibold">{totals.sumJ}</div>
+      </div>
+      <div className="rounded-2xl border p-4">
+        <div className="text-xs sm:text-sm text-muted-foreground">Présences</div>
+        <div className="text-lg sm:text-2xl font-semibold">{totals.sumP}</div>
+      </div>
+      <div className="rounded-2xl border p-4">
+        <div className="text-xs sm:text-sm text-muted-foreground">Taux de présence</div>
+        <div className="text-lg sm:text-2xl font-semibold">{totals.rate}%</div>
+      </div>
+    </div>
+  );
+
+  const RowDesktop = (r, idx) => {
+    const abs = valueFor(r, "absences");
+    const just = valueFor(r, "justified_absences");
+    const pres = valueFor(r, "presences");
+    const st = statusFrom(abs, just);
+    return (
+      <div
+        key={r.id}
+        className={`hidden md:grid grid-cols-12 items-center p-3 ${idx % 2 ? "bg-muted/10" : "bg-white"}`}
+      >
+        {/* Student */}
+        <div className="col-span-4 flex items-center gap-3">
+          <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 grid place-content-center font-semibold">
+            {((r.firstname?.[0] ?? "?") + (r.lastname?.[0] ?? "")).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium truncate">{r.firstname} {r.lastname}</div>
+            <div className="text-xs text-muted-foreground truncate">{r.email}</div>
+          </div>
+        </div>
+
+        {/* Degree/Class */}
+        <div className="col-span-2 text-sm">{r.degree?.name ?? r.classroom?.name ?? "—"}</div>
+
+        {/* Unexcused absences */}
+        <div className="col-span-2">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => dec(r, "absences")} aria-label="Moins absence">
+              <Minus className="h-4 w-4" />
             </Button>
-          )}
+            <Input
+              type="number"
+              inputMode="numeric"
+              className="w-20 text-center"
+              min={0}
+              value={abs}
+              onChange={(e) => applyEdit(r.id, { absences: e.target.value })}
+            />
+            <Button variant="outline" size="icon" onClick={() => inc(r, "absences")} aria-label="Plus absence">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Justified absences */}
+        <div className="col-span-2">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => dec(r, "justified_absences")} aria-label="Moins abs. just.">
+              <Minus className="h-4 w-4" />
+            </Button>
+            <Input
+              type="number"
+              inputMode="numeric"
+              className="w-20 text-center"
+              min={0}
+              value={just}
+              onChange={(e) => applyEdit(r.id, { justified_absences: e.target.value })}
+            />
+            <Button variant="outline" size="icon" onClick={() => inc(r, "justified_absences")} aria-label="Plus abs. just.">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Presences */}
+        <div className="col-span-1">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => dec(r, "presences")} aria-label="Moins présence">
+              <Minus className="h-4 w-4" />
+            </Button>
+            <Input
+              type="number"
+              inputMode="numeric"
+              className="w-16 text-center"
+              min={0}
+              value={pres}
+              onChange={(e) => applyEdit(r.id, { presences: e.target.value })}
+            />
+            <Button variant="outline" size="icon" onClick={() => inc(r, "presences")} aria-label="Plus présence">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Status */}
+        <div className="col-span-1 text-right pr-1">
+          <Badge className={st.className}>{st.label}</Badge>
         </div>
       </div>
+    );
+  };
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
-        <div className="rounded-2xl border p-4">
-          <div className="text-sm text-muted-foreground">Absences (non just.)</div>
-          <div className="text-2xl font-semibold">{totals.sumA}</div>
+  const RowMobileCard = (r) => {
+    const abs = valueFor(r, "absences");
+    const just = valueFor(r, "justified_absences");
+    const pres = valueFor(r, "presences");
+    const st = statusFrom(abs, just);
+
+    return (
+      <div key={r.id} className="md:hidden rounded-xl border p-3 bg-white space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 grid place-content-center font-semibold">
+              {((r.firstname?.[0] ?? "?") + (r.lastname?.[0] ?? "")).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="font-medium truncate">{r.firstname} {r.lastname}</div>
+              <div className="text-xs text-muted-foreground truncate">{r.email}</div>
+              <div className="text-xs text-muted-foreground truncate">{r.degree?.name ?? r.classroom?.name ?? "—"}</div>
+            </div>
+          </div>
+          <Badge className={st.className}>{st.label}</Badge>
         </div>
-        <div className="rounded-2xl border p-4">
-          <div className="text-sm text-muted-foreground">Absences justifiées</div>
-          <div className="text-2xl font-semibold">{totals.sumJ}</div>
-        </div>
-        <div className="rounded-2xl border p-4">
-          <div className="text-sm text-muted-foreground">Présences</div>
-          <div className="text-2xl font-semibold">{totals.sumP}</div>
-        </div>
-        <div className="rounded-2xl border p-4">
-          <div className="text-sm text-muted-foreground">Taux de présence</div>
-          <div className="text-2xl font-semibold">{totals.rate}%</div>
+
+        {/* Controls */}
+        <div className="grid grid-cols-3 gap-2">
+          {/* A */}
+          <div className="rounded-xl border p-2">
+            <div className="text-[11px] text-muted-foreground mb-1">Absences</div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => dec(r, "absences")} aria-label="Moins absence">
+                <Minus className="h-4 w-4" />
+              </Button>
+              <Input
+                type="number"
+                inputMode="numeric"
+                className="w-full text-center"
+                min={0}
+                value={abs}
+                onChange={(e) => applyEdit(r.id, { absences: e.target.value })}
+              />
+              <Button variant="outline" size="icon" onClick={() => inc(r, "absences")} aria-label="Plus absence">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* J */}
+          <div className="rounded-xl border p-2">
+            <div className="text-[11px] text-muted-foreground mb-1">Justifiées</div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => dec(r, "justified_absences")} aria-label="Moins justifiées">
+                <Minus className="h-4 w-4" />
+              </Button>
+              <Input
+                type="number"
+                inputMode="numeric"
+                className="w-full text-center"
+                min={0}
+                value={just}
+                onChange={(e) => applyEdit(r.id, { justified_absences: e.target.value })}
+              />
+              <Button variant="outline" size="icon" onClick={() => inc(r, "justified_absences")} aria-label="Plus justifiées">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* P */}
+          <div className="rounded-xl border p-2">
+            <div className="text-[11px] text-muted-foreground mb-1">Présences</div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => dec(r, "presences")} aria-label="Moins présence">
+                <Minus className="h-4 w-4" />
+              </Button>
+              <Input
+                type="number"
+                inputMode="numeric"
+                className="w-full text-center"
+                min={0}
+                value={pres}
+                onChange={(e) => applyEdit(r.id, { presences: e.target.value })}
+              />
+              <Button variant="outline" size="icon" onClick={() => inc(r, "presences")} aria-label="Plus présence">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
+    );
+  };
 
-      {/* Table */}
+  return (
+    <div className="p-4 sm:p-6 space-y-4">
+      {Toolbar}
+
+      {SummaryCards}
+
+      {/* Desktop header */}
       <div className="rounded-2xl border overflow-hidden">
-        <div className="grid grid-cols-12 bg-muted/40 p-3 text-sm font-medium">
+        <div className="hidden md:grid grid-cols-12 bg-muted/40 p-3 text-sm font-medium">
           <div className="col-span-4">Élève</div>
           <div className="col-span-2">Classe</div>
           <div className="col-span-2">Absences</div>
@@ -272,107 +457,22 @@ export default function ManagePresence() {
         ) : rows.length === 0 ? (
           <div className="p-6 text-muted-foreground">Aucun élève trouvé.</div>
         ) : (
-          rows.map((r, idx) => {
-            const abs = valueFor(r, "absences");
-            const just = valueFor(r, "justified_absences");
-            const pres = valueFor(r, "presences");
-            const st = statusFrom(abs, just);
-            return (
-              <div
-                key={r.id}
-                className={`grid grid-cols-12 items-center p-3 ${idx % 2 ? "bg-muted/10" : "bg-white"}`}
-              >
-                {/* Student */}
-                <div className="col-span-4 flex items-center gap-3">
-                  <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 grid place-content-center font-semibold">
-                    {((r.firstname?.[0] ?? "?") + (r.lastname?.[0] ?? "")).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      {r.firstname} {r.lastname}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">{r.email}</div>
-                  </div>
-                </div>
-
-                {/* Degree/Class */}
-                <div className="col-span-2 text-sm">{r.degree?.name ?? r.classroom?.name ?? "—"}</div>
-
-                {/* Unexcused absences */}
-                <div className="col-span-2">
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => dec(r, "absences")}>
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      className="w-20 text-center"
-                      min={0}
-                      value={abs}
-                      onChange={(e) => applyEdit(r.id, { absences: e.target.value })}
-                    />
-                    <Button variant="outline" size="icon" onClick={() => inc(r, "absences")}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Justified absences */}
-                <div className="col-span-2">
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => dec(r, "justified_absences")}>
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      className="w-20 text-center"
-                      min={0}
-                      value={just}
-                      onChange={(e) => applyEdit(r.id, { justified_absences: e.target.value })}
-                    />
-                    <Button variant="outline" size="icon" onClick={() => inc(r, "justified_absences")}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Presences */}
-                <div className="col-span-1">
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => dec(r, "presences")}>
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      className="w-16 text-center"
-                      min={0}
-                      value={pres}
-                      onChange={(e) => applyEdit(r.id, { presences: e.target.value })}
-                    />
-                    <Button variant="outline" size="icon" onClick={() => inc(r, "presences")}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Status */}
-                <div className="col-span-1 text-right pr-1">
-                  <Badge className={st.className}>{st.label}</Badge>
-                </div>
+          <div className="space-y-2 md:space-y-0">
+            {rows.map((r, idx) => (
+              <div key={r.id}>
+                {RowDesktop(r, idx)}
+                {RowMobileCard(r)}
               </div>
-            );
-          })
+            ))}
+          </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-3 border-t bg-muted/30">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border-t bg-muted/30">
           <div className="text-sm text-muted-foreground">
             {meta.total} élèves • page {meta.page}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               disabled={meta.page <= 1 || loading}
@@ -387,16 +487,38 @@ export default function ManagePresence() {
             >
               Suivant
             </Button>
+
+            {/* Desktop-only Reset when there are edits */}
+            {pendingCount > 0 && (
+              <Button variant="outline" onClick={resetEdits} disabled={saving} className="hidden sm:inline-flex">
+                Réinitialiser
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      <p className="mt-4 text-sm text-muted-foreground">
+      <p className="text-xs sm:text-sm text-muted-foreground">
         Règle de statut : <b>Absences non justifiées</b> ≥ 3 ou (Abs. totales ≥ 5) →{" "}
         <span className="text-red-600 font-medium">Danger</span> ; au moins 1 non justifiée ou totales ≥ 3 →{" "}
         <span className="text-amber-600 font-medium">Attention</span> ; sinon →{" "}
         <span className="text-green-600 font-medium">Parfait</span>.
       </p>
+
+      {/* Mobile sticky action bar when there are edits */}
+      {pendingCount > 0 && (
+        <div className="md:hidden fixed bottom-3 left-3 right-3 z-20">
+          <div className="rounded-2xl border bg-white/95 backdrop-blur p-2 shadow-lg flex gap-2">
+            <Button variant="outline" className="w-1/3" onClick={resetEdits} disabled={saving}>
+              Réinitialiser
+            </Button>
+            <Button className="w-2/3" onClick={saveAll} disabled={saving || !pendingCount}>
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Enregistrer ({pendingCount})
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
