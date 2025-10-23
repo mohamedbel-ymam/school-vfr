@@ -33,12 +33,17 @@ function useDebounced(value, ms = 400) {
 const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
 
 /* ----------------------------- compact stepper --------------------------- */
-function Stepper({ value, onChange, min = 0, className = "" }) {
+function Stepper({ value, onChange, min = 0, size = "sm", className = "" }) {
   const dec = () => onChange(Math.max(min, clampNonNeg(value - 1)));
   const inc = () => onChange(clampNonNeg(value + 1));
+
+  const sz = size === "sm"
+    ? { btn: "h-7 w-7", input: "w-10 h-7 text-xs", wrap: "rounded-md" }
+    : { btn: "h-8 w-8", input: "w-12 h-8 text-sm", wrap: "rounded-lg" };
+
   return (
-    <div className={`inline-flex items-center rounded-lg border bg-white overflow-hidden ${className}`}>
-      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-none" onClick={dec} aria-label="Moins">
+    <div className={`inline-flex items-center border bg-white overflow-hidden ${sz.wrap} ${className}`}>
+      <Button variant="ghost" size="icon" className={`${sz.btn} shrink-0 rounded-none`} onClick={dec} aria-label="Moins">
         <Minus className="h-4 w-4" />
       </Button>
       <input
@@ -47,9 +52,9 @@ function Stepper({ value, onChange, min = 0, className = "" }) {
         min={min}
         value={value}
         onChange={(e) => onChange(clampNonNeg(+e.target.value))}
-        className="w-12 h-8 text-center outline-none border-x px-1 text-sm"
+        className={`${sz.input} text-center outline-none border-x px-1`}
       />
-      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-none" onClick={inc} aria-label="Plus">
+      <Button variant="ghost" size="icon" className={`${sz.btn} shrink-0 rounded-none`} onClick={inc} aria-label="Plus">
         <Plus className="h-4 w-4" />
       </Button>
     </div>
@@ -68,7 +73,6 @@ export default function ManagePresence() {
 
   const [degrees, setDegrees] = useState([]);
   const [degreeId, setDegreeId] = useState("all");
-
   const [edits, setEdits] = useState({});
 
   const loadDegrees = async () => {
@@ -240,7 +244,8 @@ export default function ManagePresence() {
           <div className="col-span-2">Classe</div>
           <div className="col-span-2">Absences</div>
           <div className="col-span-2">Abs. justifiées</div>
-          <div className="col-span-2 text-right pr-1">Taux élève</div>
+          <div className="col-span-1">Présences</div>
+          <div className="col-span-1 text-right pr-1">Taux élève</div>
         </div>
 
         {loading ? (
@@ -262,7 +267,7 @@ export default function ManagePresence() {
                 <div key={r.id} className={`${idx % 2 ? "bg-muted/10" : "bg-white"}`}>
                   {/* Desktop row */}
                   <div className="hidden md:grid grid-cols-12 items-center p-3">
-                    {/* Élève + Status badge inline */}
+                    {/* Élève + Status */}
                     <div className="col-span-4 flex items-center gap-3 min-w-0">
                       <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 grid place-content-center font-semibold">
                         {((r.firstname?.[0] ?? "?") + (r.lastname?.[0] ?? "")).toUpperCase()}
@@ -279,60 +284,63 @@ export default function ManagePresence() {
 
                     {/* Absences */}
                     <div className="col-span-2">
-                      <Stepper value={abs} onChange={(v) => setAbs(r, v)} className="h-8" />
+                      <Stepper value={abs} onChange={(v) => setAbs(r, v)} size="sm" />
                     </div>
 
                     {/* Justifiées */}
                     <div className="col-span-2">
-                      <Stepper value={just} onChange={(v) => setJust(r, v)} className="h-8" />
+                      <Stepper value={just} onChange={(v) => setJust(r, v)} size="sm" />
                     </div>
 
-                    {/* Taux élève */}
-                    <div className="col-span-2 text-right pr-1">
+                    {/* Presences (compact) */}
+                    <div className="col-span-1">
+                      <Stepper value={pres} onChange={(v) => setPres(r, v)} size="sm" />
+                    </div>
+
+                    {/* Rate */}
+                    <div className="col-span-1 text-right pr-1">
                       <div className="font-medium">{rate}%</div>
                     </div>
                   </div>
 
-                    {/* Mobile card */}
-                    <div className="md:hidden p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 grid place-content-center font-semibold">
-                            {((r.firstname?.[0] ?? "?") + (r.lastname?.[0] ?? "")).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-medium truncate">{r.firstname} {r.lastname}</div>
-                            <div className="text-xs text-muted-foreground truncate">{r.email}</div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              {r.degree?.name ?? r.classroom?.name ?? "—"}
-                            </div>
-                          </div>
+                  {/* Mobile card */}
+                  <div className="md:hidden p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 grid place-content-center font-semibold">
+                          {((r.firstname?.[0] ?? "?") + (r.lastname?.[0] ?? "")).toUpperCase()}
                         </div>
-                        <Badge className={st.className}>{st.label}</Badge>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{r.firstname} {r.lastname}</div>
+                          <div className="text-xs text-muted-foreground truncate">{r.email}</div>
+                          <div className="text-xs text-muted-foreground truncate">{r.degree?.name ?? r.classroom?.name ?? "—"}</div>
+                        </div>
                       </div>
+                      <Badge className={st.className}>{st.label}</Badge>
+                    </div>
 
-                      {/* Rate row */}
-                      <div className="rounded-xl border p-2 flex items-center justify-between">
-                        <div className="text-[12px] text-muted-foreground">Taux élève</div>
-                        <div className="text-sm font-semibold">{rate}%</div>
+                    {/* Rate */}
+                    <div className="rounded-xl border p-2 flex items-center justify-between">
+                      <div className="text-[12px] text-muted-foreground">Taux élève</div>
+                      <div className="text-sm font-semibold">{rate}%</div>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-xl border p-2">
+                        <div className="text-[11px] text-muted-foreground mb-1">Abs.</div>
+                        <Stepper value={abs} onChange={(v) => setAbs(r, v)} />
                       </div>
-
-                      {/* Controls */}
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="rounded-xl border p-2">
-                          <div className="text-[11px] text-muted-foreground mb-1">Abs.</div>
-                          <Stepper value={abs} onChange={(v) => setAbs(r, v)} />
-                        </div>
-                        <div className="rounded-xl border p-2">
-                          <div className="text-[11px] text-muted-foreground mb-1">Just.</div>
-                          <Stepper value={just} onChange={(v) => setJust(r, v)} />
-                        </div>
-                        <div className="rounded-xl border p-2">
-                          <div className="text-[11px] text-muted-foreground mb-1">Prés.</div>
-                          <Stepper value={pres} onChange={(v) => setPres(r, v)} />
-                        </div>
+                      <div className="rounded-xl border p-2">
+                        <div className="text-[11px] text-muted-foreground mb-1">Just.</div>
+                        <Stepper value={just} onChange={(v) => setJust(r, v)} />
+                      </div>
+                      <div className="rounded-xl border p-2">
+                        <div className="text-[11px] text-muted-foreground mb-1">Prés.</div>
+                        <Stepper value={pres} onChange={(v) => setPres(r, v)} />
                       </div>
                     </div>
+                  </div>
                 </div>
               );
             })}
