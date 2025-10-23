@@ -1,8 +1,7 @@
-// src/components/Student/Dashboards/_parts/DashboardScaffold.jsx
 import { useRef } from "react";
 import Autoplay from "embla-carousel-autoplay";
 
-// 🔧 FIXED import paths to the shared UI kit
+// UI kit
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import {
@@ -73,16 +72,27 @@ export function StatCard({ title, value, hint, right }) {
   );
 }
 
+// same thresholds you used elsewhere
+function statusFrom(a, j) {
+  const A = Math.max(0, +a || 0);
+  const J = Math.max(0, +j || 0);
+  const total = A + J;
+  if (A >= 3 || total >= 5) return { label: "Danger", className: "bg-red-100 text-red-700 border border-red-200" };
+  if (A >= 1 || total >= 3) return { label: "Attention", className: "bg-amber-100 text-amber-700 border border-amber-200" };
+  return { label: "Parfait", className: "bg-green-100 text-green-700 border border-green-200" };
+}
+
 /**
  * DashboardScaffold
  *
  * Props:
  * - title: string
- * - images: string[] (carousel)
+ * - images: string[]
  * - stats: Array<{ title, value, hint?, right? }>
  * - shortcuts: Array<{ label, onClick }>
  * - onBack: () => void
- * - attendance?: { a:number, j:number, p:number, rate:number, range?: {from?:string,to?:string} }
+ * - attendance?: { a:number, j:number, p:number, rate:number, range?: {from?:string,to?:string} }          // current period
+ * - attendanceYear?: { a:number, j:number, p:number, rate:number }                                        // GLOBAL YEAR
  * - attendanceLoading?: boolean
  * - period?: 'overall'|'month'|'week'
  * - onPeriodChange?: (p) => void
@@ -94,11 +104,10 @@ export default function DashboardScaffold({
   shortcuts = [],
   onBack,
 
-  // attendance
   attendance,
+  attendanceYear,          // NEW
   attendanceLoading = false,
 
-  // period control
   period,
   onPeriodChange,
 }) {
@@ -108,6 +117,12 @@ export default function DashboardScaffold({
   const j = attendance?.j ?? 0;
   const p = attendance?.p ?? 0;
   const rate = attendance?.rate ?? 0;
+
+  const yA = attendanceYear?.a ?? null;
+  const yJ = attendanceYear?.j ?? null;
+  const yP = attendanceYear?.p ?? null;
+  const yRate = attendanceYear?.rate ?? null;
+  const yStatus = statusFrom(yA ?? 0, yJ ?? 0);
 
   const hasPeriod = typeof onPeriodChange === "function" && !!period;
 
@@ -128,6 +143,11 @@ export default function DashboardScaffold({
               <option value="overall">Global</option>
             </select>
           )}
+          {onBack && (
+            <Button variant="outline" onClick={onBack}>
+              Changer de filière
+            </Button>
+          )}
         </div>
       </div>
 
@@ -143,42 +163,61 @@ export default function DashboardScaffold({
                 </div>
               ) : null}
             </div>
-            {/* Reserved space if you want a detail link later */}
           </div>
 
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Rate ring */}
-            <Card className="rounded-2xl">
+          {/* Current period + Year global */}
+          <div className="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-4">
+            {/* Current period ring */}
+            <Card className="rounded-2xl lg:col-span-2">
               <CardContent className="p-4 flex items-center justify-center min-h-[152px]">
                 {attendanceLoading ? (
                   <div className="text-sm text-muted-foreground">Chargement…</div>
                 ) : (
-                  <Ring value={rate} label="Taux de présence" />
+                  <Ring value={rate} label="Taux (période)" />
                 )}
               </CardContent>
             </Card>
 
-            {/* Counters */}
-            <StatCard
-              title="Présences"
-              value={attendanceLoading ? "…" : nf(p)}
-              hint="Total comptabilisé"
-            />
-            <StatCard
-              title="Absences (non just.)"
-              value={attendanceLoading ? "…" : nf(a)}
-              hint="À surveiller"
-            />
-            <StatCard
-              title="Absences justifiées"
-              value={attendanceLoading ? "…" : nf(j)}
-              hint="Motifs fournis"
-            />
+            {/* Counters for period */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:col-span-3">
+              <StatCard title="Présences" value={attendanceLoading ? "…" : nf(p)} hint="Total comptabilisé" />
+              <StatCard title="Absences (non just.)" value={attendanceLoading ? "…" : nf(a)} hint="À surveiller" />
+              <StatCard title="Absences justifiées" value={attendanceLoading ? "…" : nf(j)} hint="Motifs fournis" />
+            </div>
           </div>
+
+          {/* YEAR (GLOBAL) summary — always visible if provided */}
+          {attendanceYear && (
+            <div className="mt-4 rounded-2xl border p-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-sm font-semibold">Année (global)</div>
+                <span className={`text-xs px-2 py-1 rounded ${yStatus.className}`}>{yStatus.label}</span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="rounded-xl border p-3">
+                  <div className="text-xs text-muted-foreground">Taux global</div>
+                  <div className="text-xl font-semibold">{yRate != null ? `${yRate}%` : "—"}</div>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <div className="text-xs text-muted-foreground">Présences (année)</div>
+                  <div className="text-xl font-semibold">{yP != null ? nf(yP) : "—"}</div>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <div className="text-xs text-muted-foreground">Absences non just.</div>
+                  <div className="text-xl font-semibold">{yA != null ? nf(yA) : "—"}</div>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <div className="text-xs text-muted-foreground">Absences justifiées</div>
+                  <div className="text-xl font-semibold">{yJ != null ? nf(yJ) : "—"}</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 
-      {/* Carousel (you’ll update visuals later) */}
+      {/* Carousel */}
       {!!images.length && (
         <Carousel plugins={[autoplay.current]} className="w-full max-w-4xl mx-auto">
           <CarouselContent>
@@ -200,7 +239,7 @@ export default function DashboardScaffold({
         </Carousel>
       )}
 
-      {/* Generic stats from page (optional extras) */}
+      {/* Optional extra stats */}
       {stats?.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {stats.map((s) => (

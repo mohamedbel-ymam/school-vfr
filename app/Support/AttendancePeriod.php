@@ -4,7 +4,7 @@ namespace App\Support;
 
 use Carbon\CarbonImmutable;
 
-final class AttendancePeriod
+class AttendancePeriod
 {
     /**
      * Map UI period -> (scope, key, meta-range)

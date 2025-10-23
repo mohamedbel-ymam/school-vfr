@@ -1,4 +1,3 @@
-// src/components/Student/Dashboards/College3emeDashboard.jsx
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext.jsx";
@@ -18,16 +17,12 @@ export default function College3emeDashboard() {
   const { setSelectedDegree } = useAuth();
   const nav = useNavigate();
 
-  // period selector + loading
   const [period, setPeriod] = useState("month"); // 'overall' | 'month' | 'week'
   const [loading, setLoading] = useState(true);
+  const [att, setAtt] = useState({ a: 0, j: 0, p: 0, rate: 0, range: null });
+  const [yearAtt, setYearAtt] = useState(null); // { a, j, p, rate }
 
-  // attendance data
-  const [att, setAtt] = useState({
-    a: 0, j: 0, p: 0, rate: 0, range: null,
-  });
-
-  // fetch student's own attendance for selected period
+  // fetch current period
   const fetchMe = async () => {
     setLoading(true);
     try {
@@ -36,32 +31,51 @@ export default function College3emeDashboard() {
       const j = clamp(res?.attendance?.justified_absences ?? 0);
       const p = clamp(res?.attendance?.presences ?? 0);
       setAtt({
-        a,
-        j,
-        p,
+        a, j, p,
         rate: rateFrom(a, j, p),
         range: res?.period?.range ?? null,
       });
     } catch (e) {
       console.error(e);
-      toast.error("Impossible de charger vos présences.");
+      toast.error("Impossible de charger vos présences (période).");
       setAtt({ a: 0, j: 0, p: 0, rate: 0, range: null });
     } finally {
       setLoading(false);
     }
   };
 
+  // fetch full year (overall) once
+  const fetchYear = async () => {
+    try {
+      const res = await AttendanceApi.me({ period: "overall" });
+      const a = clamp(res?.attendance?.absences ?? 0);
+      const j = clamp(res?.attendance?.justified_absences ?? 0);
+      const p = clamp(res?.attendance?.presences ?? 0);
+      setYearAtt({ a, j, p, rate: rateFrom(a, j, p) });
+    } catch (e) {
+      console.error(e);
+      toast.error("Impossible de charger vos présences (année).");
+      setYearAtt(null);
+    }
+  };
+
   useEffect(() => {
-    fetchMe();
+    fetchYear(); // once at mount
+  }, []);
+
+  useEffect(() => {
+    fetchMe();   // whenever period changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
-  // optional extra stat cards (you can replace with real data later)
-  const stats = useMemo(() => ([
-    { title: "Séances du jour", value: 3 },
-    { title: "Présences (période)", value: att.p },
-    { title: "Nouveaux messages", value: 1 },
-  ]), [att.p]);
+  const stats = useMemo(
+    () => [
+      { title: "Séances du jour", value: 3 },
+      { title: "Présences (période)", value: att.p },
+      { title: "Nouveaux messages", value: 1 },
+    ],
+    [att.p]
+  );
 
   const shortcuts = [
     { label: "Ressources (SM)", onClick: () => nav("/élève/documents") },
@@ -72,13 +86,14 @@ export default function College3emeDashboard() {
   return (
     <DashboardScaffold
       title="3ème année collège — Tableau de bord"
-      images={[]}           // you’ll plug your carousel images later
-      stats={stats}         // optional extras
+      images={[]}
+      stats={stats}
       shortcuts={shortcuts}
       onBack={() => { setSelectedDegree?.(null); nav("/élève/select-degree"); }}
 
-      // attendance block
-      attendance={att}              // { a, j, p, rate, range }
+      // attendance blocks
+      attendance={att}               // current period
+      attendanceYear={yearAtt}       // NEW: year/global summary
       attendanceLoading={loading}
       period={period}
       onPeriodChange={setPeriod}
