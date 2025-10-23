@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import AttendanceApi from "../../../services/api/admin/AttendanceApi"; // ✅ fixed path
+import AttendanceApi from "../../../services/api/AttendenceApi"; // ✅ fixed path
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "../../ui/select";
