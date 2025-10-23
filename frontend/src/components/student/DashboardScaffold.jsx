@@ -3,15 +3,15 @@ import { useRef } from "react";
 import Autoplay from "embla-carousel-autoplay";
 
 // 🔧 FIXED import paths to the shared UI kit
-import { Card, CardContent, CardHeader, CardTitle } from "../../../ui/card";
-import { Button } from "../../../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Button } from "../ui/button";
 import {
   Carousel,
   CarouselContent,
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
-} from "../../../ui/carousel";
+} from "../ui/carousel";
 
 // --------------------------- small helpers ----------------------------
 const nf = (n) => (Number.isFinite(+n) ? (+n).toLocaleString() : "—");
