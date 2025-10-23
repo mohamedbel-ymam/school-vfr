@@ -1,3 +1,4 @@
+// src/components/Admin/Pages/AdminDashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -32,12 +33,14 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  Cell,
 } from "recharts";
 
 // APIs
 import DocumentApi from "../../../services/api/DocumentApi.js";
 import HomeworkApi from "../../../services/api/HomeworkApi.js";
 import AttendanceApi from "../../../services/api/AttendanceApi.js";
+import { axiosClient } from "../../../api/axios"; // for /admin/degrees
 
 // Background
 import SubjectBackground from "../../teacher/SubjectBackground.jsx";
@@ -115,6 +118,14 @@ function riskStatus(abs, just) {
   return { label: "OK", className: "bg-green-100 text-green-700 border-green-200" };
 }
 
+// Degree color palette
+const DEGREE_COLORS = ["#2563eb", "#16a34a", "#db2777", "#f59e0b", "#9333ea", "#ef4444", "#0ea5e9", "#84cc16"];
+const colorForDegree = (id) => {
+  if (id == null) return "#64748b";
+  const i = Math.abs(Number(id)) % DEGREE_COLORS.length;
+  return DEGREE_COLORS[i];
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const adminFullName = `${user?.firstname ?? ""} ${user?.lastname ?? ""}`.trim();
@@ -124,7 +135,7 @@ export default function AdminDashboard() {
   const [hws, setHws] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Attendance
+  // Attendance (global summary)
   const [attPeriod, setAttPeriod] = useState("month"); // 'week' | 'month' | 'overall'
   const [att, setAtt] = useState({
     totals: { absences: 0, justified_absences: 0, presences: 0, attendance_rate: 0 },
@@ -132,6 +143,13 @@ export default function AdminDashboard() {
     period: null,
   });
   const [attLoading, setAttLoading] = useState(true);
+
+  // Degrees & degree-aware views
+  const [degrees, setDegrees] = useState([]);
+  const [degFilter, setDegFilter] = useState("all"); // "all" | <degree_id>
+  const [degLoading, setDegLoading] = useState(false);
+  const [degTotals, setDegTotals] = useState([]); // [{id,name,absences,justified,presences}]
+  const [degStudents, setDegStudents] = useState([]); // [{id,name,absences,justified,presences}]
 
   // Load docs/devoirs
   useEffect(() => {
@@ -159,7 +177,7 @@ export default function AdminDashboard() {
         setDocs(unwrap(dRes));
         setHws(unwrap(hRes));
       } catch {
-        // show defaults
+        // ignore
       } finally {
         if (mounted) setLoading(false);
       }
@@ -167,7 +185,7 @@ export default function AdminDashboard() {
     return () => { mounted = false; };
   }, []);
 
-  // Load attendance summary
+  // Load global attendance summary
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -181,11 +199,12 @@ export default function AdminDashboard() {
           period: data?.period ?? null,
         });
       } catch {
-        if (alive) setAtt({
-          totals: { absences: 0, justified_absences: 0, presences: 0, attendance_rate: 0 },
-          top: [],
-          period: null,
-        });
+        if (alive)
+          setAtt({
+            totals: { absences: 0, justified_absences: 0, presences: 0, attendance_rate: 0 },
+            top: [],
+            period: null,
+          });
       } finally {
         if (alive) setAttLoading(false);
       }
@@ -193,6 +212,74 @@ export default function AdminDashboard() {
     return () => { alive = false; };
   }, [attPeriod]);
 
+  // Load degrees once
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await axiosClient.get("/admin/degrees", { params: { per_page: 500 } });
+        const payload = res?.data?.data ?? res?.data ?? [];
+        const list = Array.isArray(payload) ? payload : (payload.items ?? []);
+        setDegrees(list.map((d) => ({ id: d.id, name: d.name })));
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // Build degree-aware data when filter/period/degrees change
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setDegLoading(true);
+      try {
+        if (degFilter === "all") {
+          // Per-degree totals (limit to first 8 to keep chart readable)
+          const sample = degrees.slice(0, 8);
+          const results = await Promise.all(
+            sample.map(async (d) => {
+              const res = await AttendanceApi.list({ degree_id: d.id, page: 1, per_page: 1000, period: attPeriod });
+              const items = res?.items ?? res ?? [];
+              const agg = items.reduce(
+                (a, r) => {
+                  a.absences += Number(r?.attendance?.absences || 0);
+                  a.justified += Number(r?.attendance?.justified_absences || 0);
+                  a.presences += Number(r?.attendance?.presences || 0);
+                  return a;
+                },
+                { absences: 0, justified: 0, presences: 0 }
+              );
+              return { id: d.id, name: d.name, ...agg };
+            })
+          );
+          if (!alive) return;
+          setDegTotals(results);
+          setDegStudents([]);
+        } else {
+          // Selected degree → per-student rows
+          const res = await AttendanceApi.list({ degree_id: degFilter, page: 1, per_page: 1000, period: attPeriod });
+          const items = res?.items ?? res ?? [];
+          const rows = items.map((r) => ({
+            id: r.id,
+            name: `${r.firstname ?? ""} ${r.lastname ?? ""}`.trim() || r.email,
+            absences: Number(r?.attendance?.absences || 0),
+            justified: Number(r?.attendance?.justified_absences || 0),
+            presences: Number(r?.attendance?.presences || 0),
+          }));
+          rows.sort((a, b) => (b.absences + b.justified) - (a.absences + a.justified));
+          if (!alive) return;
+          setDegStudents(rows);
+          setDegTotals([]);
+        }
+      } catch {
+        if (alive) { setDegTotals([]); setDegStudents([]); }
+      } finally {
+        if (alive) setDegLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [degFilter, attPeriod, degrees]);
+
+  // Series for docs / homeworks
   const seriesDocs = useMemo(() => buildDailySeries(docs, "created_at", "Documents"), [docs]);
   const seriesHws = useMemo(() => buildDailySeries(hws, "created_at", "Devoirs"), [hws]);
   const seriesMerge = useMemo(() => {
@@ -301,24 +388,41 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Attendance block (period-selectable) */}
+        {/* Attendance block (period + degree aware) */}
         <Card className="xl:col-span-3 overflow-hidden">
           <CardContent className="p-0">
             <Header title="Présence & Absences" icon={<UserX className="h-4 w-4" />} />
             <div className="px-4 pb-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Période:</span>
-                  <select
-                    value={attPeriod}
-                    onChange={(e) => setAttPeriod(e.target.value)}
-                    className="h-8 rounded-md border px-2 text-sm"
-                  >
-                    <option value="week">Cette semaine</option>
-                    <option value="month">Ce mois</option>
-                    <option value="overall">Global</option>
-                  </select>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Période:</span>
+                    <select
+                      value={attPeriod}
+                      onChange={(e) => setAttPeriod(e.target.value)}
+                      className="h-8 rounded-md border px-2 text-sm"
+                    >
+                      <option value="week">Cette semaine</option>
+                      <option value="month">Ce mois</option>
+                      <option value="overall">Global</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Classe:</span>
+                    <select
+                      value={String(degFilter)}
+                      onChange={(e) => setDegFilter(e.target.value)}
+                      className="h-8 rounded-md border px-2 text-sm min-w-[160px]"
+                    >
+                      <option value="all">Toutes les classes</option>
+                      {degrees.slice(0, 20).map((d) => (
+                        <option key={d.id} value={String(d.id)}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
+
                 <Link to="/admin/presences" className="text-sm underline">Ouvrir la gestion des présences</Link>
               </div>
 
@@ -341,30 +445,55 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              {/* Distribution bar */}
-              <div className="mt-4 h-[260px]">
-                {attLoading ? (
+              {/* Degree-aware charts */}
+              <div className="mt-4 h-[320px]">
+                {(attLoading || degLoading) ? (
                   <div className="text-sm text-muted-foreground p-4">Chargement…</div>
+                ) : degFilter === "all" ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={degTotals.map((d) => ({
+                        id: d.id,
+                        name: d.name,
+                        Absences: d.absences,
+                        Justifiées: d.justified,
+                        Présences: d.presences,
+                      }))}
+                      margin={{ top: 10, right: 20, bottom: 0, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="Absences" fill="#ef4444" />
+                      <Bar dataKey="Justifiées" fill="#f59e0b" />
+                      <Bar dataKey="Présences">
+                        {degTotals.map((entry, index) => (
+                          <Cell key={`cell-pres-${index}`} fill={colorForDegree(entry.id)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={[
-                        {
-                          name: att?.period?.key ?? attPeriod,
-                          "Unexcusées": att.totals.absences,
-                          "Justifiées": att.totals.justified_absences,
-                          "Présences": att.totals.presences,
-                        },
-                      ]}
+                      data={degStudents.map((s) => ({
+                        name: s.name,
+                        Absences: s.absences,
+                        Justifiées: s.justified,
+                        Présences: s.presences,
+                      }))}
+                      margin={{ top: 10, right: 20, bottom: 40, left: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis allowDecimals={false} />
+                      <XAxis dataKey="name" angle={-20} textAnchor="end" interval={0} height={60} tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                       <Tooltip />
                       <Legend />
-                      <Bar stackId="a" dataKey="Unexcusées" />
-                      <Bar stackId="a" dataKey="Justifiées" />
-                      <Bar dataKey="Présences" />
+                      <Bar dataKey="Absences" fill="#ef4444" />
+                      <Bar dataKey="Justifiées" fill="#f59e0b" />
+                      <Bar dataKey="Présences" fill={colorForDegree(degFilter)} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
