@@ -41,7 +41,7 @@ const ADMIN_MESSAGES_ROUTE = "/admin/messages";
 const ADMIN_DOCUMENTS_ROUTE = "/admin/documents";
 const ADMIN_DOCUMENTS_HOMEWORK = "/admin/devoirs";
 const ADMIN_SETTINGS_ROUTE = "/admin/paramètres";
-const ADMIN_ROLES_ROUTE = "/admin/roles";
+const ADMIN_PRESENCE_ROUTE = "/admin/presences";
 const ADMIN_NOTIFICATIONS_ROUTE = "/admin/notifications";
 
 /**
@@ -88,7 +88,7 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
     {
       title: "Système",
       items: [
-        { label: "Rôles & permissions", to: ADMIN_ROLES_ROUTE, icon: ShieldCheck },
+        { label: "Présence & Absences ", to: ADMIN_PRESENCE_ROUTE, icon: ShieldCheck },
         { label: "Paramètres", to: ADMIN_SETTINGS_ROUTE, icon: Settings },
       ],
     },

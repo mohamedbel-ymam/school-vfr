@@ -12,10 +12,12 @@ import {
   Users,
   FilePlus2,
   ClipboardPlus,
-  Settings2,
   ShieldCheck,
   LineChart as LineChartIcon,
   Bell,
+  UserX,
+  AlertTriangle,
+  Activity,
 } from "lucide-react";
 
 // Charts
@@ -32,18 +34,18 @@ import {
   Legend,
 } from "recharts";
 
-// APIs existantes de ton projet (on reste prudents en vérifiant les méthodes)
+// APIs
 import DocumentApi from "../../../services/api/DocumentApi.js";
 import HomeworkApi from "../../../services/api/HomeworkApi.js";
+import AttendanceApi from "../../../services/api/admin/AttendanceApi.js";
 
-// On réutilise le background animé générique
+// Background
 import SubjectBackground from "../../teacher/SubjectBackground.jsx";
-
 import { useAuth } from "../../../context/AuthContext.jsx";
 
 const unwrap = (r) => r?.data?.data?.data ?? r?.data?.data ?? [];
 
-// Thème spécial ADMIN (motifs engrenages / étoiles / losanges)
+// Thème spécial ADMIN
 const ADMIN_THEME = {
   from: "from-slate-600/20",
   to: "to-sky-600/10",
@@ -52,9 +54,8 @@ const ADMIN_THEME = {
   motifs: ["⚙", "◆", "▦", "✦", "▤", "∞"],
 };
 
-// Utilitaires
+// Utils
 const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
-
 function rangeDays(n = 14) {
   const out = [];
   const now = new Date();
@@ -65,9 +66,7 @@ function rangeDays(n = 14) {
   }
   return out;
 }
-
 function buildDailySeries(items, createdKey = "created_at", label = "Valeur") {
-  // Construit une série par jour (14 derniers jours) à partir de created_at
   const days = rangeDays(14);
   const map = Object.fromEntries(days.map((k) => [k, 0]));
   for (const it of items || []) {
@@ -78,7 +77,6 @@ function buildDailySeries(items, createdKey = "created_at", label = "Valeur") {
   }
   return days.map((k) => ({ date: k, [label]: map[k] }));
 }
-
 function numberFmt(n) {
   if (n == null) return "—";
   const x = Number(n);
@@ -86,14 +84,56 @@ function numberFmt(n) {
   return x.toLocaleString();
 }
 
+function Header({ title, icon }) {
+  return (
+    <div className="p-4">
+      <div className="flex items-center gap-2">
+        {icon}
+        <h3 className="text-base font-semibold">{title}</h3>
+      </div>
+      <Separator className="mt-3" />
+    </div>
+  );
+}
+function EmptyState({ text, action }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border p-4">
+      <p className="text-sm text-muted-foreground">{text}</p>
+      {action}
+    </div>
+  );
+}
+
+function riskStatus(abs, just) {
+  const a = +abs || 0;
+  const j = +just || 0;
+  const total = a + j;
+  if (a >= 3 || total >= 5)
+    return { label: "Danger", className: "bg-red-100 text-red-700 border-red-200" };
+  if (a >= 1 || total >= 3)
+    return { label: "Attention", className: "bg-amber-100 text-amber-700 border-amber-200" };
+  return { label: "OK", className: "bg-green-100 text-green-700 border-green-200" };
+}
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const adminFullName = `${user?.firstname ?? ""} ${user?.lastname ?? ""}`.trim();
 
+  // Docs / Devoirs
   const [docs, setDocs] = useState([]);
   const [hws, setHws] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Attendance
+  const [attPeriod, setAttPeriod] = useState("month"); // 'week' | 'month' | 'overall'
+  const [att, setAtt] = useState({
+    totals: { absences: 0, justified_absences: 0, presences: 0, attendance_rate: 0 },
+    top: [],
+    period: null,
+  });
+  const [attLoading, setAttLoading] = useState(true);
+
+  // Load docs/devoirs
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -118,21 +158,44 @@ export default function AdminDashboard() {
         if (!mounted) return;
         setDocs(unwrap(dRes));
         setHws(unwrap(hRes));
-      } catch (e) {
-        // On laisse le dashboard s'afficher avec des valeurs par défaut
+      } catch {
+        // show defaults
       } finally {
         if (mounted) setLoading(false);
       }
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
+
+  // Load attendance summary
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setAttLoading(true);
+      try {
+        const data = await AttendanceApi.summary({ period: attPeriod });
+        if (!alive) return;
+        setAtt({
+          totals: data?.totals ?? { absences: 0, justified_absences: 0, presences: 0, attendance_rate: 0 },
+          top: data?.top ?? [],
+          period: data?.period ?? null,
+        });
+      } catch {
+        if (alive) setAtt({
+          totals: { absences: 0, justified_absences: 0, presences: 0, attendance_rate: 0 },
+          top: [],
+          period: null,
+        });
+      } finally {
+        if (alive) setAttLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [attPeriod]);
 
   const seriesDocs = useMemo(() => buildDailySeries(docs, "created_at", "Documents"), [docs]);
   const seriesHws = useMemo(() => buildDailySeries(hws, "created_at", "Devoirs"), [hws]);
   const seriesMerge = useMemo(() => {
-    // fusionne Docs & Devoirs par date pour un bar chart comparatif
     const map = new Map();
     for (const row of seriesDocs) map.set(row.date, { date: row.date, Documents: row.Documents });
     for (const row of seriesHws) {
@@ -143,30 +206,17 @@ export default function AdminDashboard() {
   }, [seriesDocs, seriesHws]);
 
   const kpis = [
-    {
-      title: "Docs (aperçu)",
-      value: numberFmt(docs?.length ?? 0),
-      icon: <FileText className="h-4 w-4" />,
-      to: "/admin/documents",
-    },
-    {
-      title: "Devoirs (aperçu)",
-      value: numberFmt(hws?.length ?? 0),
-      icon: <ClipboardList className="h-4 w-4" />,
-      to: "/admin/devoirs",
-    },
-    {
-      title: "Notif. récentes",
-      value: "—", // branche à ton endpoint notif si dispo
-      icon: <Bell className="h-4 w-4" />,
-      to: "/admin/notifications",
-    },
-    {
-      title: "Sécurité",
-      value: "OK",
-      icon: <ShieldCheck className="h-4 w-4" />,
-      to: "/admin/parametres",
-    },
+    { title: "Docs (aperçu)", value: numberFmt(docs?.length ?? 0), icon: <FileText className="h-4 w-4" />, to: "/admin/documents" },
+    { title: "Devoirs (aperçu)", value: numberFmt(hws?.length ?? 0), icon: <ClipboardList className="h-4 w-4" />, to: "/admin/devoirs" },
+    { title: "Notif. récentes", value: "—", icon: <Bell className="h-4 w-4" />, to: "/admin/notifications" },
+    { title: "Sécurité", value: "OK", icon: <ShieldCheck className="h-4 w-4" />, to: "/admin/parametres" },
+  ];
+
+  const attCards = [
+    { title: "Absences (non just.)", value: numberFmt(att.totals.absences), icon: <AlertTriangle className="h-4 w-4" /> },
+    { title: "Absences justifiées", value: numberFmt(att.totals.justified_absences), icon: <Calendar className="h-4 w-4" /> },
+    { title: "Présences", value: numberFmt(att.totals.presences), icon: <Activity className="h-4 w-4" /> },
+    { title: "Taux de présence", value: `${numberFmt(att.totals.attendance_rate)}%`, icon: <LineChartIcon className="h-4 w-4" /> },
   ];
 
   return (
@@ -207,7 +257,6 @@ export default function AdminDashboard() {
                   <Users className="h-4 w-4" /> Gérer les parents
                 </Button>
               </Link>
-              
               <Link to="/admin/documents">
                 <Button size="sm" className="gap-2">
                   <FilePlus2 className="h-4 w-4" /> Documents
@@ -218,12 +267,11 @@ export default function AdminDashboard() {
                   <ClipboardPlus className="h-4 w-4" /> Devoirs
                 </Button>
               </Link>
-              <Link to="/admin/paramètres">
+              <Link to="/admin/presences">
                 <Button size="sm" variant="outline" className="gap-2">
-                  <Users className="h-4 w-4" /> Paramètres
+                  <UserX className="h-4 w-4" /> Présences
                 </Button>
               </Link>
-              
             </div>
           </div>
         </div>
@@ -252,6 +300,121 @@ export default function AdminDashboard() {
             </Card>
           ))}
         </div>
+
+        {/* Attendance block (period-selectable) */}
+        <Card className="xl:col-span-3 overflow-hidden">
+          <CardContent className="p-0">
+            <Header title="Présence & Absences" icon={<UserX className="h-4 w-4" />} />
+            <div className="px-4 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Période:</span>
+                  <select
+                    value={attPeriod}
+                    onChange={(e) => setAttPeriod(e.target.value)}
+                    className="h-8 rounded-md border px-2 text-sm"
+                  >
+                    <option value="week">Cette semaine</option>
+                    <option value="month">Ce mois</option>
+                    <option value="overall">Global</option>
+                  </select>
+                </div>
+                <Link to="/admin/presences" className="text-sm underline">Ouvrir la gestion des présences</Link>
+              </div>
+
+              {/* KPIs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                {attCards.map((c, idx) => (
+                  <Card key={idx}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-muted-foreground">{c.title}</p>
+                          <p className="text-2xl font-semibold mt-1">{attLoading ? "…" : c.value}</p>
+                        </div>
+                        <div className="h-9 w-9 rounded-xl bg-muted/60 grid place-items-center">
+                          {c.icon}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Distribution bar */}
+              <div className="mt-4 h-[260px]">
+                {attLoading ? (
+                  <div className="text-sm text-muted-foreground p-4">Chargement…</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[
+                        {
+                          name: att?.period?.key ?? attPeriod,
+                          "Unexcusées": att.totals.absences,
+                          "Justifiées": att.totals.justified_absences,
+                          "Présences": att.totals.presences,
+                        },
+                      ]}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar stackId="a" dataKey="Unexcusées" />
+                      <Bar stackId="a" dataKey="Justifiées" />
+                      <Bar dataKey="Présences" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Top at-risk list */}
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold mb-2">Élèves à risque (top)</h4>
+                {attLoading ? (
+                  <div className="text-sm text-muted-foreground">Chargement…</div>
+                ) : att.top.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Aucun signalement pour la période.</div>
+                ) : (
+                  <ul className="space-y-2">
+                    {att.top.map((t) => {
+                      const rs = riskStatus(t.absences, t.justified_absences);
+                      const initials = ((t.student.firstname?.[0] ?? "?") + (t.student.lastname?.[0] ?? "")).toUpperCase();
+                      return (
+                        <li key={t.student.id} className="flex items-center justify-between rounded-lg border p-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-8 w-8 shrink-0 rounded-full bg-slate-100 grid place-content-center text-xs font-semibold">
+                              {initials}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">
+                                {t.student.firstname} {t.student.lastname}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                Abs: {t.absences} (just.: {t.justified_absences}) · Prés: {t.presences}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-xs px-2 py-1 rounded border ${rs.className}`}>{rs.label}</span>
+                            <Link
+                              to={`/admin/presences?q=${encodeURIComponent(t.student.lastname ?? "")}`}
+                              className="text-xs underline"
+                            >
+                              Revoir
+                            </Link>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Chart 1: Activité documents (ligne) */}
         <Card className="xl:col-span-2 overflow-hidden">
@@ -362,27 +525,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
-}
-
-function Header({ title, icon }) {
-  return (
-    <div className="p-4">
-      <div className="flex items-center gap-2">
-        {icon}
-        <h3 className="text-base font-semibold">{title}</h3>
-      </div>
-      <Separator className="mt-3" />
-    </div>
-  );
-}
-
-function EmptyState({ text, action }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border p-4">
-      <p className="text-sm text-muted-foreground">{text}</p>
-      {action}
     </div>
   );
 }

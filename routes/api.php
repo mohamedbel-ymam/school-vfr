@@ -21,6 +21,10 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminUserCrudController;
 use App\Http\Controllers\Auth\MeController;
 
+// NEW: Attendance (Admin)
+use App\Http\Controllers\Admin\AttendanceController;
+use App\Http\Controllers\Api\AttendanceReadController;
+
 /*
 |--------------------------------------------------------------------------
 | Public / unauthenticated
@@ -30,8 +34,8 @@ use App\Http\Controllers\Auth\MeController;
 Route::get('/degrees', [DegreeController::class, 'index']);
 
 Route::prefix('evenements')->group(function () {
-    Route::get('/',       [PublicEventController::class, 'index']);
-    Route::get('/{event}',[PublicEventController::class, 'show']);
+    Route::get('/',        [PublicEventController::class, 'index']);
+    Route::get('/{event}', [PublicEventController::class, 'show']);
 });
 
 /*
@@ -46,16 +50,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/me/password', [AccountController::class, 'updatePassword']);
 
     // ---- Notifications (per-user)
-    Route::get( 'notifications',            [NotificationController::class, 'index']);
-    Route::post('notifications/{id}/read',  [NotificationController::class, 'markRead']);
-    Route::post('notifications/read-all',   [NotificationController::class, 'markAllRead']);
+    Route::get( 'notifications',           [NotificationController::class, 'index']);
+    Route::post('notifications/{id}/read', [NotificationController::class, 'markRead']);
+    Route::post('notifications/read-all',  [NotificationController::class, 'markAllRead']);
 
     /*
     |--------------------------------------------------------------------------
     | Admin area
     |--------------------------------------------------------------------------
     */
-    Route::middleware('role:admin')->prefix('admin')->group(function () {
+    Route::middleware('role:admin|superadmin')->prefix('admin')->group(function () {
         // NOTE: if you use route:cache in prod, avoid closures. Replace with a controller if needed.
         Route::get('ping', fn () => response()->json(['ok' => true]));
 
@@ -106,6 +110,18 @@ Route::middleware('auth:sanctum')->group(function () {
         // Devoirs (admin)
         Route::get(   'devoirs',              [HomeworkController::class, 'adminIndex']);
         Route::delete('devoirs/{homework}',   [HomeworkController::class, 'destroy']);
+
+        // ------------------------------
+        // Attendance (matches your React)
+        // ------------------------------
+        Route::get( 'attendance',                     [AttendanceController::class, 'index']);
+        Route::put( 'attendance/bulk',                [AttendanceController::class, 'bulkUpdate']);
+        Route::post('attendance/{student}/increment', [AttendanceController::class, 'increment'])
+            ->whereNumber('student');
+        Route::get('attendance/summary', [AttendanceController::class, 'summary']);
+
+        // If you decide to enforce a permission later:
+        // ->middleware('permission:manage attendance');
     });
 
     /*
@@ -150,5 +166,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('monthly-plans',   [MonthlyPlanViewController::class, 'parent']);
         Route::get('documents',       [DocumentController::class, 'parentIndex']);
         Route::get('devoirs',         [HomeworkController::class, 'parentIndex']);
+        Route::get('attendance',      [AttendanceReadController::class, 'me']);
     });
 });

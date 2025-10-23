@@ -110,7 +110,7 @@ export const ADMIN_SUBJECTS_ROUTE = "/admin/subjects";
 export const ADMIN_COURSES_ROUTE  = "/admin/courses";
 export const ADMIN_EXAMS_ROUTE    = "/admin/exams";
 export const ADMIN_MESSAGES_ROUTE = "/admin/messages";
-export const ADMIN_ROLES_ROUTE    = "/admin/roles";
+export const ADMIN_PRESENCE_ROUTE    = "/admin/presences";
 
 // Teacher extras
 export const TEACHER_COURSES_ROUTE = "/enseignant/courses";
@@ -249,7 +249,7 @@ export const router = createBrowserRouter([
       { path: "courses",            element: <NotYet /> },
       { path: "exams",              element: <NotYet /> },
       { path: "messages",           element: <NotYet /> },
-      { path: "roles",              element: <NotYet /> },
+      { path: "presences",              element: <NotYet /> },
     ],
   },
 
