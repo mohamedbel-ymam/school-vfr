@@ -64,6 +64,7 @@ import AdminDevoirs   from "@/components/admin/pages/AdminDevoirs.jsx";
 
 /* Placeholder */
 import NotYet from "@/pages/NotYet.jsx"; // file is NotYet.jsx (capital Y)
+import ManagePresence from "@/components/admin/pages/ManagePresence";
 
 /* ---------------- Route Constants ---------------- */
 
@@ -249,7 +250,7 @@ export const router = createBrowserRouter([
       { path: "courses",            element: <NotYet /> },
       { path: "exams",              element: <NotYet /> },
       { path: "messages",           element: <NotYet /> },
-      { path: "presences",              element: <NotYet /> },
+      { path: "presences",              element: <ManagePresence /> },
     ],
   },
 
