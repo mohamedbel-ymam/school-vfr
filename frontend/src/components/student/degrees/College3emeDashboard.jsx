@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext.jsx";
-import DashboardScaffold from "./_parts/DashboardScaffold.jsx";
+import DashboardScaffold from "../DashboardScaffold.jsx";
 import AttendanceApi from "../../../services/api/AttendanceApi.js";
 import { toast } from "sonner";
 
