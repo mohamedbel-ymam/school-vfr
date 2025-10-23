@@ -116,9 +116,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // ------------------------------
         Route::get( 'attendance',                     [AttendanceController::class, 'index']);
         Route::put( 'attendance/bulk',                [AttendanceController::class, 'bulkUpdate']);
-        Route::post('attendance/{student}/increment', [AttendanceController::class, 'increment'])
-            ->whereNumber('student');
-        Route::get('attendance/summary', [AttendanceController::class, 'summary']);
+        Route::post('attendance/{student}/increment', [AttendanceController::class, 'increment'])->whereNumber('student');
+        Route::get( 'attendance/summary',             [AttendanceController::class, 'summary']);
+    
 
         // If you decide to enforce a permission later:
         // ->middleware('permission:manage attendance');
@@ -152,6 +152,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('monthly-plans',   [MonthlyPlanViewController::class, 'student']);
         Route::get('documents',       [DocumentController::class, 'studentIndex']);
         Route::get('devoirs',         [HomeworkController::class, 'studentIndex']);
+        Route::get('attendance', [AttendanceReadController::class, 'me']); // NEW
+
     });
 
     /*
@@ -166,6 +168,5 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('monthly-plans',   [MonthlyPlanViewController::class, 'parent']);
         Route::get('documents',       [DocumentController::class, 'parentIndex']);
         Route::get('devoirs',         [HomeworkController::class, 'parentIndex']);
-        Route::get('attendance',      [AttendanceReadController::class, 'me']);
     });
 });

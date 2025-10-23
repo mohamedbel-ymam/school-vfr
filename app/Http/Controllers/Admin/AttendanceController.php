@@ -14,21 +14,22 @@ class AttendanceController extends Controller
 {
     /**
      * List students with attendance counters for a given period.
-     * period: overall | month | week
-     * Response shape matches your frontend: { data: { items: [...], meta: {...} } }
+     * Accepts filters: q, period ('overall'|'month'|'week'), degree_id
+     * Response: { data: { items: [...], meta: {...} } }
      */
     public function index(Request $request)
     {
-        $q       = trim((string) $request->query('q', ''));
-        $period  = $request->query('period', 'overall');   // overall|month|week
-        $perPage = (int) $request->query('per_page', 25);
-        $perPage = max(1, min(100, $perPage));
+        $q        = trim((string) $request->query('q', ''));
+        $period   = $request->query('period', 'overall');   // overall|month|week
+        $perPage  = max(1, min(100, (int) $request->query('per_page', 25)));
+        $degreeId = $request->query('degree_id');           // NEW: filter by degree
 
         [$scope, $key, $meta] = $this->resolveScopeAndKey($period);
 
-        // Pull students (role: student); include degree name if available
+        // Pull students (role: student); include degree name; apply search + degree filter
         $students = User::role('student')
             ->leftJoin('degrees', 'degrees.id', '=', 'users.degree_id')
+            ->when($degreeId, fn ($qb) => $qb->where('users.degree_id', $degreeId)) // ← degree filter
             ->when($q !== '', function ($qb) use ($q) {
                 $like = "%{$q}%";
                 $qb->where(function ($w) use ($like) {
@@ -70,9 +71,9 @@ class AttendanceController extends Controller
                     'name' => $u->degree_name,
                 ] : null,
                 'attendance' => [
-                    'absences'            => $s?->absences ?? 0,
-                    'justified_absences'  => $s?->justified_absences ?? 0,
-                    'presences'           => $s?->presences ?? 0,
+                    'absences'            => (int) ($s->absences ?? 0),
+                    'justified_absences'  => (int) ($s->justified_absences ?? 0),
+                    'presences'           => (int) ($s->presences ?? 0),
                 ],
             ];
         })->values();
@@ -88,6 +89,9 @@ class AttendanceController extends Controller
                         'scope' => $scope,
                         'key'   => $key,
                         'range' => $meta, // from/to for week or month
+                    ],
+                    'filters'  => [
+                        'degree_id' => $degreeId, // echo back applied filter
                     ],
                 ],
             ],
@@ -180,7 +184,6 @@ class AttendanceController extends Controller
     /**
      * Admin summary for dashboard widgets.
      * GET /api/admin/attendance/summary?period=overall|month|week
-     * Returns totals and a “top at-risk” list.
      */
     public function summary(Request $request)
     {
@@ -199,7 +202,7 @@ class AttendanceController extends Controller
         $total = $a + $j + $p;
         $attendance_rate = $total ? (int) round(($p / $total) * 100) : 0;
 
-        // Top students at risk (by unexcused absences, then total absences)
+        // Top at-risk students
         $top = AttendanceStat::query()
             ->where('scope', $scope)
             ->where('period_key', $key)
@@ -237,11 +240,9 @@ class AttendanceController extends Controller
 
     /**
      * Map UI period -> (scope, key, meta-range)
-     * key is used to uniquely identify the bucket to upsert into.
      */
     protected function resolveScopeAndKey(string $period): array
     {
-        // ensure app timezone; config('app.timezone') should be 'Africa/Casablanca'
         $now = CarbonImmutable::now();
 
         switch ($period) {

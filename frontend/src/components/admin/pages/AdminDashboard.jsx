@@ -37,7 +37,7 @@ import {
 // APIs
 import DocumentApi from "../../../services/api/DocumentApi.js";
 import HomeworkApi from "../../../services/api/HomeworkApi.js";
-import AttendanceApi from "../../../services/api/AttendenceApi.js";
+import AttendanceApi from "../../../services/api/AttendanceApi.js";
 
 // Background
 import SubjectBackground from "../../teacher/SubjectBackground.jsx";

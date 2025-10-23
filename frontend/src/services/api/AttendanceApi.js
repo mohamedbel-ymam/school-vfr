@@ -18,9 +18,9 @@ const AttendanceApi = {
    * @param {{ q?: string, page?: number, per_page?: number, period?: 'overall'|'month'|'week' }} params
    */
   async list(params = {}) {
-    const { q = "", page = 1, per_page = 25, period = "overall" } = params;
+    const { q = "", page = 1, per_page = 25, period = "overall",degree_id} = params;
     const res = await axiosClient.get("/admin/attendance", {
-      params: { q, page, per_page, period },
+      params: { q, page, per_page, period,degree_id },
     });
     return unwrap(res);
   },
