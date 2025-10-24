@@ -37,12 +37,6 @@ const toMins = (hhmm) => {
   const [h, m] = s.split(":").map(Number);
   return h * 60 + m;
 };
-const toSqlTime = (hhmm) => {
-  const s = parseTimeLike(hhmm);
-  if (!s) return null;
-  const [h, m] = s.split(":");
-  return `${PAD(h)}:${PAD(m)}:00`;
-};
 const numOrNull = (v) => {
   if (v === 0 || v === "0") return 0;
   if (v == null || v === "") return null;
@@ -72,6 +66,11 @@ const addDays = (date, n) => {
 };
 const sameMonday = (a, b) =>
   startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+const isSameDayIndex = (date, dow1to7) => {
+  const js = date.getDay(); // 0..6 (Sun..Sat)
+  const app = js === 0 ? 7 : js;
+  return app === dow1to7;
+};
 
 /* period fallback (if no times) */
 const SCHOOL_START_MINS = 9 * 60;
@@ -93,7 +92,17 @@ const parsePeriodToMins = (period) => {
   return null;
 };
 
-const unwrapLessons = (res) => res?.data?.data?.lessons ?? res?.data?.lessons ?? [];
+/* ── Make week() response robust (array or {lessons:[]}) ── */
+const unwrapLessons = (res) => {
+  const d = res?.data;
+  if (!d) return [];
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.data)) return d.data;
+  if (Array.isArray(d?.data?.data)) return d.data.data; // paginated resource
+  if (Array.isArray(d?.lessons)) return d.lessons;
+  if (Array.isArray(d?.data?.lessons)) return d.data.lessons;
+  return [];
+};
 
 /* colors */
 const slugify = (s = "") =>
@@ -131,7 +140,7 @@ const missingFields = (f) => {
   return miss;
 };
 
-// Teachers come from /admin/users?role=teacher (per your routes)
+// Teachers come from /admin/users?role=teacher
 async function fetchTeachers() {
   const res = await axiosClient.get("/admin/users", { params: { role: "teacher", per_page: 1000 } });
   const arr = res?.data?.data ?? res?.data ?? [];
@@ -160,17 +169,15 @@ export default function ManageTimeTables() {
 
   // form state
   const blank = {
-    
-  degree_id:  "…",    // required
-  subject_id: "…",    // required
-  teacher_id: "…",    // required
-  room_id:    "…",    // optional
-  day:        "1",    // 1..7 (or send day_of_week)
-  hour_from:  "09:00",// H:i  (or send start_time)
-  hour_to:    "10:30",// H:i  (or send end_time)
-  week_start: "2025-10-20",
-  title:      "…"
-
+    degree_id:  "",        // required
+    subject_id: "",        // required
+    teacher_id: "",        // required
+    room_id:    "",        // optional
+    day_of_week:"1",       // 1..7 (↤ fixed key)
+    start_time: "09:00",   // H:i
+    end_time:   "10:30",   // H:i
+    period:     "",        // optional alternative
+    title:      "",        // optional
   };
   const [form, setForm] = useState(blank);
   const [editingId, setEditingId] = useState(null);
@@ -289,104 +296,101 @@ export default function ManageTimeTables() {
   }, [byDay]);
   const range = maxM - minM;
 
-
   /* ─────────────── Save / Update / Delete ─────────────── */
-const hhmm = (v) => {
-  const s = parseTimeLike(v);
-  if (!s) return null;
-  const [h, m] = s.split(":");
-  return `${PAD(h)}:${PAD(m)}`;
-};
-
-const normalizePayload = (state) => {
-  const day = normalizeDow(state.day_of_week);
-
-  // cast to numbers or null (backend often uses integer rules)
-  const degree_id  = state.degree_id  ? Number(state.degree_id)  : null;
-  const subject_id = state.subject_id ? Number(state.subject_id) : null;
-  const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
-  const room_id    = state.room_id    ? Number(state.room_id)    : null;
-
-  // accept either explicit times OR a "period"
-  let hour_from = hhmm(state.start_time);
-  let hour_to   = hhmm(state.end_time);
-
-  if (!(hour_from && hour_to) && state.period) {
-    const p = parsePeriodToMins(state.period);
-    if (p) {
-      const [sm, em] = p;
-      hour_from = hhmm(`${Math.floor(sm/60)}:${PAD(sm%60)}`);
-      hour_to   = hhmm(`${Math.floor(em/60)}:${PAD(em%60)}`);
-    }
-  }
-
-  const miss = [];
-  if (!day) miss.push("Jour");
-  if (!degree_id)  miss.push("Niveau");
-  if (!subject_id) miss.push("Matière");
-  if (!teacher_id) miss.push("Enseignant");
-  if (!(hour_from && hour_to)) miss.push("Heures (début/fin ou période)");
-  if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
-
-  // 🔴 IMPORTANT: send only the keys many Laravel backends validate on
-  return {
-    degree_id,        // required|exists:degrees,id
-    subject_id,       // required|exists:subjects,id
-    teacher_id,       // required|exists:users,id (role:teacher)
-    room_id,          // nullable|exists:rooms,id
-    day,              // required|integer|between:1,7
-    hour_from,        // required|date_format:H:i
-    hour_to,          // required|date_format:H:i|after:hour_from
-    week_start: mondayIso, // required|date_format:Y-m-d
-    title: state.title?.trim() || null,
+  const hhmm = (v) => {
+    const s = parseTimeLike(v);
+    if (!s) return null;
+    const [h, m] = s.split(":");
+    return `${PAD(h)}:${PAD(m)}`;
   };
-};
 
+  const normalizePayload = (state) => {
+    const day_of_week = normalizeDow(state.day_of_week);
+
+    // cast to numbers or null (backend uses integer rules)
+    const degree_id  = state.degree_id  ? Number(state.degree_id)  : null;
+    const subject_id = state.subject_id ? Number(state.subject_id) : null;
+    const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
+    const room_id    = state.room_id    ? Number(state.room_id)    : null;
+
+    // accept either explicit times OR a "period"
+    let hour_from = hhmm(state.start_time);
+    let hour_to   = hhmm(state.end_time);
+
+    if (!(hour_from && hour_to) && state.period) {
+      const p = parsePeriodToMins(state.period);
+      if (p) {
+        const [sm, em] = p;
+        hour_from = hhmm(`${Math.floor(sm/60)}:${PAD(sm%60)}`);
+        hour_to   = hhmm(`${Math.floor(em/60)}:${PAD(em%60)}`);
+      }
+    }
+
+    const miss = [];
+    if (!day_of_week) miss.push("Jour");
+    if (!degree_id)  miss.push("Niveau");
+    if (!subject_id) miss.push("Matière");
+    if (!teacher_id) miss.push("Enseignant");
+    if (!(hour_from && hour_to)) miss.push("Heures (début/fin ou période)");
+    if (miss.length) throw new Error(`Champs requis manquants: ${miss.join(", ")}`);
+
+    // Send the exact keys your backend validates on
+    return {
+      degree_id,        // required|exists:degrees,id
+      subject_id,       // required|exists:subjects,id
+      teacher_id,       // required|exists:users,id
+      room_id,          // nullable|exists:rooms,id
+      day_of_week,      // required_without:day
+      hour_from,        // required_without:period
+      hour_to,          // required_without:period|after:hour_from
+      week_start: mondayIso, // optional/nullable in backend
+      title: state.title?.trim() || null,
+    };
+  };
 
   const onSubmit = async (e) => {
-  e?.preventDefault?.();
-  try {
-    setSaving(true);
-    const payload = normalizePayload(form);
-    console.log("POST /admin/timetables payload →", payload);
+    e?.preventDefault?.();
+    try {
+      setSaving(true);
+      const payload = normalizePayload(form);
+      console.log("POST /admin/timetables payload →", payload);
 
-    if (editingId) {
-      await TimeTableApi.update(editingId, payload);
-    } else {
-      await TimeTableApi.create(payload);
-    }
-
-    const res = await TimeTableApi.week({ week_start: mondayIso });
-    setLessons((unwrapLessons(res) ?? []).map((l) => ({
-      ...l,
-      day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
-      start_time: parseTimeLike(l?.start ?? l?.start_time ?? l?.from ?? l?.hour_from),
-      end_time: parseTimeLike(l?.end ?? l?.end_time ?? l?.to ?? l?.hour_to),
-      start_minutes: numOrNull(l?.start_minutes) ?? undefined,
-      end_minutes: numOrNull(l?.end_minutes) ?? undefined,
-      week_start: l?.week_start ?? mondayIso,
-    })));
-    setForm(blank);
-    setEditingId(null);
-    setErr("");
-  } catch (e2) {
-    const data = e2?.response?.data;
-    console.error("Timetable create failed (422):", data || e2);
-    let friendly = "Échec de l’enregistrement (422)";
-    if (data?.message) friendly = data.message;
-    if (data?.errors && typeof data.errors === "object") {
-      const lines = [];
-      for (const [field, arr] of Object.entries(data.errors)) {
-        if (Array.isArray(arr) && arr.length) lines.push(`• ${field}: ${arr[0]}`);
+      if (editingId) {
+        await TimeTableApi.update(editingId, payload);
+      } else {
+        await TimeTableApi.create(payload);
       }
-      if (lines.length) friendly += "\n" + lines.join("\n");
-    }
-    setErr(friendly);
-  } finally {
-    setSaving(false);
-  }
-};
 
+      const res = await TimeTableApi.week({ week_start: mondayIso });
+      setLessons((unwrapLessons(res) ?? []).map((l) => ({
+        ...l,
+        day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
+        start_time: parseTimeLike(l?.start ?? l?.start_time ?? l?.from ?? l?.hour_from),
+        end_time: parseTimeLike(l?.end ?? l?.end_time   ?? l?.to   ?? l?.hour_to),
+        start_minutes: numOrNull(l?.start_minutes) ?? undefined,
+        end_minutes: numOrNull(l?.end_minutes) ?? undefined,
+        week_start: l?.week_start ?? mondayIso,
+      })));
+      setForm(blank);
+      setEditingId(null);
+      setErr("");
+    } catch (e2) {
+      const data = e2?.response?.data;
+      console.error("Timetable create failed (422):", data || e2);
+      let friendly = "Échec de l’enregistrement (422)";
+      if (data?.message) friendly = data.message;
+      if (data?.errors && typeof data.errors === "object") {
+        const lines = [];
+        for (const [field, arr] of Object.entries(data.errors)) {
+          if (Array.isArray(arr) && arr.length) lines.push(`• ${field}: ${arr[0]}`);
+        }
+        if (lines.length) friendly += "\n" + lines.join("\n");
+      }
+      setErr(friendly);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const onEdit = (l) => {
     setEditingId(l.id);

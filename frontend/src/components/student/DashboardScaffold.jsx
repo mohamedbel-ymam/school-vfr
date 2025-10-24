@@ -143,11 +143,7 @@ export default function DashboardScaffold({
               <option value="overall">Global</option>
             </select>
           )}
-          {onBack && (
-            <Button variant="outline" onClick={onBack}>
-              Changer de filière
-            </Button>
-          )}
+          
         </div>
       </div>
 
