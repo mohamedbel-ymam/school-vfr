@@ -247,6 +247,18 @@ const buildIcs = (events) => {
   lines.push("END:VCALENDAR");
   return lines.filter(Boolean).join("\r\n");
 };
+const getDegreeName = (l) =>
+  l?.degree?.name ??
+  l?.timetable?.degree?.name ??
+  (typeof l?.degree === "string" ? l.degree : null) ??
+  (l?.degree_id != null ? `Niveau #${l.degree_id}` : null) ??
+  "Niveau";
+
+const getDegreeId = (l) =>
+  l?.degree?.id ??
+  l?.timetable?.degree?.id ??
+  l?.degree_id ??
+  getDegreeName(l);
 
 /* API fallback if TimeTableApi.teacher is not present */
 const TEACHER_ENDPOINT = "/enseignant/emploi-du-temps";
@@ -333,27 +345,25 @@ export default function TeacherTimetable() {
   }, [lessons]);
 
   const degrees = useMemo(() => {
-    const m = new Map();
-    for (const l of lessons ?? []) {
-      const id = l?.degree?.id ?? l?.degree_id ?? l?.timetable?.degree?.id ?? l?.timetable?.degree?.name ?? "degree";
-      const name = l?.degree?.name ?? l?.degree_name ?? l?.timetable?.degree?.name ?? "Niveau";
-      m.set(String(id), name);
-    }
-    return [...m.entries()].map(([id, name]) => ({ id, name }));
-  }, [lessons]);
+  const m = new Map();
+  for (const l of lessons ?? []) {
+    const id = String(getDegreeId(l));
+    const name = getDegreeName(l);
+    m.set(id, name);
+  }
+  return [...m.entries()].map(([id, name]) => ({ id, name }));
+}, [lessons]);
 
-  const filtered = useMemo(() => {
-    let arr = lessons ?? [];
-    if (subjectFilter) arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
-    if (degreeFilter) {
-      arr = arr.filter(
-        (l) =>
-          String(l?.degree?.id ?? l?.degree_id ?? l?.timetable?.degree?.id ?? l?.timetable?.degree?.name) ===
-          String(degreeFilter)
-      );
-    }
-    return arr;
-  }, [lessons, subjectFilter, degreeFilter]);
+ const filtered = useMemo(() => {
+  let arr = lessons ?? [];
+  if (subjectFilter) {
+    arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
+  }
+  if (degreeFilter) {
+    arr = arr.filter((l) => String(getDegreeId(l)) === String(degreeFilter));
+  }
+  return arr;
+}, [lessons, subjectFilter, degreeFilter]);
 
   const hasTimed = useMemo(() => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))), [filtered]);
 
@@ -606,36 +616,47 @@ function WeekGrid({ lessons, monday }) {
                       const leftPct = laneIndex * widthPct;
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Cours";
-                      const solid = subjectSolid(l);
-                      const degreeFull = l.degree?.name ?? l.timetable?.degree?.name ?? "Niveau";
+                      const c = subjectBlockColors(l);
+                      const degreeFull  = getDegreeName(l);
                       const degreeShort = degreeAbbr(degreeFull);
                       const room = roomName(l);
                       const startS = parseTimeLike(getStartStr(l));
-                      const endS = parseTimeLike(getEndStr(l));
-
+                      const endS   = parseTimeLike(getEndStr(l));
                       return (
                         <div
-                          key={`${l.id ?? `${d.val}-${i}`}`}
-                          className={`absolute rounded-lg text-[11px] sm:text-sm overflow-hidden ${synthetic ? "ring-1 ring-white/60" : ""}`}
-                          title={`${degreeFull} • ${subjName}${room ? ` • ${room}` : ""}${startS && endS ? ` (${startS}–${endS})` : ""}`}
-                          style={{
-                            top: `${topPct}%`,
-                            height: `${heightPct}%`,
-                            left: `calc(${leftPct}% + 4px)`,
-                            width: `calc(${widthPct}% - 8px)`,
-                            backgroundColor: solid,
-                            color: "#fff",
-                            boxShadow: `0 6px 16px rgba(0,0,0,0.18)`,
-                            opacity: synthetic ? 0.9 : 1,
-                          }}
-                        >
-                          <div className="px-2 pt-1 font-semibold leading-tight truncate">{subjectAbbr(subjName)}</div>
-                          <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
-                            {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
-                          </div>
-                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
-                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
+                        key={`${l.id ?? `${d.val}-${i}`}`}
+                        className={`absolute rounded-lg text-[11px] sm:text-sm overflow-hidden ${synthetic ? "ring-1 ring-white/60" : ""}`}
+                        title={`${degreeFull} • ${subjName}${room ? ` • ${room}` : ""}${startS && endS ? ` (${startS}–${endS})` : ""}`}
+                        style={{
+                          top: `${topPct}%`,
+                          height: `${heightPct}%`,
+                          left: `calc(${leftPct}% + 4px)`,
+                          width: `calc(${widthPct}% - 8px)`,
+                          backgroundColor: c.border,
+                          color: "#fff",
+                          boxShadow: `0 6px 16px ${c.accent}44`,
+                          opacity: synthetic ? 0.9 : 1,
+                        }}
+                      >
+                        {/* subject + degree chip */}
+                        <div className="px-2 pt-1 font-semibold leading-tight truncate flex items-center gap-1">
+                          <span className="truncate">{subjectAbbr(subjName)}</span>
+                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-md bg-white/20 truncate max-w-[55%]" title={degreeFull}>
+                            {degreeFull}
+                          </span>
                         </div>
+                      
+                        {/* time */}
+                        <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
+                          {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
+                        </div>
+                      
+                        {/* room */}
+                        <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
+                      
+                        {/* tiny badge bottom-right */}
+                        <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
+                      </div>
                       );
                     })
                   )}
@@ -692,23 +713,30 @@ function AgendaList({ lessons, monday }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const degree = l.degree?.name ?? l.timetable?.degree?.name ?? "Niveau";
+                  const degree = getDegreeName(l);
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
-                    ? `(${pad2(Math.floor(mins[0] / 60))}:${pad2(mins[0] % 60)}–${pad2(Math.floor(mins[1] / 60))}:${pad2(mins[1] % 60)})`
+                    ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
+                                  
                   return (
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10">
+                        {/* degree chip FIRST so it’s obvious which class */}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
                           {degreeAbbr(degree)}
+                        </span>
+                        {/* subject (full name) */}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10">
+                          {l?.subject?.name ?? l?.subject_name ?? "Cours"}
                         </span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
                       <div className="text-xs text-foreground/80">{room || ""}</div>
                     </div>
                   );
+                  
                 })
               ) : (
                 <div className="text-xs text-muted-foreground">—</div>
