@@ -28,6 +28,62 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const _strip = (s = "") =>
   s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+const slugify = (s = "") =>
+  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
+const hueFromKey = (key) => (hashInt(String(key)) * 137.508) % 360;
+
+/* ---------- DEGREE extraction (robust) ---------- */
+const firstTruthy = (...a) => a.find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
+
+const asDegreeObj = (x, fallbackId) => {
+  if (!x) return null;
+  if (typeof x === "string") return { id: fallbackId ?? slugify(x), name: x };
+  return {
+    id: firstTruthy(x.id, fallbackId),
+    name: firstTruthy(x.name, x.title, x.label, x.fullname, x.full_name),
+    abbreviation: firstTruthy(x.abbreviation, x.abbr, x.short, x.short_name, x.code),
+  };
+};
+
+/* Try many possible backend shapes */
+const getDegreeObj = (l) => {
+  const cands = [
+    // canonical places
+    asDegreeObj(l?.degree, l?.degree_id),
+    asDegreeObj(l?.timetable?.degree, l?.timetable?.degree_id),
+    asDegreeObj(l?.classe?.degree), asDegreeObj(l?.class?.degree),
+    asDegreeObj(l?.classroom?.degree), asDegreeObj(l?.group?.degree),
+    asDegreeObj(l?.section?.degree), asDegreeObj(l?.division?.degree),
+
+    // flat fields
+    asDegreeObj(
+      {
+        name: firstTruthy(
+          l?.degree_name, l?.degreeLabel, l?.degree_title,
+          l?.niveau_name, l?.niveau, l?.level_name, l?.level,
+          // sometimes the "class" name is actually the degree stream (ex: 3AC, TC…)
+          l?.class_name, l?.classe_name, l?.class, l?.classe
+        ),
+        abbreviation: firstTruthy(
+          l?.degree_abbreviation, l?.degree_abbr, l?.degree_short, l?.degree_code,
+          l?.niveau_abbr, l?.level_abbr, l?.abbr, l?.code
+        ),
+      },
+      firstTruthy(l?.degree_id, l?.niveau_id, l?.level_id)
+    ),
+  ];
+
+  // last resort: if only an id exists
+  if (!cands.some(Boolean) && (l?.degree_id != null)) {
+    return { id: l.degree_id, name: `#${l.degree_id}` };
+  }
+
+  return cands.find(Boolean) ?? null;
+};
+
 const degreeAbbr = (name = "") => {
   const n = _strip(name);
   if (!n) return "Niv.";
@@ -40,80 +96,22 @@ const degreeAbbr = (name = "") => {
   const sp = /sciences?\s*phys|sp\b/.test(n);
   const svt = /\bsvt\b|sciences?\s*vie/.test(n);
   const l = /\blettres?\b|litt/i.test(n);
-  if (bac && one) {
-    if (sm) return "1Bac(SM)";
-    if (sp) return "1Bac(SP)";
-    if (svt) return "1Bac(SVT)";
-    if (l) return "1Bac(L)";
-    return "1Bac";
-  }
-  if (bac && two) {
-    if (sm) return "2Bac(SM)";
-    if (sp) return "2Bac(SP)";
-    if (svt) return "2Bac(SVT)";
-    if (l) return "2Bac(L)";
-    return "2Bac";
-  }
+  if (bac && one) return sm ? "1Bac(SM)" : sp ? "1Bac(SP)" : svt ? "1Bac(SVT)" : l ? "1Bac(L)" : "1Bac";
+  if (bac && two) return sm ? "2Bac(SM)" : sp ? "2Bac(SP)" : svt ? "2Bac(SVT)" : l ? "2Bac(L)" : "2Bac";
   return name.length > 10 ? name.slice(0, 10) + "…" : name;
 };
 
-const slugify = (s = "") =>
-  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
-const hueFromKey = (key) => (hashInt(String(key)) * 137.508) % 360;
-
-/* ----- DEGREE extraction (very robust) ----- */
-const firstTruthy = (...a) => a.find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
-const asDegreeObj = (x, fallbackId) => {
-  if (!x) return null;
-  if (typeof x === "string") return { id: fallbackId ?? slugify(x), name: x };
-  return {
-    id: firstTruthy(x.id, fallbackId),
-    name: firstTruthy(x.name, x.title, x.label),
-    abbreviation: firstTruthy(x.abbreviation, x.abbr, x.short, x.code),
-  };
-};
-const getDegreeObj = (l) => {
-  // candidates in priority order (cover most backends)
-  const cands = [
-    asDegreeObj(l?.degree, l?.degree_id),
-    asDegreeObj(l?.timetable?.degree, l?.timetable?.degree_id),
-    asDegreeObj(l?.timetable?.classe?.degree),
-    asDegreeObj(l?.timetable?.class?.degree),
-    asDegreeObj(l?.timetable?.classroom?.degree),
-    asDegreeObj(l?.classe?.degree),
-    asDegreeObj(l?.class?.degree),
-    asDegreeObj(l?.classroom?.degree),
-    asDegreeObj(l?.group?.degree),
-    asDegreeObj(l?.section?.degree),
-    asDegreeObj(l?.division?.degree),
-    // flat fields
-    asDegreeObj(
-      { name: firstTruthy(l?.degree_name, l?.degreeLabel, l?.degree_title),
-        abbreviation: firstTruthy(l?.degree_abbreviation, l?.degree_abbr, l?.degree_short, l?.degree_code) },
-      l?.degree_id
-    ),
-  ];
-  return cands.find(Boolean) ?? null;
-};
-const getDegreeName  = (l) => getDegreeObj(l)?.name  || "Sans niveau";
+const getDegreeName  = (l) => getDegreeObj(l)?.name || "Sans niveau";
 const getDegreeShort = (l) => getDegreeObj(l)?.abbreviation || degreeAbbr(getDegreeName(l));
 const getDegreeId    = (l) => firstTruthy(getDegreeObj(l)?.id, slugify(getDegreeName(l)));
 
-/* Color by DEGREE */
-const degreeKey = (l) => firstTruthy(getDegreeId(l), slugify(getDegreeName(l)));
+const degreeKey   = (l) => firstTruthy(getDegreeId(l), slugify(getDegreeName(l)));
 const degreeColors = (l) => {
   const h = hueFromKey(degreeKey(l));
-  return {
-    bg: `hsla(${h},85%,45%,0.20)`,
-    border: `hsl(${h},65%,45%)`,
-    accent: `hsl(${h},85%,45%)`,
-  };
+  return { bg: `hsla(${h},85%,45%,0.20)`, border: `hsl(${h},65%,45%)`, accent: `hsl(${h},85%,45%)` };
 };
 
-const roomName = (l) =>
-  l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
+const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
 const roomAbbr = (r) => {
   if (!r) return "";
   const s = String(r);
@@ -140,85 +138,46 @@ const startOfWeekMonday = (base = new Date()) => {
   d.setHours(0, 0, 0, 0);
   return d;
 };
-const addDays = (date, n) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-};
-const sameMonday = (a, b) =>
-  startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
-const isSameDayIndex = (date, dow1to7) => {
-  const js = date.getDay();
-  const ours = js === 0 ? 7 : js;
-  return ours === dow1to7;
-};
+const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() + n); return d; };
+const sameMonday = (a, b) => startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+const isSameDayIndex = (date, dow1to7) => { const js = date.getDay(); const ours = js === 0 ? 7 : js; return ours === dow1to7; };
 const inWeek = (date, monday) => {
-  const start = new Date(monday);
-  const end = addDays(monday, 6);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
+  const start = new Date(monday), end = addDays(monday, 6);
+  start.setHours(0,0,0,0); end.setHours(23,59,59,999);
   return date >= start && date <= end;
 };
 
 const parseTimeLike = (v) => {
   if (!v && v !== 0) return null;
   const s = String(v).trim();
-  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
-  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
-  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
-  if (m) return `${pad2(+m[1])}:${pad2(+(m[2] ?? 0))}`;
-  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
-  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
-  m = s.match(/^(\d{1,2})$/);
-  if (m) return `${pad2(+m[1])}:00`;
+  let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/); if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
+  m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);            if (m) return `${pad2(+m[1])}:${pad2(+(m[2] ?? 0))}`;
+  m = s.match(/^(\d{1,2})\.(\d{1,2})$/);                 if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
+  m = s.match(/^(\d{1,2})$/);                            if (m) return `${pad2(+m[1])}:00`;
   return null;
 };
-const toMins = (hhmm) => {
-  const s = parseTimeLike(hhmm);
-  if (!s) return null;
-  const [h, m] = s.split(":").map(Number);
-  return h * 60 + m;
-};
+const toMins = (hhmm) => { const s = parseTimeLike(hhmm); if (!s) return null; const [h,m]=s.split(":").map(Number); return h*60+m; };
 
 const pickFirst = (...vals) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
 const getStartStr = (l) => pickFirst(l?.start, l?.start_time, l?.from, l?.hour_from, l?.begin, l?.time_from) ?? null;
-const getEndStr   = (l) => pickFirst(l?.end, l?.end_time,   l?.to,   l?.hour_to,   l?.finish, l?.time_to) ?? null;
+const getEndStr   = (l) => pickFirst(l?.end,   l?.end_time,   l?.to,   l?.hour_to,   l?.finish, l?.time_to) ?? null;
 
-const numOrNull = (v) => {
-  if (v === 0 || v === "0") return 0;
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
-
+const numOrNull = (v) => { if (v === 0 || v === "0") return 0; if (v == null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 const parsePeriodToMins = (period) => {
   if (!period && period !== 0) return null;
   const s = String(period).trim();
   let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
-  if (m) {
-    const sm = toMins(m[1]), em = toMins(m[2]);
-    if (sm != null && em != null && em > sm) return [sm, em];
-  }
+  if (m) { const sm = toMins(m[1]), em = toMins(m[2]); if (sm!=null && em!=null && em>sm) return [sm,em]; }
   m = s.match(/(\d{1,2})/);
-  if (m) {
-    const idx = Math.max(1, Math.min(20, parseInt(m[1], 10)));
-    const start = SCHOOL_START_MINS + (idx - 1) * PERIOD_DURATION_MINS;
-    return [start, start + PERIOD_DURATION_MINS];
-  }
+  if (m) { const idx = Math.max(1, Math.min(20, parseInt(m[1], 10))); const start = SCHOOL_START_MINS + (idx - 1) * PERIOD_DURATION_MINS; return [start, start + PERIOD_DURATION_MINS]; }
   return null;
 };
 const resolveStartEndMins = (l) => {
-  const sm = numOrNull(l?.start_minutes);
-  const em = numOrNull(l?.end_minutes);
-  if (sm != null && em != null && em > sm) return [sm, em];
-
-  const s = toMins(getStartStr(l));
-  const e = toMins(getEndStr(l));
-  if (s != null && e != null && e > s) return [s, e];
-
-  const p = parsePeriodToMins(l?.period);
-  if (p) return p;
-
+  const sm = numOrNull(l?.start_minutes); const em = numOrNull(l?.end_minutes);
+  if (sm!=null && em!=null && em>sm) return [sm, em];
+  const s = toMins(getStartStr(l)); const e = toMins(getEndStr(l));
+  if (s!=null && e!=null && e>s) return [s, e];
+  const p = parsePeriodToMins(l?.period); if (p) return p;
   return null;
 };
 
@@ -234,17 +193,7 @@ const toIcsDate = (d) =>
 const buildIcs = (events) => {
   const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Takwa Etablissement//Enseignant Emploi du temps//EN"];
   for (const ev of events) {
-    lines.push(
-      "BEGIN:VEVENT",
-      `UID:${ev.uid}`,
-      `DTSTAMP:${toIcsDate(new Date())}`,
-      `DTSTART:${toIcsDate(ev.start)}`,
-      `DTEND:${toIcsDate(ev.end)}`,
-      `SUMMARY:${ev.title}`,
-      ev.location ? `LOCATION:${ev.location}` : "",
-      ev.desc ? `DESCRIPTION:${ev.desc.replace(/\n/g, "\\n")}` : "",
-      "END:VEVENT"
-    );
+    lines.push("BEGIN:VEVENT", `UID:${ev.uid}`, `DTSTAMP:${toIcsDate(new Date())}`, `DTSTART:${toIcsDate(ev.start)}`, `DTEND:${toIcsDate(ev.end)}`, `SUMMARY:${ev.title}`, ev.location ? `LOCATION:${ev.location}` : "", ev.desc ? `DESCRIPTION:${ev.desc.replace(/\n/g, "\\n")}` : "", "END:VEVENT");
   }
   lines.push("END:VCALENDAR");
   return lines.filter(Boolean).join("\r\n");
@@ -282,14 +231,8 @@ export default function TeacherTimetable() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const monday = useMemo(
-    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
-    [weekOffset]
-  );
-  const mondayIso = useMemo(
-    () => `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`,
-    [monday]
-  );
+  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
+  const mondayIso = useMemo(() => `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`, [monday]);
 
   useEffect(() => {
     let mounted = true;
@@ -347,10 +290,7 @@ export default function TeacherTimetable() {
     return arr;
   }, [lessons, degreeFilter]);
 
-  const hasTimed = useMemo(
-    () => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))),
-    [filtered]
-  );
+  const hasTimed = useMemo(() => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))), [filtered]);
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
@@ -370,6 +310,16 @@ export default function TeacherTimetable() {
             onToday={() => setWeekOffset(0)}
             onNext={() => setWeekOffset((w) => w + 1)}
           />
+          {/* Inline "Cette semaine" only when offset != 0 */}
+          {weekOffset !== 0 && (
+            <button
+              onClick={() => setWeekOffset(0)}
+              className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
+            >
+              Cette semaine
+            </button>
+          )}
+
           <Select
             value={degreeFilter}
             onChange={setDegreeFilter}
@@ -382,9 +332,7 @@ export default function TeacherTimetable() {
       </div>
 
       {view === "grid" ? (
-        hasTimed ? (
-          <WeekGrid lessons={filtered} monday={monday} />
-        ) : (
+        hasTimed ? <WeekGrid lessons={filtered} monday={monday} /> : (
           <div className="rounded-md border p-3 text-sm text-muted-foreground">
             Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
             ou basculez en vue <b>Agenda</b>.
@@ -394,7 +342,7 @@ export default function TeacherTimetable() {
         <AgendaList lessons={filtered} monday={monday} />
       )}
 
-      {/* NEW: floating 'Cette semaine' button, visible only when offset != 0 */}
+      {/* Floating FAB as a second safety (when user scrolls) */}
       <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
     </div>
   );
@@ -468,13 +416,9 @@ function WeekGrid({ lessons, monday }) {
 
   const { minM, maxM } = useMemo(() => {
     let min = Infinity, max = -Infinity;
-    for (const d of DAYS) {
-      for (const l of byDay.get(d.val) ?? []) {
-        const mins = resolveStartEndMins(l);
-        if (!mins) continue;
-        min = Math.min(min, mins[0]);
-        max = Math.max(max, mins[1]);
-      }
+    for (const d of DAYS) for (const l of byDay.get(d.val) ?? []) {
+      const mins = resolveStartEndMins(l); if (!mins) continue;
+      min = Math.min(min, mins[0]); max = Math.max(max, mins[1]);
     }
     if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) { min = 9 * 60; max = 12 * 60; }
     let minAdj = Math.floor((min - PAD_MINS) / 30) * 30;
@@ -483,7 +427,6 @@ function WeekGrid({ lessons, monday }) {
     maxAdj = clamp(maxAdj, minAdj + 60, HARD_MAX);
     return { minM: minAdj, maxM: maxAdj };
   }, [byDay]);
-
   const range = maxM - minM;
 
   const lanesByDay = useMemo(() => {
@@ -520,16 +463,8 @@ function WeekGrid({ lessons, monday }) {
     return out;
   }, [byDay, minM, maxM]);
 
-  const hourMarks = useMemo(() => {
-    const arr = [];
-    for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
-    return arr;
-  }, [minM, maxM]);
-  const halfHourMarks = useMemo(() => {
-    const arr = [];
-    for (let m = minM + 30; m < maxM; m += 60) arr.push(m);
-    return arr;
-  }, [minM, maxM]);
+  const hourMarks = useMemo(() => { const arr = []; for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m }); return arr; }, [minM, maxM]);
+  const halfHourMarks = useMemo(() => { const arr = []; for (let m = minM + 30; m < maxM; m += 60) arr.push(m); return arr; }, [minM, maxM]);
 
   const hasAny = useMemo(() => DAYS.some((d) => (byDay.get(d.val) ?? []).length), [byDay]);
   if (!hasAny) return <div className="rounded-md border p-3 text-sm text-muted-foreground">Aucune séance pour cette semaine.</div>;
@@ -623,13 +558,14 @@ function WeekGrid({ lessons, monday }) {
                         >
                           {/* DEGREE as main label */}
                           <div className="px-2 pt-1 font-semibold leading-tight truncate">{degreeFull}</div>
+                          {/* time */}
                           <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
                             {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
                           </div>
+                          {/* room */}
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
-                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">
-                            {degreeShort}
-                          </div>
+                          {/* tiny badge bottom-right */}
+                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
                         </div>
                       );
                     })
@@ -697,12 +633,8 @@ function AgendaList({ lessons, monday }) {
                   return (
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
-                          {short}
-                        </span>
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
-                          {degree}
-                        </span>
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>{short}</span>
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>{degree}</span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
                       <div className="text-xs text-foreground/80">{room || ""}</div>

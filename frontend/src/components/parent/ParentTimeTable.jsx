@@ -277,6 +277,15 @@ export default function ParentTimetable() {
             onToday={() => setWeekOffset(0)}
             onNext={() => setWeekOffset((w) => w + 1)}
           />
+                    
+          {weekOffset !== 0 && (
+            <button
+              onClick={() => setWeekOffset(0)}
+              className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
+            >
+              Cette semaine
+            </button>
+          )}
 
           <IcsButton
             childName={childLabel(currentChild)}
