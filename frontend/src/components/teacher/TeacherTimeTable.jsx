@@ -2,9 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../api/axios";
-import subjectColors from "../../config/subjectColors";
 
-/* ───────────────────────────── Constants ───────────────────────────── */
+/* ───────────── Constants ───────────── */
 const DAYS = [
   { label: "Lun", full: "Lundi", val: 1 },
   { label: "Mar", full: "Mardi", val: 2 },
@@ -15,110 +14,64 @@ const DAYS = [
   { label: "Dim", full: "Dimanche", val: 7 },
 ];
 
-// dynamic window clamps for grid
 const HARD_MIN = 7 * 60;
 const HARD_MAX = 22 * 60;
 const PAD_MINS = 30;
 
-// fallback for “period” parsing
 const SCHOOL_START_MINS = 9 * 60;
 const PERIOD_DURATION_MINS = 90;
 
-/* ───────────────────────────── Utils ───────────────────────────── */
+/* ───────────── Utils ───────────── */
 const pad2 = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 const _strip = (s = "") =>
   s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-/* Subject abbreviations (FR first) */
-const SUBJECT_ABBR = {
-  "physique & chimie": "PC",
-  "physique et chimie": "PC",
-  "physique-chimie": "PC",
-  "français": "FR",
-  "francais": "FR",
-  "mathématiques": "MA",
-  "mathematiques": "MA",
-  maths: "MA",
-  anglais: "AN",
-  arabe: "AR",
-  svt: "SVT",
-  "histoire géographie": "HG",
-  "histoire-geographie": "HG",
-  "histoire-géographie": "HG",
-  informatique: "INFO",
-  "éducation physique": "EPS",
-  "education physique": "EPS",
-  philosophie: "PHI",
-};
-const subjectAbbr = (name = "") => {
+const degreeAbbr = (name = "") => {
   const n = _strip(name);
-  if (SUBJECT_ABBR[n]) return SUBJECT_ABBR[n];
-  const letters = n
-    .split(/\s+/)
-    .filter((w) => w && !["de", "du", "et", "la", "le", "les"].includes(w))
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 4)
-    .toUpperCase();
-  return letters || name.slice(0, 4).toUpperCase();
-};
-
-/* Degree label helpers (use abbreviation when present) */
-const degreeLabelShort = (deg) => {
-  if (!deg) return "Niv.";
-  const abbr = deg.abbreviation ?? deg.short_name ?? deg.code ?? null;
-  if (abbr && String(abbr).trim()) return String(abbr).trim();
-  const name = deg.name ?? "";
-  return name.length > 10 ? name.slice(0, 10) + "…" : (name || "Niv.");
-};
-const degreeLabelFull = (deg) => {
-  if (!deg) return "Niveau";
-  const abbr = deg.abbreviation ?? deg.short_name ?? deg.code ?? null;
-  const name = deg.name ?? "";
-  return abbr && String(abbr).trim() ? `${abbr} • ${name || "Niveau"}` : (name || "Niveau");
-};
-
-/* Slug + deterministic hue for subject colors */
-const slugify = (s = "") =>
-  s
-    .normalize?.("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-const hashInt = (str) => {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  return h;
-};
-const hue = (key) => (hashInt(String(key)) * 137.508) % 360;
-
-/* Subject keys + colors */
-const subjectKey = (l) =>
-  l?.subject?.key ??
-  l?.subject?.id ??
-  l?.subject_id ??
-  slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
-
-const subjectFixedColor = (l) => {
-  const slug = slugify(l?.subject?.name ?? l?.subject_name ?? "") || null;
-  return slug ? subjectColors?.[slug] ?? null : null;
-};
-const subjectBlockColors = (l) => {
-  const fixed = subjectFixedColor(l);
-  if (fixed) {
-    return {
-      bg: `${fixed}22`,
-      border: fixed,
-      accent: fixed,
-    };
+  if (!n) return "Niv.";
+  if (/(^|\s)3(\s|e|eme|ème).*(college|collegue|colle|ac)/i.test(n)) return "3AC";
+  if (/tronc\s*commun|^tc$/.test(n)) return "TC";
+  const bac = n.includes("bac");
+  const one = /\b1\b|premiere|1ere|1re/.test(n);
+  const two = /\b2\b|deuxieme|2eme|2e/.test(n);
+  const sm = /sciences?\s*mat(h)?|sm\b/.test(n);
+  const sp = /sciences?\s*phys|sp\b/.test(n);
+  const svt = /\bsvt\b|sciences?\s*vie/.test(n);
+  const l = /\blettres?\b|litt/i.test(n);
+  if (bac && one) {
+    if (sm) return "1Bac(SM)";
+    if (sp) return "1Bac(SP)";
+    if (svt) return "1Bac(SVT)";
+    if (l) return "1Bac(L)";
+    return "1Bac";
   }
-  const key =
-    slugify(l?.subject?.name ?? l?.subject_name ?? "") ||
-    String(l?.subject?.id ?? l?.subject_id ?? "subject");
-  const h = hue(key);
+  if (bac && two) {
+    if (sm) return "2Bac(SM)";
+    if (sp) return "2Bac(SP)";
+    if (svt) return "2Bac(SVT)";
+    if (l) return "2Bac(L)";
+    return "2Bac";
+  }
+  return name.length > 10 ? name.slice(0, 10) + "…" : name;
+};
+
+const slugify = (s = "") =>
+  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
+const hueFromKey = (key) => (hashInt(String(key)) * 137.508) % 360;
+
+/* Color by DEGREE (not by subject) */
+const degreeKey = (l) =>
+  l?.timetable?.degree?.id ??
+  l?.degree?.id ??
+  l?.degree_id ??
+  slugify(l?.timetable?.degree?.name ?? l?.degree?.name ?? "degree");
+
+const degreeColors = (l) => {
+  const h = hueFromKey(degreeKey(l));
   return {
     bg: `hsla(${h},85%,45%,0.20)`,
     border: `hsl(${h},65%,45%)`,
@@ -236,6 +189,7 @@ const resolveStartEndMins = (l) => {
   return null;
 };
 
+/* unwrap */
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ??
   r?.data?.lessons ??
@@ -263,34 +217,27 @@ const buildIcs = (events) => {
   return lines.filter(Boolean).join("\r\n");
 };
 
-/* Degree getters (prefer nested degree object with name + abbreviation) */
-const getDegreeObj = (l) =>
-  l?.degree ??
-  l?.timetable?.degree ??
-  (typeof l?.degree === "object" ? l.degree : null) ??
-  null;
+const getDegreeName = (l) =>
+  l?.degree?.name ??
+  l?.timetable?.degree?.name ??
+  (typeof l?.degree === "string" ? l.degree : null) ??
+  (l?.degree_id != null ? `Niveau #${l.degree_id}` : null) ??
+  "Niveau";
 
-const getDegreeName = (l) => {
-  const deg = getDegreeObj(l);
-  if (deg?.name) return deg.name;
-  return "Niveau";
-};
-const getDegreeShort = (l) => degreeLabelShort(getDegreeObj(l));
 const getDegreeId = (l) =>
   l?.degree?.id ??
   l?.timetable?.degree?.id ??
   l?.degree_id ??
-  // if no id, fallback to full label so filter still groups logically
-  degreeLabelFull(getDegreeObj(l));
+  getDegreeName(l);
 
-/* API fallback if TimeTableApi.teacher is not present */
+/* API fallback */
 const TEACHER_ENDPOINT = "/enseignant/emploi-du-temps";
 const fetchTeacherWeek = async ({ week_start }) => {
   if (TimeTableApi?.teacher) return TimeTableApi.teacher({ week_start });
   return axiosClient.get(TEACHER_ENDPOINT, { params: { week_start } });
 };
 
-/* ───────────────────────────── Component ───────────────────────────── */
+/* ───────────── Component ───────────── */
 export default function TeacherTimetable() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -300,10 +247,9 @@ export default function TeacherTimetable() {
   const [view, setView] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "agenda" : "grid"
   );
-  const [subjectFilter, setSubjectFilter] = useState("");
   const [degreeFilter, setDegreeFilter] = useState("");
 
-  // auto switch to agenda on small screens (debounced)
+  // switch to agenda on small screens
   const resizeTimer = useRef();
   useEffect(() => {
     const onResize = () => {
@@ -331,7 +277,6 @@ export default function TeacherTimetable() {
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
 
-          // normalize time fields (prefer minutes)
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: numOrNull(l?.start_minutes) ?? undefined,
@@ -356,34 +301,23 @@ export default function TeacherTimetable() {
     return () => { mounted = false; };
   }, [mondayIso]);
 
-  /* Filters */
-  const subjects = useMemo(() => {
-    const m = new Map();
-    for (const l of lessons ?? []) {
-      const id = String(subjectKey(l));
-      const name = l?.subject?.name ?? l?.subject_name ?? "Matière";
-      m.set(id, name);
-    }
-    return [...m.entries()].map(([id, name]) => ({ id, name }));
-  }, [lessons]);
-
   const degrees = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
       const id = String(getDegreeId(l));
-      const obj = getDegreeObj(l);
-      const full = degreeLabelFull(obj);
-      m.set(id, full);
+      const name = getDegreeName(l);
+      m.set(id, name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
-    if (subjectFilter) arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
-    if (degreeFilter) arr = arr.filter((l) => String(getDegreeId(l)) === String(degreeFilter));
+    if (degreeFilter) {
+      arr = arr.filter((l) => String(getDegreeId(l)) === String(degreeFilter));
+    }
     return arr;
-  }, [lessons, subjectFilter, degreeFilter]);
+  }, [lessons, degreeFilter]);
 
   const hasTimed = useMemo(() => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))), [filtered]);
 
@@ -408,18 +342,7 @@ export default function TeacherTimetable() {
           <Select
             value={degreeFilter}
             onChange={setDegreeFilter}
-            options={[
-              { value: "", label: "Tous les niveaux" },
-              ...degrees.map((d) => ({ value: d.id, label: d.name })),
-            ]}
-          />
-          <Select
-            value={subjectFilter}
-            onChange={setSubjectFilter}
-            options={[
-              { value: "", label: "Toutes les matières" },
-              ...subjects.map((s) => ({ value: s.id, label: s.name })),
-            ]}
+            options={[{ value: "", label: "Tous les niveaux" }, ...degrees.map((d) => ({ value: d.id, label: d.name }))]}
           />
           <ViewToggle value={view} onChange={setView} />
           <IcsButton lessons={filtered} monday={monday} />
@@ -443,7 +366,7 @@ export default function TeacherTimetable() {
   );
 }
 
-/* ───────────────────────────── Small UI ───────────────────────────── */
+/* ───────────── Small UI ───────────── */
 function ToolbarSubtitle({ monday }) {
   const sunday = addDays(monday, 6);
   const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -474,7 +397,7 @@ function ViewToggle({ value, onChange }) {
   );
 }
 
-/* ───────────────────────────── Grid view ───────────────────────────── */
+/* ───────────── Grid view (DEGREE-first) ───────────── */
 function WeekGrid({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
@@ -641,11 +564,9 @@ function WeekGrid({ lessons, monday }) {
                       const widthPct = 100 / laneCount;
                       const leftPct = laneIndex * widthPct;
 
-                      const subjName = l?.subject?.name ?? l?.subject_name ?? "Cours";
-                      const c = subjectBlockColors(l);
-                      const degreeObj   = getDegreeObj(l);
-                      const degreeFull  = degreeLabelFull(degreeObj);
-                      const degreeShort = degreeLabelShort(degreeObj);
+                      const degreeFull  = getDegreeName(l);
+                      const degreeShort = degreeAbbr(degreeFull);
+                      const c = degreeColors(l);
                       const room = roomName(l);
                       const startS = parseTimeLike(getStartStr(l));
                       const endS   = parseTimeLike(getEndStr(l));
@@ -654,7 +575,7 @@ function WeekGrid({ lessons, monday }) {
                         <div
                           key={`${l.id ?? `${d.val}-${i}`}`}
                           className={`absolute rounded-lg text-[11px] sm:text-sm overflow-hidden ${synthetic ? "ring-1 ring-white/60" : ""}`}
-                          title={`${degreeFull} • ${subjName}${room ? ` • ${room}` : ""}${startS && endS ? ` (${startS}–${endS})` : ""}`}
+                          title={`${degreeFull}${room ? ` • ${room}` : ""}${startS && endS ? ` (${startS}–${endS})` : ""}`}
                           style={{
                             top: `${topPct}%`,
                             height: `${heightPct}%`,
@@ -666,23 +587,15 @@ function WeekGrid({ lessons, monday }) {
                             opacity: synthetic ? 0.9 : 1,
                           }}
                         >
-                          {/* subject + degree chip */}
-                          <div className="px-2 pt-1 font-semibold leading-tight truncate flex items-center gap-1">
-                            <span className="truncate">{subjectAbbr(subjName)}</span>
-                            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-md bg-white/20 truncate max-w-[55%]" title={degreeFull}>
-                              {degreeFull}
-                            </span>
-                          </div>
-
+                          {/* DEGREE NAME as main label */}
+                          <div className="px-2 pt-1 font-semibold leading-tight truncate">{degreeFull}</div>
                           {/* time */}
                           <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
                             {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
                           </div>
-
                           {/* room */}
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
-
-                          {/* tiny badge bottom-right */}
+                          {/* short badge */}
                           <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
                         </div>
                       );
@@ -700,7 +613,7 @@ function WeekGrid({ lessons, monday }) {
   );
 }
 
-/* ───────────────────────────── Agenda view ───────────────────────────── */
+/* ───────────── Agenda view (DEGREE-first) ───────────── */
 function AgendaList({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
@@ -741,25 +654,20 @@ function AgendaList({ lessons, monday }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const degObj = getDegreeObj(l);
-                  const degreeChip = degreeLabelShort(degObj);
-                  const degreeFull = degreeLabelFull(degObj);
+                  const degree = getDegreeName(l);
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
                     ? `(${pad2(Math.floor(mins[0] / 60))}:${pad2(mins[0] % 60)}–${pad2(Math.floor(mins[1] / 60))}:${pad2(mins[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
-
                   return (
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="font-medium text-foreground flex items-center gap-2">
-                        {/* degree chip FIRST so it’s obvious which class */}
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degreeFull}>
-                          {degreeChip}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
+                          {degreeAbbr(degree)}
                         </span>
-                        {/* subject (full name) */}
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10">
-                          {l?.subject?.name ?? l?.subject_name ?? "Cours"}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
+                          {degree}
                         </span>
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
@@ -778,12 +686,12 @@ function AgendaList({ lessons, monday }) {
   );
 }
 
-/* ───────────────────────────── ICS export ───────────────────────────── */
+/* ───────────── ICS export ───────────── */
 function IcsButton({ lessons, monday }) {
   const download = () => {
     const events = [];
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue; // ignore monthly plans
+      if (l.is_plan) continue;
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
         if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
@@ -799,26 +707,21 @@ function IcsButton({ lessons, monday }) {
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
-      const degObj = getDegreeObj(l);
-      const degreeChip = degreeLabelShort(degObj);
-      const subj = l.subject?.name ?? l.subject_name ?? "Cours";
+      const degree = getDegreeName(l);
       const room = roomName(l);
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
         start, end,
-        title: degreeChip ? `${degreeChip} • ${subj}` : subj,
+        title: degree,
         location: room,
-        desc: degObj?.name ? `Niveau: ${degreeLabelFull(degObj)}` : "",
+        desc: degree ? `Niveau: ${degree}` : "",
       });
     }
     const ics = buildIcs(events);
     const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "enseignant-emploi-du-temps.ics";
-    a.click();
+    const a = document.createElement("a"); a.href = url; a.download = "enseignant-emploi-du-temps.ics"; a.click();
     URL.revokeObjectURL(url);
   };
   return <button onClick={download} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Export .ics</button>;
