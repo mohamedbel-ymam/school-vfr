@@ -31,6 +31,7 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const _strip = (s = "") =>
   s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+/* Subject abbreviations (FR first) */
 const SUBJECT_ABBR = {
   "physique & chimie": "PC",
   "physique et chimie": "PC",
@@ -64,67 +65,56 @@ const subjectAbbr = (name = "") => {
   return letters || name.slice(0, 4).toUpperCase();
 };
 
-const degreeAbbr = (name = "") => {
-  const n = _strip(name);
-  if (!n) return "Niv.";
-  if (/(^|\s)3(\s|e|eme|ème).*(college|collegue|colle|ac)/i.test(n)) return "3AC";
-  if (/tronc\s*commun|^tc$/.test(n)) return "TC";
-  const bac = n.includes("bac");
-  const one = /\b1\b|premiere|1ere|1re/.test(n);
-  const two = /\b2\b|deuxieme|2eme|2e/.test(n);
-  const sm = /sciences?\s*mat(h)?|sm\b/.test(n);
-  const sp = /sciences?\s*phys|sp\b/.test(n);
-  const svt = /\bsvt\b|sciences?\s*vie/.test(n);
-  const l = /\blettres?\b|litt/i.test(n);
-  if (bac && one) {
-    if (sm) return "1Bac(SM)";
-    if (sp) return "1Bac(SP)";
-    if (svt) return "1Bac(SVT)";
-    if (l) return "1Bac(L)";
-    return "1Bac";
-  }
-  if (bac && two) {
-    if (sm) return "2Bac(SM)";
-    if (sp) return "2Bac(SP)";
-    if (svt) return "2Bac(SVT)";
-    if (l) return "2Bac(L)";
-    return "2Bac";
-  }
-  return name.length > 10 ? name.slice(0, 10) + "…" : name;
+/* Degree label helpers (use abbreviation when present) */
+const degreeLabelShort = (deg) => {
+  if (!deg) return "Niv.";
+  const abbr = deg.abbreviation ?? deg.short_name ?? deg.code ?? null;
+  if (abbr && String(abbr).trim()) return String(abbr).trim();
+  const name = deg.name ?? "";
+  return name.length > 10 ? name.slice(0, 10) + "…" : (name || "Niv.");
+};
+const degreeLabelFull = (deg) => {
+  if (!deg) return "Niveau";
+  const abbr = deg.abbreviation ?? deg.short_name ?? deg.code ?? null;
+  const name = deg.name ?? "";
+  return abbr && String(abbr).trim() ? `${abbr} • ${name || "Niveau"}` : (name || "Niveau");
 };
 
+/* Slug + deterministic hue for subject colors */
 const slugify = (s = "") =>
-  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
+  s
+    .normalize?.("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+const hashInt = (str) => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+};
 const hue = (key) => (hashInt(String(key)) * 137.508) % 360;
 
+/* Subject keys + colors */
 const subjectKey = (l) =>
   l?.subject?.key ??
   l?.subject?.id ??
   l?.subject_id ??
   slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
-  // color utilities (paste near slugify/hashInt/goldenHue/subjectKey)
-// Use a golden-angle hue from a stable key
-// (You already have hashInt; we reuse your existing `hue` function.)
 
-// Return the fixed color from subjectColors by slug of the subject NAME
 const subjectFixedColor = (l) => {
-  const slug =
-    slugify(l?.subject?.name ?? l?.subject_name ?? "") || null;
+  const slug = slugify(l?.subject?.name ?? l?.subject_name ?? "") || null;
   return slug ? subjectColors?.[slug] ?? null : null;
 };
-
-// Build colors for a subject block: fixed if configured; otherwise generated
 const subjectBlockColors = (l) => {
   const fixed = subjectFixedColor(l);
   if (fixed) {
     return {
-      bg: `${fixed}22`,       // translucent background
-      border: fixed,          // solid fill / border
-      accent: fixed,          // glow/accent
+      bg: `${fixed}22`,
+      border: fixed,
+      accent: fixed,
     };
   }
-  // Fallback: generate from a stable key (prefer slug of name)
   const key =
     slugify(l?.subject?.name ?? l?.subject_name ?? "") ||
     String(l?.subject?.id ?? l?.subject_id ?? "subject");
@@ -135,8 +125,6 @@ const subjectBlockColors = (l) => {
     accent: `hsl(${h},85%,45%)`,
   };
 };
-
-
 
 const roomName = (l) =>
   l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
@@ -274,18 +262,26 @@ const buildIcs = (events) => {
   lines.push("END:VCALENDAR");
   return lines.filter(Boolean).join("\r\n");
 };
-const getDegreeName = (l) =>
-  l?.degree?.name ??
-  l?.timetable?.degree?.name ??
-  (typeof l?.degree === "string" ? l.degree : null) ??
-  (l?.degree_id != null ? `Niveau #${l.degree_id}` : null) ??
-  "Niveau";
 
+/* Degree getters (prefer nested degree object with name + abbreviation) */
+const getDegreeObj = (l) =>
+  l?.degree ??
+  l?.timetable?.degree ??
+  (typeof l?.degree === "object" ? l.degree : null) ??
+  null;
+
+const getDegreeName = (l) => {
+  const deg = getDegreeObj(l);
+  if (deg?.name) return deg.name;
+  return "Niveau";
+};
+const getDegreeShort = (l) => degreeLabelShort(getDegreeObj(l));
 const getDegreeId = (l) =>
   l?.degree?.id ??
   l?.timetable?.degree?.id ??
   l?.degree_id ??
-  getDegreeName(l);
+  // if no id, fallback to full label so filter still groups logically
+  degreeLabelFull(getDegreeObj(l));
 
 /* API fallback if TimeTableApi.teacher is not present */
 const TEACHER_ENDPOINT = "/enseignant/emploi-du-temps";
@@ -360,7 +356,7 @@ export default function TeacherTimetable() {
     return () => { mounted = false; };
   }, [mondayIso]);
 
-  // Filters
+  /* Filters */
   const subjects = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
@@ -372,25 +368,22 @@ export default function TeacherTimetable() {
   }, [lessons]);
 
   const degrees = useMemo(() => {
-  const m = new Map();
-  for (const l of lessons ?? []) {
-    const id = String(getDegreeId(l));
-    const name = getDegreeName(l);
-    m.set(id, name);
-  }
-  return [...m.entries()].map(([id, name]) => ({ id, name }));
-}, [lessons]);
+    const m = new Map();
+    for (const l of lessons ?? []) {
+      const id = String(getDegreeId(l));
+      const obj = getDegreeObj(l);
+      const full = degreeLabelFull(obj);
+      m.set(id, full);
+    }
+    return [...m.entries()].map(([id, name]) => ({ id, name }));
+  }, [lessons]);
 
- const filtered = useMemo(() => {
-  let arr = lessons ?? [];
-  if (subjectFilter) {
-    arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
-  }
-  if (degreeFilter) {
-    arr = arr.filter((l) => String(getDegreeId(l)) === String(degreeFilter));
-  }
-  return arr;
-}, [lessons, subjectFilter, degreeFilter]);
+  const filtered = useMemo(() => {
+    let arr = lessons ?? [];
+    if (subjectFilter) arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
+    if (degreeFilter) arr = arr.filter((l) => String(getDegreeId(l)) === String(degreeFilter));
+    return arr;
+  }, [lessons, subjectFilter, degreeFilter]);
 
   const hasTimed = useMemo(() => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))), [filtered]);
 
@@ -415,12 +408,18 @@ export default function TeacherTimetable() {
           <Select
             value={degreeFilter}
             onChange={setDegreeFilter}
-            options={[{ value: "", label: "Tous les niveaux" }, ...degrees.map((d) => ({ value: d.id, label: d.name }))]}
+            options={[
+              { value: "", label: "Tous les niveaux" },
+              ...degrees.map((d) => ({ value: d.id, label: d.name })),
+            ]}
           />
           <Select
             value={subjectFilter}
             onChange={setSubjectFilter}
-            options={[{ value: "", label: "Toutes les matières" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]}
+            options={[
+              { value: "", label: "Toutes les matières" },
+              ...subjects.map((s) => ({ value: s.id, label: s.name })),
+            ]}
           />
           <ViewToggle value={view} onChange={setView} />
           <IcsButton lessons={filtered} monday={monday} />
@@ -644,46 +643,48 @@ function WeekGrid({ lessons, monday }) {
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Cours";
                       const c = subjectBlockColors(l);
-                      const degreeFull  = getDegreeName(l);
-                      const degreeShort = degreeAbbr(degreeFull);
+                      const degreeObj   = getDegreeObj(l);
+                      const degreeFull  = degreeLabelFull(degreeObj);
+                      const degreeShort = degreeLabelShort(degreeObj);
                       const room = roomName(l);
                       const startS = parseTimeLike(getStartStr(l));
                       const endS   = parseTimeLike(getEndStr(l));
+
                       return (
                         <div
-                        key={`${l.id ?? `${d.val}-${i}`}`}
-                        className={`absolute rounded-lg text-[11px] sm:text-sm overflow-hidden ${synthetic ? "ring-1 ring-white/60" : ""}`}
-                        title={`${degreeFull} • ${subjName}${room ? ` • ${room}` : ""}${startS && endS ? ` (${startS}–${endS})` : ""}`}
-                        style={{
-                          top: `${topPct}%`,
-                          height: `${heightPct}%`,
-                          left: `calc(${leftPct}% + 4px)`,
-                          width: `calc(${widthPct}% - 8px)`,
-                          backgroundColor: c.border,
-                          color: "#fff",
-                          boxShadow: `0 6px 16px ${c.accent}44`,
-                          opacity: synthetic ? 0.9 : 1,
-                        }}
-                      >
-                        {/* subject + degree chip */}
-                        <div className="px-2 pt-1 font-semibold leading-tight truncate flex items-center gap-1">
-                          <span className="truncate">{subjectAbbr(subjName)}</span>
-                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-md bg-white/20 truncate max-w-[55%]" title={degreeFull}>
-                            {degreeFull}
-                          </span>
+                          key={`${l.id ?? `${d.val}-${i}`}`}
+                          className={`absolute rounded-lg text-[11px] sm:text-sm overflow-hidden ${synthetic ? "ring-1 ring-white/60" : ""}`}
+                          title={`${degreeFull} • ${subjName}${room ? ` • ${room}` : ""}${startS && endS ? ` (${startS}–${endS})` : ""}`}
+                          style={{
+                            top: `${topPct}%`,
+                            height: `${heightPct}%`,
+                            left: `calc(${leftPct}% + 4px)`,
+                            width: `calc(${widthPct}% - 8px)`,
+                            backgroundColor: c.border,
+                            color: "#fff",
+                            boxShadow: `0 6px 16px ${c.accent}44`,
+                            opacity: synthetic ? 0.9 : 1,
+                          }}
+                        >
+                          {/* subject + degree chip */}
+                          <div className="px-2 pt-1 font-semibold leading-tight truncate flex items-center gap-1">
+                            <span className="truncate">{subjectAbbr(subjName)}</span>
+                            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-md bg-white/20 truncate max-w-[55%]" title={degreeFull}>
+                              {degreeFull}
+                            </span>
+                          </div>
+
+                          {/* time */}
+                          <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
+                            {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
+                          </div>
+
+                          {/* room */}
+                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
+
+                          {/* tiny badge bottom-right */}
+                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
                         </div>
-                      
-                        {/* time */}
-                        <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
-                          {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
-                        </div>
-                      
-                        {/* room */}
-                        <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
-                      
-                        {/* tiny badge bottom-right */}
-                        <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
-                      </div>
                       );
                     })
                   )}
@@ -740,7 +741,9 @@ function AgendaList({ lessons, monday }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const degree = getDegreeName(l);
+                  const degObj = getDegreeObj(l);
+                  const degreeChip = degreeLabelShort(degObj);
+                  const degreeFull = degreeLabelFull(degObj);
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
@@ -751,8 +754,8 @@ function AgendaList({ lessons, monday }) {
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="font-medium text-foreground flex items-center gap-2">
                         {/* degree chip FIRST so it’s obvious which class */}
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
-                          {degreeAbbr(degree)}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degreeFull}>
+                          {degreeChip}
                         </span>
                         {/* subject (full name) */}
                         <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10">
@@ -763,7 +766,6 @@ function AgendaList({ lessons, monday }) {
                       <div className="text-xs text-foreground/80">{room || ""}</div>
                     </div>
                   );
-                  
                 })
               ) : (
                 <div className="text-xs text-muted-foreground">—</div>
@@ -797,16 +799,17 @@ function IcsButton({ lessons, monday }) {
       start.setHours(Math.floor(mins[0] / 60), mins[0] % 60, 0, 0);
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
-      const degree = l.degree?.name ?? l.timetable?.degree?.name ?? "";
+      const degObj = getDegreeObj(l);
+      const degreeChip = degreeLabelShort(degObj);
       const subj = l.subject?.name ?? l.subject_name ?? "Cours";
       const room = roomName(l);
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
         start, end,
-        title: degree ? `${degreeAbbr(degree)} • ${subj}` : subj,
+        title: degreeChip ? `${degreeChip} • ${subj}` : subj,
         location: room,
-        desc: degree ? `Niveau: ${degree}` : "",
+        desc: degObj?.name ? `Niveau: ${degreeLabelFull(degObj)}` : "",
       });
     }
     const ics = buildIcs(events);
