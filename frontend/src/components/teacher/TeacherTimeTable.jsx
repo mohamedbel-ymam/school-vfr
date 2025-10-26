@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../api/axios";
 
-/* ───────────── Constants ───────────── */
+/* ───────────────────────────── Constants ───────────────────────────── */
 const DAYS = [
   { label: "Lun", full: "Lundi", val: 1 },
   { label: "Mar", full: "Mardi", val: 2 },
@@ -21,7 +21,7 @@ const PAD_MINS = 30;
 const SCHOOL_START_MINS = 9 * 60;
 const PERIOD_DURATION_MINS = 90;
 
-/* ───────────── Utils ───────────── */
+/* ───────────────────────────── Utils ───────────────────────────── */
 const pad2 = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
@@ -31,9 +31,9 @@ const _strip = (s = "") =>
 const degreeAbbr = (name = "") => {
   const n = _strip(name);
   if (!n) return "Niv.";
-  if (/(^|\s)3(\s|e|eme|ème).*(college|collegue|colle|ac)/i.test(n)) return "3AC";
+  if (/(^|\s)3(\s|e|eme|ème).*(college|collège|collegue|colle|ac)/i.test(n)) return "3AC";
   if (/tronc\s*commun|^tc$/.test(n)) return "TC";
-  const bac = n.includes("bac");
+  const bac = /\bbac\b/.test(n);
   const one = /\b1\b|premiere|1ere|1re/.test(n);
   const two = /\b2\b|deuxieme|2eme|2e/.test(n);
   const sm = /sciences?\s*mat(h)?|sm\b/.test(n);
@@ -63,13 +63,14 @@ const slugify = (s = "") =>
 const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
 const hueFromKey = (key) => (hashInt(String(key)) * 137.508) % 360;
 
-/* Color by DEGREE (not by subject) */
-const degreeKey = (l) =>
-  l?.timetable?.degree?.id ??
-  l?.degree?.id ??
-  l?.degree_id ??
-  slugify(l?.timetable?.degree?.name ?? l?.degree?.name ?? "degree");
-
+/* Color by DEGREE */
+const degreeKey = (l) => {
+  const d =
+    l?.degree ??
+    l?.timetable?.degree ??
+    (l?.degree_name ? { id: l.degree_id, name: l.degree_name } : null);
+  return d?.id ?? slugify(d?.name ?? "degree");
+};
 const degreeColors = (l) => {
   const h = hueFromKey(degreeKey(l));
   return {
@@ -77,6 +78,33 @@ const degreeColors = (l) => {
     border: `hsl(${h},65%,45%)`,
     accent: `hsl(${h},85%,45%)`,
   };
+};
+
+/* Degree getters (name + abbr + id) */
+const getDegreeObj = (l) =>
+  l?.degree ??
+  l?.timetable?.degree ??
+  (l?.degree_name || l?.degree_abbreviation
+    ? { id: l?.degree_id, name: l?.degree_name, abbreviation: l?.degree_abbreviation }
+    : null);
+
+const getDegreeName = (l) => {
+  const d = getDegreeObj(l);
+  return d?.name || "Sans niveau";
+};
+const getDegreeShort = (l) => {
+  const d = getDegreeObj(l);
+  return (
+    d?.abbreviation ||
+    d?.abbr ||
+    d?.short ||
+    d?.code ||
+    degreeAbbr(d?.name || "")
+  );
+};
+const getDegreeId = (l) => {
+  const d = getDegreeObj(l);
+  return d?.id ?? slugify(d?.name ?? "degree");
 };
 
 const roomName = (l) =>
@@ -189,7 +217,7 @@ const resolveStartEndMins = (l) => {
   return null;
 };
 
-/* unwrap */
+/* unwrap lessons */
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ??
   r?.data?.lessons ??
@@ -217,27 +245,14 @@ const buildIcs = (events) => {
   return lines.filter(Boolean).join("\r\n");
 };
 
-const getDegreeName = (l) =>
-  l?.degree?.name ??
-  l?.timetable?.degree?.name ??
-  (typeof l?.degree === "string" ? l.degree : null) ??
-  (l?.degree_id != null ? `Niveau #${l.degree_id}` : null) ??
-  "Niveau";
-
-const getDegreeId = (l) =>
-  l?.degree?.id ??
-  l?.timetable?.degree?.id ??
-  l?.degree_id ??
-  getDegreeName(l);
-
-/* API fallback */
+/* API fallback if TimeTableApi.teacher is not present */
 const TEACHER_ENDPOINT = "/enseignant/emploi-du-temps";
 const fetchTeacherWeek = async ({ week_start }) => {
   if (TimeTableApi?.teacher) return TimeTableApi.teacher({ week_start });
   return axiosClient.get(TEACHER_ENDPOINT, { params: { week_start } });
 };
 
-/* ───────────── Component ───────────── */
+/* ───────────────────────────── Component ───────────────────────────── */
 export default function TeacherTimetable() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -249,7 +264,7 @@ export default function TeacherTimetable() {
   );
   const [degreeFilter, setDegreeFilter] = useState("");
 
-  // switch to agenda on small screens
+  // auto switch to agenda on small screens (debounced)
   const resizeTimer = useRef();
   useEffect(() => {
     const onResize = () => {
@@ -262,8 +277,14 @@ export default function TeacherTimetable() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
-  const mondayIso = useMemo(() => `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`, [monday]);
+  const monday = useMemo(
+    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
+    [weekOffset]
+  );
+  const mondayIso = useMemo(
+    () => `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`,
+    [monday]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -301,6 +322,7 @@ export default function TeacherTimetable() {
     return () => { mounted = false; };
   }, [mondayIso]);
 
+  // Degree filter options
   const degrees = useMemo(() => {
     const m = new Map();
     for (const l of lessons ?? []) {
@@ -311,6 +333,7 @@ export default function TeacherTimetable() {
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
+  // Apply filter
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
     if (degreeFilter) {
@@ -319,7 +342,10 @@ export default function TeacherTimetable() {
     return arr;
   }, [lessons, degreeFilter]);
 
-  const hasTimed = useMemo(() => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))), [filtered]);
+  const hasTimed = useMemo(
+    () => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))),
+    [filtered]
+  );
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
@@ -366,7 +392,7 @@ export default function TeacherTimetable() {
   );
 }
 
-/* ───────────── Small UI ───────────── */
+/* ───────────────────────────── Small UI ───────────────────────────── */
 function ToolbarSubtitle({ monday }) {
   const sunday = addDays(monday, 6);
   const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -397,7 +423,7 @@ function ViewToggle({ value, onChange }) {
   );
 }
 
-/* ───────────── Grid view (DEGREE-first) ───────────── */
+/* ───────────────────────────── Grid view ───────────────────────────── */
 function WeekGrid({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
@@ -565,7 +591,7 @@ function WeekGrid({ lessons, monday }) {
                       const leftPct = laneIndex * widthPct;
 
                       const degreeFull  = getDegreeName(l);
-                      const degreeShort = degreeAbbr(degreeFull);
+                      const degreeShort = getDegreeShort(l);
                       const c = degreeColors(l);
                       const room = roomName(l);
                       const startS = parseTimeLike(getStartStr(l));
@@ -587,16 +613,15 @@ function WeekGrid({ lessons, monday }) {
                             opacity: synthetic ? 0.9 : 1,
                           }}
                         >
-                          {/* DEGREE NAME as main label */}
+                          {/* DEGREE as main label */}
                           <div className="px-2 pt-1 font-semibold leading-tight truncate">{degreeFull}</div>
-                          {/* time */}
                           <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
                             {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
                           </div>
-                          {/* room */}
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
-                          {/* short badge */}
-                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
+                          <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">
+                            {degreeShort}
+                          </div>
                         </div>
                       );
                     })
@@ -613,7 +638,7 @@ function WeekGrid({ lessons, monday }) {
   );
 }
 
-/* ───────────── Agenda view (DEGREE-first) ───────────── */
+/* ───────────────────────────── Agenda view ───────────────────────────── */
 function AgendaList({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
@@ -655,6 +680,7 @@ function AgendaList({ lessons, monday }) {
               {list.length ? (
                 list.map((l, i) => {
                   const degree = getDegreeName(l);
+                  const short  = getDegreeShort(l);
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
@@ -664,7 +690,7 @@ function AgendaList({ lessons, monday }) {
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="font-medium text-foreground flex items-center gap-2">
                         <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
-                          {degreeAbbr(degree)}
+                          {short}
                         </span>
                         <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10" title={degree}>
                           {degree}
@@ -686,7 +712,7 @@ function AgendaList({ lessons, monday }) {
   );
 }
 
-/* ───────────── ICS export ───────────── */
+/* ───────────────────────────── ICS export ───────────────────────────── */
 function IcsButton({ lessons, monday }) {
   const download = () => {
     const events = [];
@@ -708,12 +734,13 @@ function IcsButton({ lessons, monday }) {
       end.setHours(Math.floor(mins[1] / 60), mins[1] % 60, 0, 0);
 
       const degree = getDegreeName(l);
+      const short  = getDegreeShort(l);
       const room = roomName(l);
 
       events.push({
         uid: `${l.id ?? Math.random().toString(36).slice(2)}@takwa`,
         start, end,
-        title: degree,
+        title: short ? `${short} • ${degree}` : degree,
         location: room,
         desc: degree ? `Niveau: ${degree}` : "",
       });
@@ -721,7 +748,10 @@ function IcsButton({ lessons, monday }) {
     const ics = buildIcs(events);
     const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "enseignant-emploi-du-temps.ics"; a.click();
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "enseignant-emploi-du-temps.ics";
+    a.click();
     URL.revokeObjectURL(url);
   };
   return <button onClick={download} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Export .ics</button>;
