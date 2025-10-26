@@ -344,6 +344,14 @@ export default function TeacherTimetable() {
 
       {/* Floating FAB as a second safety (when user scrolls) */}
       <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
+    {weekOffset !== 0 && (
+  <button
+    onClick={() => setWeekOffset(0)}
+    className="fixed bottom-4 right-4 px-3 py-2 rounded-full shadow-lg border bg-background/95 hover:bg-muted transition"
+  >
+    Cette semaine
+  </button>
+)}
     </div>
   );
 }
