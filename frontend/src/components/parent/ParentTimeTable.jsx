@@ -84,6 +84,18 @@ const resolveStartEndMins = (row) => {
   if (p) return p;
   return null;
 };
+function BackToThisWeekFab({ show, onClick }) {
+  if (!show) return null;
+  return (
+    <button
+      onClick={onClick}
+      className="fixed bottom-4 right-4 px-3 py-2 rounded-full shadow-lg border bg-background/95 hover:bg-muted transition"
+      aria-label="Revenir à cette semaine"
+    >
+      Cette semaine
+    </button>
+  );
+}
 
 // subjects (stable, distinct hues)
 const slugify = (s = "") =>
@@ -304,6 +316,8 @@ export default function ParentTimetable() {
 
       {/* Agenda list */}
       <AgendaList lessons={lessons} monday={monday} />
+      <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
+
     </div>
   );
 }

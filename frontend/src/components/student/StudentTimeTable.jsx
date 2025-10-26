@@ -49,6 +49,18 @@ const roomAbbr = (r) => {
   if (/^S-\w+/i.test(s)) return s;
   return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
 };
+function BackToThisWeekFab({ show, onClick }) {
+  if (!show) return null;
+  return (
+    <button
+      onClick={onClick}
+      className="fixed bottom-4 right-4 px-3 py-2 rounded-full shadow-lg border bg-background/95 hover:bg-muted transition"
+      aria-label="Revenir à cette semaine"
+    >
+      Cette semaine
+    </button>
+  );
+}
 
 /* ─────────────────────────────── Constants ─────────────────────────────── */
 const DAYS = [
@@ -423,6 +435,8 @@ export default function StudentTimeTable() {
       ) : (
         <AgendaList lessons={shownLessons} weekOffset={weekOffset} />
       )}
+      <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
+
     </div>
   );
 }

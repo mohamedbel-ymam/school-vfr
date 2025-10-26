@@ -63,14 +63,46 @@ const slugify = (s = "") =>
 const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
 const hueFromKey = (key) => (hashInt(String(key)) * 137.508) % 360;
 
-/* Color by DEGREE */
-const degreeKey = (l) => {
-  const d =
-    l?.degree ??
-    l?.timetable?.degree ??
-    (l?.degree_name ? { id: l.degree_id, name: l.degree_name } : null);
-  return d?.id ?? slugify(d?.name ?? "degree");
+/* ----- DEGREE extraction (very robust) ----- */
+const firstTruthy = (...a) => a.find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
+const asDegreeObj = (x, fallbackId) => {
+  if (!x) return null;
+  if (typeof x === "string") return { id: fallbackId ?? slugify(x), name: x };
+  return {
+    id: firstTruthy(x.id, fallbackId),
+    name: firstTruthy(x.name, x.title, x.label),
+    abbreviation: firstTruthy(x.abbreviation, x.abbr, x.short, x.code),
+  };
 };
+const getDegreeObj = (l) => {
+  // candidates in priority order (cover most backends)
+  const cands = [
+    asDegreeObj(l?.degree, l?.degree_id),
+    asDegreeObj(l?.timetable?.degree, l?.timetable?.degree_id),
+    asDegreeObj(l?.timetable?.classe?.degree),
+    asDegreeObj(l?.timetable?.class?.degree),
+    asDegreeObj(l?.timetable?.classroom?.degree),
+    asDegreeObj(l?.classe?.degree),
+    asDegreeObj(l?.class?.degree),
+    asDegreeObj(l?.classroom?.degree),
+    asDegreeObj(l?.group?.degree),
+    asDegreeObj(l?.section?.degree),
+    asDegreeObj(l?.division?.degree),
+    // flat fields
+    asDegreeObj(
+      { name: firstTruthy(l?.degree_name, l?.degreeLabel, l?.degree_title),
+        abbreviation: firstTruthy(l?.degree_abbreviation, l?.degree_abbr, l?.degree_short, l?.degree_code) },
+      l?.degree_id
+    ),
+  ];
+  return cands.find(Boolean) ?? null;
+};
+const getDegreeName  = (l) => getDegreeObj(l)?.name  || "Sans niveau";
+const getDegreeShort = (l) => getDegreeObj(l)?.abbreviation || degreeAbbr(getDegreeName(l));
+const getDegreeId    = (l) => firstTruthy(getDegreeObj(l)?.id, slugify(getDegreeName(l)));
+
+/* Color by DEGREE */
+const degreeKey = (l) => firstTruthy(getDegreeId(l), slugify(getDegreeName(l)));
 const degreeColors = (l) => {
   const h = hueFromKey(degreeKey(l));
   return {
@@ -78,33 +110,6 @@ const degreeColors = (l) => {
     border: `hsl(${h},65%,45%)`,
     accent: `hsl(${h},85%,45%)`,
   };
-};
-
-/* Degree getters (name + abbr + id) */
-const getDegreeObj = (l) =>
-  l?.degree ??
-  l?.timetable?.degree ??
-  (l?.degree_name || l?.degree_abbreviation
-    ? { id: l?.degree_id, name: l?.degree_name, abbreviation: l?.degree_abbreviation }
-    : null);
-
-const getDegreeName = (l) => {
-  const d = getDegreeObj(l);
-  return d?.name || "Sans niveau";
-};
-const getDegreeShort = (l) => {
-  const d = getDegreeObj(l);
-  return (
-    d?.abbreviation ||
-    d?.abbr ||
-    d?.short ||
-    d?.code ||
-    degreeAbbr(d?.name || "")
-  );
-};
-const getDegreeId = (l) => {
-  const d = getDegreeObj(l);
-  return d?.id ?? slugify(d?.name ?? "degree");
 };
 
 const roomName = (l) =>
@@ -388,6 +393,9 @@ export default function TeacherTimetable() {
       ) : (
         <AgendaList lessons={filtered} monday={monday} />
       )}
+
+      {/* NEW: floating 'Cette semaine' button, visible only when offset != 0 */}
+      <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
     </div>
   );
 }
@@ -709,6 +717,20 @@ function AgendaList({ lessons, monday }) {
         );
       })}
     </div>
+  );
+}
+
+/* ───────────────────────────── Floating 'Cette semaine' ───────────────────────────── */
+function BackToThisWeekFab({ show, onClick }) {
+  if (!show) return null;
+  return (
+    <button
+      onClick={onClick}
+      className="fixed bottom-4 right-4 px-3 py-2 rounded-full shadow-lg border bg-background/95 hover:bg-muted transition"
+      aria-label="Revenir à cette semaine"
+    >
+      Cette semaine
+    </button>
   );
 }
 
