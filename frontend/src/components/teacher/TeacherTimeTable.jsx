@@ -104,22 +104,35 @@ const subjectKey = (l) =>
   l?.subject_id ??
   slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
   // color utilities (paste near slugify/hashInt/goldenHue/subjectKey)
+// Use a golden-angle hue from a stable key
+// (You already have hashInt; we reuse your existing `hue` function.)
+
+// Return the fixed color from subjectColors by slug of the subject NAME
+const subjectFixedColor = (l) => {
+  const slug =
+    slugify(l?.subject?.name ?? l?.subject_name ?? "") || null;
+  return slug ? subjectColors?.[slug] ?? null : null;
+};
+
+// Build colors for a subject block: fixed if configured; otherwise generated
 const subjectBlockColors = (l) => {
-  const key = String(subjectKey(l) ?? "subject");
-  const fixed = subjectColors?.[key];
+  const fixed = subjectFixedColor(l);
   if (fixed) {
-    // use configured color for solid border/bg + accent
     return {
-      bg: `${fixed}22`,        // translucent bg
-      border: fixed,           // solid border / solid block
-      accent: fixed,           // glow/accent
+      bg: `${fixed}22`,       // translucent background
+      border: fixed,          // solid fill / border
+      accent: fixed,          // glow/accent
     };
   }
-  const hue = goldenHue(key);
+  // Fallback: generate from a stable key (prefer slug of name)
+  const key =
+    slugify(l?.subject?.name ?? l?.subject_name ?? "") ||
+    String(l?.subject?.id ?? l?.subject_id ?? "subject");
+  const h = hue(key);
   return {
-    bg: `hsla(${hue},85%,45%,0.20)`,
-    border: `hsl(${hue},65%,45%)`,
-    accent: `hsl(${hue},85%,45%)`,
+    bg: `hsla(${h},85%,45%,0.20)`,
+    border: `hsl(${h},65%,45%)`,
+    accent: `hsl(${h},85%,45%)`,
   };
 };
 
@@ -731,7 +744,7 @@ function AgendaList({ lessons, monday }) {
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
-                    ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
+                    ? `(${pad2(Math.floor(mins[0] / 60))}:${pad2(mins[0] % 60)}–${pad2(Math.floor(mins[1] / 60))}:${pad2(mins[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
 
                   return (
