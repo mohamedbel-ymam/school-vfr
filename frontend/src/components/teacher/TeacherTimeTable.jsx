@@ -1,10 +1,10 @@
 // src/components/teacher/TeacherTimetable.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
+import { axiosClient } from "../../api/axios";
 import subjectColors from "../../config/subjectColors";
 
-/* ───────────────────── Utilities & constants ───────────────────── */
-
+/* ───────────────────────────── Constants ───────────────────────────── */
 const DAYS = [
   { label: "Lun", full: "Lundi", val: 1 },
   { label: "Mar", full: "Mardi", val: 2 },
@@ -15,50 +15,22 @@ const DAYS = [
   { label: "Dim", full: "Dimanche", val: 7 },
 ];
 
-const pad = (n) => String(n).padStart(2, "0");
+// dynamic window clamps for grid
+const HARD_MIN = 7 * 60;
+const HARD_MAX = 22 * 60;
+const PAD_MINS = 30;
+
+// fallback for “period” parsing
+const SCHOOL_START_MINS = 9 * 60;
+const PERIOD_DURATION_MINS = 90;
+
+/* ───────────────────────────── Utils ───────────────────────────── */
+const pad2 = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-
-const normalizeDow = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  if (n === 0) return 7;
-  if (n < 0) return null;
-  if (n > 7) return (n % 7) || 7;
-  return n;
-};
-
-const startOfWeekMonday = (base = new Date()) => {
-  const d = new Date(base);
-  const js = d.getDay(); // 0..6
-  const delta = js === 0 ? -6 : 1 - js;
-  d.setDate(d.getDate() + delta);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-const addDays = (date, n) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-};
-const sameMonday = (a, b) =>
-  startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
-const isSameDayIndex = (date, dow1to7) => {
-  const js = date.getDay(); // 0..6
-  const ours = js === 0 ? 7 : js;
-  return ours === dow1to7;
-};
-const inWeek = (date, monday) => {
-  const start = new Date(monday);
-  const end = addDays(monday, 6);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
-  return date >= start && date <= end;
-};
 
 const _strip = (s = "") =>
   s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-/** “FR/MA/AN…” or initials up to 4 chars */
 const SUBJECT_ABBR = {
   "physique & chimie": "PC",
   "physique et chimie": "PC",
@@ -67,17 +39,17 @@ const SUBJECT_ABBR = {
   "francais": "FR",
   "mathématiques": "MA",
   "mathematiques": "MA",
-  "maths": "MA",
-  "anglais": "AN",
-  "arabe": "AR",
-  "svt": "SVT",
+  maths: "MA",
+  anglais: "AN",
+  arabe: "AR",
+  svt: "SVT",
   "histoire géographie": "HG",
   "histoire-geographie": "HG",
   "histoire-géographie": "HG",
-  "informatique": "INFO",
+  informatique: "INFO",
   "éducation physique": "EPS",
   "education physique": "EPS",
-  "philosophie": "PHI",
+  philosophie: "PHI",
 };
 const subjectAbbr = (name = "") => {
   const n = _strip(name);
@@ -90,15 +62,6 @@ const subjectAbbr = (name = "") => {
     .slice(0, 4)
     .toUpperCase();
   return letters || name.slice(0, 4).toUpperCase();
-};
-
-const roomAbbr = (r) => {
-  if (!r) return "";
-  const s = String(r);
-  const m = s.match(/(?:salle|room)\s*([a-z]?)(\d+)/i);
-  if (m) return `S-${(m[1] || "").toUpperCase()}${m[2]}`;
-  if (/^S-\w+/i.test(s)) return s;
-  return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
 };
 
 const degreeAbbr = (name = "") => {
@@ -131,47 +94,82 @@ const degreeAbbr = (name = "") => {
 };
 
 const slugify = (s = "") =>
-  s.normalize?.("NFD")?.replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
-const goldenHue = (k) => (hashInt(k) * 137.508) % 360;
+const hue = (key) => (hashInt(String(key)) * 137.508) % 360;
+
 const subjectKey = (l) =>
   l?.subject?.key ??
-  (l?.subject?.name ? slugify(l.subject.name) : null) ??
-  (l?.subject?.id ?? l?.subject_id ?? "subject");
-const subjectBlockColors = (l) => {
-  const key = String(subjectKey(l) ?? "subject");
-  const fixed = subjectColors?.[key];
-  if (fixed) return { bg: `${fixed}22`, border: fixed, accent: fixed };
-  const hue = goldenHue(key);
-  return { bg: `hsla(${hue},85%,45%,0.20)`, border: `hsl(${hue},65%,45%)`, accent: `hsl(${hue},85%,45%)` };
-};
-const roomName = (l) => l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
+  l?.subject?.id ??
+  l?.subject_id ??
+  slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
 
-/* time parsing */
-const extractHHMM = (v) => {
-  if (!v) return null;
-  const s = String(v);
-  const m = s.match(/(?:T|\s)?(\d{1,2}):(\d{2})(?::\d{2})?/);
-  return m ? `${pad(+m[1])}:${pad(+m[2])}` : null;
+const subjectSolid = (l) => {
+  const key = String(subjectKey(l));
+  return subjectColors[key] || `hsl(${hue(key)} 65% 45%)`;
 };
-const pickFirst = (...vals) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
-const getStartStr = (l) =>
-  pickFirst(l?.start, l?.start_time, l?.starts_at && extractHHMM(l?.starts_at), l?.from, l?.hour_from, l?.begin, l?.time_from) ?? null;
-const getEndStr = (l) =>
-  pickFirst(l?.end, l?.end_time, l?.ends_at && extractHHMM(l?.ends_at), l?.to, l?.hour_to, l?.finish, l?.time_to) ?? null;
+
+const subjectSoft = (key) => `hsl(${hue(key)} 65% 45% / 0.14)`;
+
+const roomName = (l) =>
+  l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
+const roomAbbr = (r) => {
+  if (!r) return "";
+  const s = String(r);
+  const m = s.match(/(?:salle|room)\s*([a-z]?)(\d+)/i);
+  if (m) return `S-${(m[1] || "").toUpperCase()}${m[2]}`;
+  if (/^S-\w+/i.test(s)) return s;
+  return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
+};
+
+const normalizeDow = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 7;
+  if (n < 0) return null;
+  if (n > 7) return (n % 7) || 7;
+  return n;
+};
+
+const startOfWeekMonday = (base = new Date()) => {
+  const d = new Date(base);
+  const js = d.getDay();
+  const delta = js === 0 ? -6 : 1 - js;
+  d.setDate(d.getDate() + delta);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+const addDays = (date, n) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+};
+const sameMonday = (a, b) =>
+  startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
+const isSameDayIndex = (date, dow1to7) => {
+  const js = date.getDay();
+  const ours = js === 0 ? 7 : js;
+  return ours === dow1to7;
+};
+const inWeek = (date, monday) => {
+  const start = new Date(monday);
+  const end = addDays(monday, 6);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+  return date >= start && date <= end;
+};
 
 const parseTimeLike = (v) => {
   if (!v && v !== 0) return null;
   const s = String(v).trim();
   let m = s.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
-  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
   m = s.match(/^(\d{1,2})h(?:(\d{1,2}))?$/i);
-  if (m) return `${pad(+m[1])}:${pad(+(m[2] ?? 0))}`;
+  if (m) return `${pad2(+m[1])}:${pad2(+(m[2] ?? 0))}`;
   m = s.match(/^(\d{1,2})\.(\d{1,2})$/);
-  if (m) return `${pad(+m[1])}:${pad(+m[2])}`;
+  if (m) return `${pad2(+m[1])}:${pad2(+m[2])}`;
   m = s.match(/^(\d{1,2})$/);
-  if (m) return `${pad(+m[1])}:00`;
+  if (m) return `${pad2(+m[1])}:00`;
   return null;
 };
 const toMins = (hhmm) => {
@@ -180,6 +178,11 @@ const toMins = (hhmm) => {
   const [h, m] = s.split(":").map(Number);
   return h * 60 + m;
 };
+
+const pickFirst = (...vals) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+const getStartStr = (l) => pickFirst(l?.start, l?.start_time, l?.from, l?.hour_from, l?.begin, l?.time_from) ?? null;
+const getEndStr   = (l) => pickFirst(l?.end, l?.end_time,   l?.to,   l?.hour_to,   l?.finish, l?.time_to) ?? null;
+
 const numOrNull = (v) => {
   if (v === 0 || v === "0") return 0;
   if (v == null || v === "") return null;
@@ -187,16 +190,12 @@ const numOrNull = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/* baseline for period fallback */
-const SCHOOL_START_MINS = 9 * 60;
-const PERIOD_DURATION_MINS = 90;
-
 const parsePeriodToMins = (period) => {
   if (!period && period !== 0) return null;
   const s = String(period).trim();
   let m = s.match(/(\d{1,2}[:h.]\d{0,2})\s*[-–—àto]+\s*(\d{1,2}[:h.]\d{0,2})/i);
   if (m) {
-    const sm = toMins(m[1]); const em = toMins(m[2]);
+    const sm = toMins(m[1]), em = toMins(m[2]);
     if (sm != null && em != null && em > sm) return [sm, em];
   }
   m = s.match(/(\d{1,2})/);
@@ -207,7 +206,6 @@ const parsePeriodToMins = (period) => {
   }
   return null;
 };
-
 const resolveStartEndMins = (l) => {
   const sm = numOrNull(l?.start_minutes);
   const em = numOrNull(l?.end_minutes);
@@ -223,17 +221,16 @@ const resolveStartEndMins = (l) => {
   return null;
 };
 
-/* unwrap lessons array from various response shapes */
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ??
   r?.data?.lessons ??
   (Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []);
 
-/* ICS helpers */
+/* ICS */
 const toIcsDate = (d) =>
-  `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+  `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}00Z`;
 const buildIcs = (events) => {
-  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Takwa Etablissement//Enseignant Emploi du temps//EN"];
+  const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Takwa Etablissement//Enseignant Emploi du temps//EN"];
   for (const ev of events) {
     lines.push(
       "BEGIN:VEVENT",
@@ -251,12 +248,19 @@ const buildIcs = (events) => {
   return lines.filter(Boolean).join("\r\n");
 };
 
-/* ───────────────────── Main component ───────────────────── */
+/* API fallback if TimeTableApi.teacher is not present */
+const TEACHER_ENDPOINT = "/enseignant/emploi-du-temps";
+const fetchTeacherWeek = async ({ week_start }) => {
+  if (TimeTableApi?.teacher) return TimeTableApi.teacher({ week_start });
+  return axiosClient.get(TEACHER_ENDPOINT, { params: { week_start } });
+};
 
+/* ───────────────────────────── Component ───────────────────────────── */
 export default function TeacherTimetable() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "agenda" : "grid"
@@ -264,24 +268,28 @@ export default function TeacherTimetable() {
   const [subjectFilter, setSubjectFilter] = useState("");
   const [degreeFilter, setDegreeFilter] = useState("");
 
-  const monday = useMemo(
-    () => startOfWeekMonday(addDays(new Date(), weekOffset * 7)),
-    [weekOffset]
-  );
-  const mondayIso = useMemo(() => {
-    const y = monday.getFullYear();
-    const m = pad(monday.getMonth() + 1);
-    const d = pad(monday.getDate());
-    return `${y}-${m}-${d}`;
-  }, [monday]);
+  // auto switch to agenda on small screens (debounced)
+  const resizeTimer = useRef();
+  useEffect(() => {
+    const onResize = () => {
+      clearTimeout(resizeTimer.current);
+      resizeTimer.current = setTimeout(() => {
+        if (window.innerWidth < 640) setView((v) => (v === "grid" ? "agenda" : v));
+      }, 120);
+    };
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
+  const mondayIso = useMemo(() => `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`, [monday]);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       setLoading(true);
       try {
-        // Ask backend for the visible week
-        const res = await TimeTableApi.teacher({ week_start: mondayIso });
+        const res = await fetchTeacherWeek({ week_start: mondayIso });
         const raw = unwrapLessons(res);
 
         const normalized = (raw ?? []).map((l) => ({
@@ -329,16 +337,14 @@ export default function TeacherTimetable() {
     for (const l of lessons ?? []) {
       const id = l?.degree?.id ?? l?.degree_id ?? l?.timetable?.degree?.id ?? l?.timetable?.degree?.name ?? "degree";
       const name = l?.degree?.name ?? l?.degree_name ?? l?.timetable?.degree?.name ?? "Niveau";
-      m.set(id, name);
+      m.set(String(id), name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [lessons]);
 
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
-    if (subjectFilter) {
-      arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
-    }
+    if (subjectFilter) arr = arr.filter((l) => String(subjectKey(l)) === String(subjectFilter));
     if (degreeFilter) {
       arr = arr.filter(
         (l) =>
@@ -401,7 +407,7 @@ export default function TeacherTimetable() {
   );
 }
 
-/* ───────────────────── Small UI bits ───────────────────── */
+/* ───────────────────────────── Small UI ───────────────────────────── */
 function ToolbarSubtitle({ monday }) {
   const sunday = addDays(monday, 6);
   const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -432,7 +438,7 @@ function ViewToggle({ value, onChange }) {
   );
 }
 
-/* ───────────────────── Grid view ───────────────────── */
+/* ───────────────────────────── Grid view ───────────────────────────── */
 function WeekGrid({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
@@ -470,22 +476,19 @@ function WeekGrid({ lessons, monday }) {
   const { minM, maxM } = useMemo(() => {
     let min = Infinity, max = -Infinity;
     for (const d of DAYS) {
-      const arr = byDay.get(d.val) ?? [];
-      for (const l of arr) {
+      for (const l of byDay.get(d.val) ?? []) {
         const mins = resolveStartEndMins(l);
         if (!mins) continue;
         min = Math.min(min, mins[0]);
         max = Math.max(max, mins[1]);
       }
     }
-    if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
-      min = 9 * 60; max = 12 * 60;
-    }
-    const PAD = 30;
-    min = Math.max(7 * 60, Math.floor((min - PAD) / 30) * 30);
-    max = Math.min(22 * 60, Math.ceil((max + PAD) / 30) * 30);
-    if (max - min < 60) max = min + 60;
-    return { minM: min, maxM: max };
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) { min = 9 * 60; max = 12 * 60; }
+    let minAdj = Math.floor((min - PAD_MINS) / 30) * 30;
+    let maxAdj = Math.ceil((max + PAD_MINS) / 30) * 30;
+    minAdj = clamp(minAdj, HARD_MIN, HARD_MAX - 30);
+    maxAdj = clamp(maxAdj, minAdj + 60, HARD_MAX);
+    return { minM: minAdj, maxM: maxAdj };
   }, [byDay]);
 
   const range = maxM - minM;
@@ -494,9 +497,9 @@ function WeekGrid({ lessons, monday }) {
     const out = new Map();
     const UNT_SLOT = 30;
     for (const d of DAYS) {
-      const dayItems = byDay.get(d.val) ?? [];
+      const items = byDay.get(d.val) ?? [];
       const timed = [], untimed = [];
-      for (const l of dayItems) {
+      for (const l of items) {
         const mins = resolveStartEndMins(l);
         if (mins) timed.push({ l, s: mins[0], e: mins[1], synthetic: false });
         else untimed.push(l);
@@ -536,9 +539,7 @@ function WeekGrid({ lessons, monday }) {
   }, [minM, maxM]);
 
   const hasAny = useMemo(() => DAYS.some((d) => (byDay.get(d.val) ?? []).length), [byDay]);
-  if (!hasAny) {
-    return <div className="rounded-md border p-3 text-sm text-muted-foreground">Aucune séance pour cette semaine.</div>;
-  }
+  if (!hasAny) return <div className="rounded-md border p-3 text-sm text-muted-foreground">Aucune séance pour cette semaine.</div>;
 
   return (
     <div className="rounded-xl border overflow-hidden">
@@ -570,7 +571,7 @@ function WeekGrid({ lessons, monday }) {
                 const pct = ((m - minM) / range) * 100;
                 return (
                   <div key={m} className="absolute left-0 right-0" style={{ top: `${pct}%`, transform: "translateY(-50%)" }}>
-                    <div className="text-[11px] sm:text-xs text-muted-foreground px-2">{pad(h)}:00</div>
+                    <div className="text-[11px] sm:text-xs text-muted-foreground px-2">{pad2(h)}:00</div>
                     <div className="h-px bg-border/70" />
                   </div>
                 );
@@ -605,7 +606,7 @@ function WeekGrid({ lessons, monday }) {
                       const leftPct = laneIndex * widthPct;
 
                       const subjName = l?.subject?.name ?? l?.subject_name ?? "Cours";
-                      const c = subjectBlockColors(l);
+                      const solid = subjectSolid(l);
                       const degreeFull = l.degree?.name ?? l.timetable?.degree?.name ?? "Niveau";
                       const degreeShort = degreeAbbr(degreeFull);
                       const room = roomName(l);
@@ -622,9 +623,9 @@ function WeekGrid({ lessons, monday }) {
                             height: `${heightPct}%`,
                             left: `calc(${leftPct}% + 4px)`,
                             width: `calc(${widthPct}% - 8px)`,
-                            backgroundColor: c.border,
+                            backgroundColor: solid,
                             color: "#fff",
-                            boxShadow: `0 6px 16px ${c.accent}44`,
+                            boxShadow: `0 6px 16px rgba(0,0,0,0.18)`,
                             opacity: synthetic ? 0.9 : 1,
                           }}
                         >
@@ -650,7 +651,7 @@ function WeekGrid({ lessons, monday }) {
   );
 }
 
-/* ───────────────────── Agenda view ───────────────────── */
+/* ───────────────────────────── Agenda view ───────────────────────────── */
 function AgendaList({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
@@ -695,7 +696,7 @@ function AgendaList({ lessons, monday }) {
                   const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
-                    ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
+                    ? `(${pad2(Math.floor(mins[0] / 60))}:${pad2(mins[0] % 60)}–${pad2(Math.floor(mins[1] / 60))}:${pad2(mins[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
                   return (
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
@@ -720,12 +721,12 @@ function AgendaList({ lessons, monday }) {
   );
 }
 
-/* ───────────────────── ICS (ignores plans) ───────────────────── */
+/* ───────────────────────────── ICS export ───────────────────────────── */
 function IcsButton({ lessons, monday }) {
   const download = () => {
     const events = [];
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue;
+      if (l.is_plan) continue; // ignore monthly plans
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
         if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
@@ -756,7 +757,10 @@ function IcsButton({ lessons, monday }) {
     const ics = buildIcs(events);
     const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "enseignant-emploi-du-temps.ics"; a.click();
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "enseignant-emploi-du-temps.ics";
+    a.click();
     URL.revokeObjectURL(url);
   };
   return <button onClick={download} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Export .ics</button>;
