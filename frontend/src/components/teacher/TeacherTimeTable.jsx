@@ -103,13 +103,27 @@ const subjectKey = (l) =>
   l?.subject?.id ??
   l?.subject_id ??
   slugify(l?.subject?.name ?? l?.subject_name ?? "subject");
-
-const subjectSolid = (l) => {
-  const key = String(subjectKey(l));
-  return subjectColors[key] || `hsl(${hue(key)} 65% 45%)`;
+  // color utilities (paste near slugify/hashInt/goldenHue/subjectKey)
+const subjectBlockColors = (l) => {
+  const key = String(subjectKey(l) ?? "subject");
+  const fixed = subjectColors?.[key];
+  if (fixed) {
+    // use configured color for solid border/bg + accent
+    return {
+      bg: `${fixed}22`,        // translucent bg
+      border: fixed,           // solid border / solid block
+      accent: fixed,           // glow/accent
+    };
+  }
+  const hue = goldenHue(key);
+  return {
+    bg: `hsla(${hue},85%,45%,0.20)`,
+    border: `hsl(${hue},65%,45%)`,
+    accent: `hsl(${hue},85%,45%)`,
+  };
 };
 
-const subjectSoft = (key) => `hsl(${hue(key)} 65% 45% / 0.14)`;
+
 
 const roomName = (l) =>
   l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
@@ -719,7 +733,7 @@ function AgendaList({ lessons, monday }) {
                   const timeStr = mins
                     ? `(${pad(Math.floor(mins[0] / 60))}:${pad(mins[0] % 60)}–${pad(Math.floor(mins[1] / 60))}:${pad(mins[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
-                                  
+
                   return (
                     <div key={l.id ?? `${d.val}-${i}`} className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="font-medium text-foreground flex items-center gap-2">
