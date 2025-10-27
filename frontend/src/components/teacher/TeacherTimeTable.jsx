@@ -27,7 +27,6 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 const _strip = (s = "") =>
   s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
 const slugify = (s = "") =>
   s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -35,53 +34,62 @@ const slugify = (s = "") =>
 const hashInt = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; };
 const hueFromKey = (key) => (hashInt(String(key)) * 137.508) % 360;
 
-/* ---------- DEGREE extraction (robust) ---------- */
+/* ---------- DEGREE extraction (extra-robust) ---------- */
 const firstTruthy = (...a) => a.find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
 
 const asDegreeObj = (x, fallbackId) => {
   if (!x) return null;
   if (typeof x === "string") return { id: fallbackId ?? slugify(x), name: x };
   return {
-    id: firstTruthy(x.id, fallbackId),
+    id: firstTruthy(x.id, fallbackId, x.value),
     name: firstTruthy(x.name, x.title, x.label, x.fullname, x.full_name),
     abbreviation: firstTruthy(x.abbreviation, x.abbr, x.short, x.short_name, x.code),
   };
 };
 
-/* Try many possible backend shapes */
+/* Try a LOT of shapes – nested, flat, aliases */
 const getDegreeObj = (l) => {
-  const cands = [
-    // canonical places
-    asDegreeObj(l?.degree, l?.degree_id),
-    asDegreeObj(l?.timetable?.degree, l?.timetable?.degree_id),
-    asDegreeObj(l?.classe?.degree), asDegreeObj(l?.class?.degree),
-    asDegreeObj(l?.classroom?.degree), asDegreeObj(l?.group?.degree),
-    asDegreeObj(l?.section?.degree), asDegreeObj(l?.division?.degree),
+  const fromNested =
+    asDegreeObj(l?.degree, l?.degree_id) ||
+    asDegreeObj(l?.timetable?.degree, l?.timetable?.degree_id) ||
+    asDegreeObj(l?.timetable?.classe?.degree) ||
+    asDegreeObj(l?.timetable?.class?.degree) ||
+    asDegreeObj(l?.timetable?.classroom?.degree) ||
+    asDegreeObj(l?.classe?.degree) ||
+    asDegreeObj(l?.class?.degree) ||
+    asDegreeObj(l?.classroom?.degree) ||
+    asDegreeObj(l?.group?.degree) ||
+    asDegreeObj(l?.section?.degree) ||
+    asDegreeObj(l?.division?.degree);
 
-    // flat fields
-    asDegreeObj(
-      {
-        name: firstTruthy(
-          l?.degree_name, l?.degreeLabel, l?.degree_title,
-          l?.niveau_name, l?.niveau, l?.level_name, l?.level,
-          // sometimes the "class" name is actually the degree stream (ex: 3AC, TC…)
-          l?.class_name, l?.classe_name, l?.class, l?.classe
-        ),
-        abbreviation: firstTruthy(
-          l?.degree_abbreviation, l?.degree_abbr, l?.degree_short, l?.degree_code,
-          l?.niveau_abbr, l?.level_abbr, l?.abbr, l?.code
-        ),
-      },
-      firstTruthy(l?.degree_id, l?.niveau_id, l?.level_id)
-    ),
-  ];
+  if (fromNested) return fromNested;
 
-  // last resort: if only an id exists
-  if (!cands.some(Boolean) && (l?.degree_id != null)) {
-    return { id: l.degree_id, name: `#${l.degree_id}` };
+  const fromFlat = asDegreeObj(
+    {
+      name: firstTruthy(
+        l?.degree_name, l?.degreeLabel, l?.degree_title,
+        l?.niveau_name, l?.niveau, l?.level_name, l?.level,
+        l?.class_name, l?.classe_name, l?.class, l?.classe
+      ),
+      abbreviation: firstTruthy(
+        l?.degree_abbreviation, l?.degree_abbr, l?.degree_short, l?.degree_code,
+        l?.niveau_abbr, l?.level_abbr, l?.abbr, l?.code
+      ),
+    },
+    firstTruthy(l?.degree_id, l?.niveau_id, l?.level_id, l?.class_id, l?.classe_id)
+  );
+
+  if (fromFlat) return fromFlat;
+
+  if (l?.degree_id != null) return { id: l.degree_id, name: `#${l.degree_id}` };
+
+  // Debug once per lesson so you can inspect what your API sends
+  if (!l.__degreeWarned) {
+    try { console.warn("No degree found on lesson:", JSON.parse(JSON.stringify(l))); }
+    catch { console.warn("No degree found on lesson (couldn't stringify)."); }
+    l.__degreeWarned = true;
   }
-
-  return cands.find(Boolean) ?? null;
+  return null;
 };
 
 const degreeAbbr = (name = "") => {
@@ -245,15 +253,13 @@ export default function TeacherTimetable() {
         const normalized = (raw ?? []).map((l) => ({
           ...l,
           day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
-
           start_time: getStartStr(l),
           end_time: getEndStr(l),
           start_minutes: numOrNull(l?.start_minutes) ?? undefined,
           end_minutes: numOrNull(l?.end_minutes) ?? undefined,
-
           is_plan: Boolean(l?.plan_id || l?.plan_date || l?.is_plan),
           plan_date: l?.plan_date ?? l?.date ?? null,
-          week_start: l?.week_start ?? l?.weekStart ?? mondayIso,
+          week_start: l?.week_start ?? l?.weekStart ?? mondayIso, // default to current week if missing
         }));
 
         if (!mounted) return;
@@ -284,13 +290,9 @@ export default function TeacherTimetable() {
   // Apply filter
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
-    if (degreeFilter) {
-      arr = arr.filter((l) => String(getDegreeId(l)) === String(degreeFilter));
-    }
+    if (degreeFilter) arr = arr.filter((l) => String(getDegreeId(l)) === String(degreeFilter));
     return arr;
   }, [lessons, degreeFilter]);
-
-  const hasTimed = useMemo(() => (filtered ?? []).some((x) => Boolean(resolveStartEndMins(x))), [filtered]);
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
@@ -310,7 +312,6 @@ export default function TeacherTimetable() {
             onToday={() => setWeekOffset(0)}
             onNext={() => setWeekOffset((w) => w + 1)}
           />
-          {/* Inline "Cette semaine" only when offset != 0 */}
           {weekOffset !== 0 && (
             <button
               onClick={() => setWeekOffset(0)}
@@ -319,7 +320,6 @@ export default function TeacherTimetable() {
               Cette semaine
             </button>
           )}
-
           <Select
             value={degreeFilter}
             onChange={setDegreeFilter}
@@ -331,27 +331,15 @@ export default function TeacherTimetable() {
         </div>
       </div>
 
+      {/* Always render the grid (even if there are no times); it shows untimed pills */}
       {view === "grid" ? (
-        hasTimed ? <WeekGrid lessons={filtered} monday={monday} /> : (
-          <div className="rounded-md border p-3 text-sm text-muted-foreground">
-            Aucune séance avec horaire précis. Ajoutez <code>start_time</code>/<code>end_time</code> ou un <code>period</code> côté admin,
-            ou basculez en vue <b>Agenda</b>.
-          </div>
-        )
+        <WeekGrid lessons={filtered} monday={monday} />
       ) : (
         <AgendaList lessons={filtered} monday={monday} />
       )}
 
-      {/* Floating FAB as a second safety (when user scrolls) */}
+      {/* Floating quick return */}
       <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
-    {weekOffset !== 0 && (
-  <button
-    onClick={() => setWeekOffset(0)}
-    className="fixed bottom-4 right-4 px-3 py-2 rounded-full shadow-lg border bg-background/95 hover:bg-muted transition"
-  >
-    Cette semaine
-  </button>
-)}
     </div>
   );
 }
@@ -424,9 +412,13 @@ function WeekGrid({ lessons, monday }) {
 
   const { minM, maxM } = useMemo(() => {
     let min = Infinity, max = -Infinity;
-    for (const d of DAYS) for (const l of byDay.get(d.val) ?? []) {
-      const mins = resolveStartEndMins(l); if (!mins) continue;
-      min = Math.min(min, mins[0]); max = Math.max(max, mins[1]);
+    for (const d of DAYS) {
+      for (const l of byDay.get(d.val) ?? []) {
+        const mins = resolveStartEndMins(l);
+        if (!mins) continue;
+        min = Math.min(min, mins[0]);
+        max = Math.max(max, mins[1]);
+      }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) { min = 9 * 60; max = 12 * 60; }
     let minAdj = Math.floor((min - PAD_MINS) / 30) * 30;
@@ -458,6 +450,7 @@ function WeekGrid({ lessons, monday }) {
         }
         if (!placed) lanes.push([it]);
       }
+      // Untimed pills lane (so non-planned weeks still show)
       if (untimed.length) {
         const pillLane = untimed.map((l, idx) => {
           const s = Math.max(minM, maxM - (idx + 1) * UNT_SLOT);
@@ -564,15 +557,11 @@ function WeekGrid({ lessons, monday }) {
                             opacity: synthetic ? 0.9 : 1,
                           }}
                         >
-                          {/* DEGREE as main label */}
                           <div className="px-2 pt-1 font-semibold leading-tight truncate">{degreeFull}</div>
-                          {/* time */}
                           <div className="px-2 text-[10px] sm:text-[11px] leading-tight">
                             {startS && endS ? `${startS}–${endS}` : (synthetic ? "Sans horaire" : "")}
                           </div>
-                          {/* room */}
                           <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{roomAbbr(room)}</div>
-                          {/* tiny badge bottom-right */}
                           <div className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/20">{degreeShort}</div>
                         </div>
                       );
