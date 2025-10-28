@@ -235,8 +235,26 @@ const buildIcs = (events) => {
 };
 
 /* ───────────────────────────── API helpers ───────────────────────────── */
-const STUDENT_ENDPOINT = "/eleve/emploi-du-temps"; // routes/api.php
-const PLANS_ENDPOINT = "/eleve/monthly-plans";
+const STUDENT_ENDPOINT = [
+  "/eleve/emploi-du-temps",
+  "/student/emploi-du-temps",
+  "/etudiant/emploi-du-temps",
+  "/students/emploi-du-temps",
+  "/student/timetable",
+  "/eleve/timetable",
+  "/me/emploi-du-temps",
+  "/me/timetable",
+];
+
+const PLANS_ENDPOINT = [
+  "/eleve/monthly-plans",
+  "/student/monthly-plans",
+  "/etudiant/monthly-plans",
+  "/students/monthly-plans",
+  "/eleve/plans-mensuels",
+  "/student/plans-mensuels",
+  "/me/monthly-plans",
+];
 
 /* If your TimeTableApi doesn’t expose student(), we fallback locally. */
 const fetchStudentWeek = async ({ week_start }) => {
