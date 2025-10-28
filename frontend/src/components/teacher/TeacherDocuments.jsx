@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DocumentApi from "../../services/api/DocumentApi";
 import { axiosClient } from "../../api/axios";
 import { Card, CardContent } from "../ui/card";
@@ -14,34 +14,38 @@ import {
   SelectValue,
 } from "../ui/select";
 
-/* Small helpers */
-const pad = (s) => (s == null ? "" : String(s));
-const isNumericId = (v) => /^\d+$/.test(String(v ?? "").trim());
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
+const NONE_VALUE = "__none__"; // explicit "no degree" value (never empty string)
 
-/** Try several teacher-safe endpoints; never throw, just return [] on error */
+const safeStr = (v) => (v == null ? "" : String(v));
+const isNumId = (v) => /^\d+$/.test(safeStr(v).trim());
+
+/** Try several teacher-friendly endpoints; return [] on any failure */
 async function fetchTeacherDegrees() {
   const candidates = [
     "/enseignant/degrees",
     "/teacher/degrees",
     "/me/degrees",
     "/enseignant/my-degrees",
-    "/me/classes", // some APIs expose classes but include degree_id/name inside
+    "/me/classes", // sometimes classes carry degree info
   ];
+
   for (const url of candidates) {
     try {
       const res = await axiosClient.get(url, { params: { per_page: 1000 } });
-      const raw = res?.data?.data ?? res?.data ?? [];
-      if (!Array.isArray(raw) || raw.length === 0) continue;
+      const arr = res?.data?.data ?? res?.data ?? [];
+      if (!Array.isArray(arr) || arr.length === 0) continue;
 
-      // map & sanitize; keep only items with a numeric ID (so SelectItem never gets "")
-      const cleaned = raw
+      const cleaned = arr
         .map((it) => {
           const id =
             it?.id ??
             it?.value ??
             it?.degree_id ??
-            it?.classe_id ??
             it?.class_id ??
+            it?.classe_id ??
             null;
           const name =
             it?.name ??
@@ -53,19 +57,18 @@ async function fetchTeacherDegrees() {
             it?.class_name ??
             it?.classe_name ??
             null;
-
           return { id, name };
         })
-        .filter((d) => isNumericId(d.id) && pad(d.name).trim() !== "")
-        .map((d) => ({ id: String(d.id).trim(), name: String(d.name).trim() }));
+        .filter((d) => isNumId(d.id) && safeStr(d.name).trim() !== "")
+        .map((d) => ({ id: String(d.id), name: String(d.name).trim() }));
 
       if (cleaned.length) return cleaned;
     } catch {
-      // try next endpoint
+      /* try next */
     }
   }
 
-  // As a very last resort, try admin degrees (may 403) but do not crash
+  // Last resort: admin degrees (may 403; ignore errors)
   try {
     const res = await axiosClient.get("/admin/degrees", {
       params: { per_page: 1000 },
@@ -73,7 +76,7 @@ async function fetchTeacherDegrees() {
     const arr = res?.data?.data ?? res?.data ?? [];
     const cleaned = (Array.isArray(arr) ? arr : [])
       .map((d) => ({ id: d?.id, name: d?.name ?? d?.title ?? d?.label }))
-      .filter((d) => isNumericId(d.id) && pad(d.name).trim() !== "")
+      .filter((d) => isNumId(d.id) && safeStr(d.name).trim() !== "")
       .map((d) => ({ id: String(d.id), name: String(d.name).trim() }));
     return cleaned;
   } catch {
@@ -81,9 +84,38 @@ async function fetchTeacherDegrees() {
   }
 }
 
+/** Robust delete that tries multiple endpoints; throws last error if all fail */
+async function deleteTeacherDocRobust(id) {
+  // 1) Try the service first
+  try {
+    return await DocumentApi.deleteAsTeacher(id);
+  } catch (e1) {
+    // 2) Try a set of common endpoints directly
+    const candidates = [
+      `/enseignant/documents/${id}`,
+      `/teacher/documents/${id}`,
+      `/me/documents/${id}`,
+      `/documents/${id}`, // generic
+    ];
+    let lastErr = e1;
+    for (const url of candidates) {
+      try {
+        return await axiosClient.delete(url);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Component                                                          */
+/* ------------------------------------------------------------------ */
 export default function TeacherDocuments() {
   const [degrees, setDegrees] = useState([]);
   const [degreesLoading, setDegreesLoading] = useState(true);
+  const [degError, setDegError] = useState("");
 
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -91,32 +123,38 @@ export default function TeacherDocuments() {
   // form
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  /** empty string means "no selection" → placeholder is shown */
-  const [degreeId, setDegreeId] = useState("");
+  // use explicit NONE_VALUE so Select never has empty string
+  const [degreeId, setDegreeId] = useState(NONE_VALUE);
   const [file, setFile] = useState(null);
+
   const [submitting, setSubmitting] = useState(false);
-  const [deleting, setDeleting] = useState(null); // id being deleted
+  const [deleting, setDeleting] = useState(null);
 
   async function loadAll() {
     setLoading(true);
     setDegreesLoading(true);
+    setDegError("");
     try {
       const [degSettled, docsSettled] = await Promise.allSettled([
         fetchTeacherDegrees(),
         DocumentApi.listTeacher(),
       ]);
 
-      const degList =
-        degSettled.status === "fulfilled" && Array.isArray(degSettled.value)
-          ? degSettled.value
-          : [];
-      setDegrees(degList);
+      if (degSettled.status === "fulfilled") {
+        setDegrees(degSettled.value ?? []);
+      } else {
+        setDegrees([]);
+        setDegError("Impossible de charger la liste des degrés.");
+      }
 
-      const docs =
-        docsSettled.status === "fulfilled" ? docsSettled.value : null;
-      const listDocs =
-        docs?.data?.data?.data ?? docs?.data?.data ?? docs?.data ?? [];
-      setList(Array.isArray(listDocs) ? listDocs : []);
+      if (docsSettled.status === "fulfilled") {
+        const docs = docsSettled.value;
+        const listDocs =
+          docs?.data?.data?.data ?? docs?.data?.data ?? docs?.data ?? [];
+        setList(Array.isArray(listDocs) ? listDocs : []);
+      } else {
+        setList([]);
+      }
     } finally {
       setDegreesLoading(false);
       setLoading(false);
@@ -128,10 +166,12 @@ export default function TeacherDocuments() {
   }, []);
 
   const degreeOptions = useMemo(() => {
-    // Ensure there is NO item with value=""
-    return (degrees ?? [])
-      .filter((d) => isNumericId(d.id) && pad(d.name).trim() !== "")
+    // Always include the explicit "no degree" option first
+    const base = [{ value: NONE_VALUE, label: "— Aucun degré —" }];
+    const fromApi = (degrees ?? [])
+      .filter((d) => isNumId(d.id) && safeStr(d.name).trim() !== "")
       .map((d) => ({ value: String(d.id), label: d.name }));
+    return [...base, ...fromApi];
   }, [degrees]);
 
   async function onSubmit(e) {
@@ -145,14 +185,21 @@ export default function TeacherDocuments() {
       await DocumentApi.upload({
         title: title.trim(),
         description: description.trim() || null,
-        degree_id: degreeId ? Number(degreeId) : null, // null = “sans niveau”
+        degree_id: degreeId === NONE_VALUE ? null : Number(degreeId),
         file,
       });
+      // reset
       setTitle("");
       setDescription("");
-      setDegreeId(""); // back to placeholder
+      setDegreeId(NONE_VALUE);
       setFile(null);
       await loadAll();
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.message ||
+        "Échec de l’envoi du document.";
+      alert(msg);
     } finally {
       setSubmitting(false);
     }
@@ -162,16 +209,20 @@ export default function TeacherDocuments() {
     if (!confirm("Supprimer ce document ?")) return;
     setDeleting(id);
     try {
-      await DocumentApi.deleteAsTeacher(id);
+      await deleteTeacherDocRobust(id);
       await loadAll();
     } catch (e) {
-      const status = e?.response?.status;
-      if (status === 403) {
+      const st = e?.response?.status;
+      if (st === 403) {
         alert(
-          "Suppression refusée (403). Vous n'avez pas l'autorisation de supprimer ce document."
+          "Suppression refusée (403). Vous n’avez pas l’autorisation pour ce document."
         );
-      } else if (status === 404) {
+      } else if (st === 404) {
         alert("Document introuvable (404).");
+      } else if (e?.code === "ERR_NETWORK") {
+        alert(
+          "Réseau indisponible. Vérifiez la connexion du serveur (ERR_NETWORK)."
+        );
       } else {
         alert("Échec de la suppression.");
       }
@@ -186,6 +237,23 @@ export default function TeacherDocuments() {
         <CardContent className="p-6 space-y-4">
           <h2 className="text-lg font-semibold">Partager un document</h2>
 
+          {degError && (
+            <div className="text-xs text-amber-600 border border-amber-300 rounded-md p-2 bg-amber-50">
+              {degError} Vous pouvez quand même téléverser un document en
+              laissant “Aucun degré”.
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={loadAll}
+                >
+                  Réessayer le chargement des degrés
+                </Button>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <Label>Titre</Label>
@@ -199,28 +267,30 @@ export default function TeacherDocuments() {
             <div>
               <Label>Niveau (degré)</Label>
               <Select
-                value={degreeId} // "" => placeholder
-                onValueChange={(v) => setDegreeId(v)} // v is ALWAYS non-empty string from our items
+                value={degreeId}
+                onValueChange={(v) => setDegreeId(v)}
+                // value is NEVER "" because we default/use NONE_VALUE
               >
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      degreesLoading ? "Chargement…" : "Optionnel (aucun)"
-                    }
-                  />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* Always show the explicit "no degree" item first */}
+                  <SelectItem value={NONE_VALUE}>— Aucun degré —</SelectItem>
+
                   {degreesLoading && (
                     <SelectItem value="__loading" disabled>
                       Chargement…
                     </SelectItem>
                   )}
-                  {!degreesLoading && degreeOptions.length === 0 && (
+
+                  {!degreesLoading && degreeOptions.slice(1).length === 0 && (
                     <SelectItem value="__empty" disabled>
                       Aucun degré disponible
                     </SelectItem>
                   )}
-                  {degreeOptions.map((o) => (
+
+                  {degreeOptions.slice(1).map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
                     </SelectItem>
@@ -228,7 +298,7 @@ export default function TeacherDocuments() {
                 </SelectContent>
               </Select>
               <p className="mt-1 text-xs text-muted-foreground">
-                Laisser vide si le document n’est pas lié à un degré.
+                Laissez “Aucun degré” si le document est général.
               </p>
             </div>
 
@@ -271,6 +341,7 @@ export default function TeacherDocuments() {
                   Aucun document.
                 </div>
               )}
+
               {list.map((d) => (
                 <div
                   key={d.id}
@@ -281,7 +352,7 @@ export default function TeacherDocuments() {
                     <div className="text-xs text-muted-foreground">
                       {d.subject_name ? `${d.subject_name} · ` : ""}
                       Degré: {d.degree?.name ?? d.degree_id ?? "—"} ·{" "}
-                      {d.filesize_human}
+                      {d.filesize_human ?? ""}
                     </div>
                     {d.file_url ? (
                       <a
@@ -312,6 +383,7 @@ export default function TeacherDocuments() {
           )}
         </CardContent>
       </Card>
+
     </div>
   );
 }
