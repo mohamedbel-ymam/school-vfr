@@ -247,7 +247,11 @@ export default function ManageTimeTables() {
     return () => { mounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mondayIso]);
-
+const degreesById = useMemo(() => {
+  const m = {};
+  for (const d of degrees) m[String(d.id)] = d.name;
+  return m;
+}, [degrees]);
   /* Derived lists & shown lessons */
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
@@ -550,8 +554,9 @@ export default function ManageTimeTables() {
             range={range}
             onEdit={onEdit}
             onDelete={onDelete}
+            degreesById={degreesById} 
           />
-          <TableList rows={filtered} onEdit={onEdit} onDelete={onDelete} />
+          <TableList rows={filtered} onEdit={onEdit} onDelete={onDelete} degreesById={degreesById}  />
         </div>
       </div>
     </div>
@@ -626,7 +631,7 @@ function TimePreview({ start, end, period }) {
 }
 
 /* ────────────────────────── Grid view ────────────────────────── */
-function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete }) {
+function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete,degreesById }) {
   const hourMarks = useMemo(() => {
     const arr = [];
     for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
@@ -705,7 +710,13 @@ function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete }) {
 
                       const solid = subjectSolid(l);
                       const subj = l?.subject?.name ?? l?.subject_name ?? "Matière";
-                      const degree = l?.degree?.name ?? l?.degree_name ?? "Niveau";
+
+                      const degree =
+                       l?.degree?.name ??
+                       l?.degree_name ??
+                       (degreesById ? degreesById[String(l?.degree_id)] : undefined) ??
+                       "Niveau";
+                      
                       const room = roomName(l);
                       const sText = minsToTime(s2), eText = minsToTime(e2);
 
@@ -775,7 +786,7 @@ function buildLanes(items) {
 }
 
 /* ────────────────────────── Table list view ────────────────────────── */
-function TableList({ rows, onEdit, onDelete }) {
+function TableList({ rows, onEdit, onDelete,degreesById  }) {
   if (!rows?.length) return null;
   return (
     <div className="rounded-xl border overflow-hidden">
@@ -795,7 +806,11 @@ function TableList({ rows, onEdit, onDelete }) {
           <tbody>
             {rows.map((l) => {
               const day = DAYS.find((d) => d.val === normalizeDow(l?.day_of_week))?.full ?? "-";
-              const degree = l?.degree?.name ?? l?.degree_name ?? "-";
+              const degree =
+               l?.degree?.name ??
+               l?.degree_name ??
+               (degreesById ? degreesById[String(l?.degree_id)] : undefined) ??
+               "-";
               const subject = l?.subject?.name ?? l?.subject_name ?? "-";
               const teacher = l?.teacher?.firstname
                 ? `${l.teacher.firstname} ${l.teacher.lastname ?? ""}`.trim()
