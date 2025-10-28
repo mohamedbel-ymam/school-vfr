@@ -191,6 +191,15 @@ const degreeColors = (l) => {
     accent: `hsl(${h},85%,45%)`,
   };
 };
+const degreeChip = (l) => {
+  const c = degreeColors(l); // { bg, border, accent }
+  return {
+    softBg: c.bg,        // translucent background (card)
+    solid: c.border,     // solid color (chip/stripe)
+    text: "#fff",        // chip text
+    shadow: `${c.accent}33`, // subtle shadow
+  };
+};
 
 const roomName = (l) =>
   l?.room?.name ?? l?.room ?? (l?.room_id ? `Salle #${l.room_id}` : "");
@@ -942,15 +951,14 @@ function WeekGrid({ lessons, monday, degreeCatalog }) {
 }
 
 /* ───────────────────────────── Agenda view ───────────────────────────── */
-function AgendaList({ lessons, monday, degreeCatalog }) {
+function AgendaList({ lessons, monday }) {
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
       if (l.is_plan && l.plan_date) {
         const date = new Date(`${l.plan_date}T00:00:00`);
         if (!Number.isNaN(date.getTime()) && inWeek(date, monday)) {
-          const js = date.getDay();
-          const dow = js === 0 ? 7 : js;
+          const js = date.getDay(); const dow = js === 0 ? 7 : js;
           m.get(dow)?.push(l);
         }
         continue;
@@ -964,9 +972,7 @@ function AgendaList({ lessons, monday, degreeCatalog }) {
       m.get(day)?.push(l);
     }
     for (const [k, arr] of m) {
-      arr.sort(
-        (a, b) => (resolveStartEndMins(a)?.[0] ?? 0) - (resolveStartEndMins(b)?.[0] ?? 0)
-      );
+      arr.sort((a, b) => (resolveStartEndMins(a)?.[0] ?? 0) - (resolveStartEndMins(b)?.[0] ?? 0));
       m.set(k, arr);
     }
     return m;
@@ -980,56 +986,60 @@ function AgendaList({ lessons, monday, degreeCatalog }) {
         return (
           <div key={d.val}>
             <div className="text-sm font-semibold text-foreground/90 mb-2">
-              {d.full} •{" "}
-              {date.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
+              {d.full} • {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
             </div>
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const { name: degree, short } = decorateDegree(
-                    l,
-                    degreeCatalog
-                  );
-                  const room = roomName(l);
+                  const degreeFull  = getDegreeName(l);
+                  const degreeShort = getDegreeShort(l);
+                  const rName = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
-                    ? `(${pad2(Math.floor(mins[0] / 60))}:${pad2(
-                        mins[0] % 60
-                      )}–${pad2(Math.floor(mins[1] / 60))}:${pad2(
-                        mins[1] % 60
-                      )})`
-                    : l?.period
-                    ? `(Période ${l.period})`
-                    : "";
+                    ? `(${pad2(Math.floor(mins[0] / 60))}:${pad2(mins[0] % 60)}–${pad2(Math.floor(mins[1] / 60))}:${pad2(mins[1] % 60)})`
+                    : (l?.period ? `(Période ${l.period})` : "");
+
+                  // 🎨 same colors as grid
+                  const chip = degreeChip(l);
+
                   return (
                     <div
                       key={l.id ?? `${d.val}-${i}`}
-                      className="rounded-xl border p-3 bg-muted/40 hover:bg-muted/60 transition-colors"
+                      className="relative rounded-xl border p-3 hover:bg-muted/60 transition-colors overflow-hidden"
+                      style={{
+                        background: chip.softBg,
+                        borderColor: "transparent",
+                        boxShadow: `0 2px 10px ${chip.shadow}`,
+                      }}
                     >
-                      <div className="font-medium text-foreground flex items-center gap-2">
+                      {/* left accent stripe */}
+                      <div
+                        className="absolute inset-y-0 left-0 w-1.5"
+                        style={{ background: chip.solid }}
+                        aria-hidden
+                      />
+
+                      <div className="font-medium text-foreground flex items-center gap-2 pl-2">
+                        {/* colored degree chip */}
                         <span
-                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10"
-                          title={degree}
+                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold"
+                          style={{ background: chip.solid, color: chip.text }}
+                          title={degreeFull}
                         >
-                          {short}
+                          {degreeShort}
                         </span>
-                        <span
-                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-foreground/10"
-                          title={degree}
-                        >
-                          {degree}
+
+                        {/* full degree name */}
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-white/15">
+                          {degreeFull}
                         </span>
-                        {timeStr ? (
-                          <span className="text-muted-foreground">
-                            {timeStr}
-                          </span>
-                        ) : null}
+
+                        {/* time */}
+                        {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
-                      <div className="text-xs text-foreground/80">
-                        {room || ""}
+
+                      <div className="text-xs text-foreground/80 pl-2">
+                        {rName || ""}
                       </div>
                     </div>
                   );
@@ -1044,6 +1054,7 @@ function AgendaList({ lessons, monday, degreeCatalog }) {
     </div>
   );
 }
+
 
 /* ───────────────────────────── Floating 'Cette semaine' ───────────────────────────── */
 function BackToThisWeekFab({ show, onClick }) {
