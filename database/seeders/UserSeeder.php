@@ -59,47 +59,30 @@ class UserSeeder extends Seeder
 
         // --- Seed accounts --------------------------------------------------
         // Student
-        $student = $upsertUser([
-            'firstname' => 'Mohamed',
-            'lastname'  => 'Belymam',
-            'email'     => 'mohamed@belymam.com',
-            'role'      => UserRole::STUDENT->value,
-            'degree_id' => $degree->id,
-        ], 'student');
+        
 
         // Admin
-        $admin = $upsertUser([
-            'firstname' => 'Super',
-            'lastname'  => 'Admin',
-            'email'     => 'admin@school.com',
+        $user1 = $upsertUser([
+            'firstname' => 'Youssra',
+            'lastname'  => 'Yassir',
+            'email'     => 'youssrayassir@takwa.com',
             'role'      => UserRole::ADMIN->value,
             'degree_id' => null,
         ], 'admin');
-
+        $user2 = $upsertUser([
+                    'firstname' => 'Zineb  ',
+                    'lastname'  => 'El hounaini',
+                    'email'     => 'zinebelhounaini@takwa.com',
+                    'role'      => UserRole::ADMIN->value,
+                    'degree_id' => null,
+                ], 'admin');
         // Parent
-        $parent = $upsertUser([
-            'firstname' => 'parent',
-            'lastname'  => 'One',
-            'email'     => 'parent@school.com',
-            'role'      => UserRole::PARENT->value,
-            'degree_id' => null,
-        ], 'parent');
+        
 
         // Teacher
-        $teacher = $upsertUser([
-            'firstname' => 'Enseignant',
-            'lastname'  => 'One',
-            'email'     => 'enseignant@school.com',
-            'role'      => UserRole::TEACHER->value,
-            'degree_id' => null,
-        ], 'teacher');
-
+      
         // --- Link parent → child (HasMany/BelongsTo) -----------------------
         // Use the BelongsTo side to associate:
-        if ($student && $parent) {
-            $student->parent()->associate($parent);
-            $student->save();
-            // Alternatively (from parent side): $parent->children()->save($student);
-        }
+        
     }
 }
