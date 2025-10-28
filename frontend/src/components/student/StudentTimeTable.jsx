@@ -246,11 +246,55 @@ const fetchStudentWeek = async ({ week_start }) => {
   return axiosClient.get(STUDENT_ENDPOINT, { params: { week_start } });
 };
 
+/* Subject catalog (robust fallback when API returns only subject_id) */
+const SUBJECT_ENDPOINT_CANDIDATES = ["/admin/subjects", "/eleve/subjects", "/subjects"];
+async function fetchSubjectCatalog() {
+  for (const url of SUBJECT_ENDPOINT_CANDIDATES) {
+    try {
+      const res = await axiosClient.get(url, { params: { per_page: 1000 } });
+      const arr = res?.data?.data ?? res?.data ?? [];
+      if (Array.isArray(arr) && arr.length) {
+        const m = {};
+        for (const it of arr) {
+          const id = String(it?.id ?? it?.value ?? "");
+          const name = it?.name ?? it?.title ?? it?.label ?? (id ? `#${id}` : "Matière");
+          const key = it?.key ?? it?.code ?? undefined;
+          if (id) m[id] = { name, key };
+        }
+        return m;
+      }
+    } catch {
+      /* try next */
+    }
+  }
+  return {};
+}
+
+/* Normalize/Decorate subject using catalog when needed */
+function decorateSubjectFromRaw(l, catalog) {
+  const subjId = l?.subject?.id ?? l?.subject_id ?? null;
+  const subjNameRaw = l?.subject?.name ?? l?.subject_name ?? null;
+  const subjKey = l?.subject?.key ?? l?.subject_key ?? null;
+
+  if (subjNameRaw) {
+    return { id: subjId ?? null, name: subjNameRaw, key: subjKey ?? subjId ?? slugify(subjNameRaw) };
+  }
+  if (subjId != null && catalog && catalog[String(subjId)]) {
+    const c = catalog[String(subjId)];
+    return { id: subjId, name: c.name, key: c.key ?? subjId };
+  }
+  // Fallback if nothing available
+  if (subjId != null) return { id: subjId, name: `Matière #${subjId}`, key: subjId };
+  return { id: null, name: "Matière", key: slugify("Matière") };
+}
+
 /* ────────────────────────────── Component ────────────────────────────── */
 export default function StudentTimeTable() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  const [subjectCatalog, setSubjectCatalog] = useState({}); // ✅ new
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState(() =>
@@ -291,32 +335,38 @@ export default function StudentTimeTable() {
     (async () => {
       setLoading(true);
       try {
-        // 1) weekly lessons
-        const res = await fetchStudentWeek({ week_start: mondayIso });
-        const raw = unwrapLessons(res);
+        // Fetch weekly lessons and subject catalog in parallel
+        const [weekRes, catalogRes] = await Promise.allSettled([
+          fetchStudentWeek({ week_start: mondayIso }),
+          fetchSubjectCatalog(),
+        ]);
 
-        const weekly = (raw ?? []).map((l) => ({
-          ...l,
-          day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
-          subject:
-            l?.subject?.id || l?.subject_id
-              ? { id: l.subject?.id ?? l.subject_id, name: l.subject?.name ?? l.subject_name ?? "Matière", key: l?.subject?.key }
-              : l?.subject?.name
-              ? { id: null, name: l.subject.name }
-              : l?.subject,
-          room: l?.room ?? (l?.room_id ? null : undefined),
+        const catalog = catalogRes.status === "fulfilled" ? (catalogRes.value || {}) : {};
+        if (mounted) setSubjectCatalog(catalog);
 
-          start_time: getStartStr(l),
-          end_time: getEndStr(l),
-          start_minutes: numOrNull(l?.start_minutes) ?? undefined,
-          end_minutes: numOrNull(l?.end_minutes) ?? undefined,
+        const raw = weekRes.status === "fulfilled" ? unwrapLessons(weekRes.value) : [];
 
-          is_plan: false,
-          plan_date: null,
-          week_start: l?.week_start ?? l?.weekStart ?? mondayIso,
-        }));
+        const weekly = (raw ?? []).map((l) => {
+          const normalizedSubject = decorateSubjectFromRaw(l, catalog);
+          return {
+            ...l,
+            day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
+            subject: normalizedSubject,
+            subject_id: l?.subject_id ?? normalizedSubject?.id ?? l?.subject?.id ?? undefined,
+            room: l?.room ?? (l?.room_id ? null : undefined),
 
-        // 2) monthly plans overlapping visible week
+            start_time: getStartStr(l),
+            end_time: getEndStr(l),
+            start_minutes: numOrNull(l?.start_minutes) ?? undefined,
+            end_minutes: numOrNull(l?.end_minutes) ?? undefined,
+
+            is_plan: false,
+            plan_date: null,
+            week_start: l?.week_start ?? l?.weekStart ?? mondayIso,
+          };
+        });
+
+        // Monthly plans overlapping visible week
         const planPages = await Promise.all(
           monthsForWeek.map((month) => axiosClient.get(PLANS_ENDPOINT, { params: { month } }))
         );
@@ -327,23 +377,34 @@ export default function StudentTimeTable() {
           return !Number.isNaN(d) && inWeek(d, monday);
         });
 
-        const plans = plansInWeek.map((p) => ({
-          id: p.id,
-          is_plan: true,
-          plan_date: p.plan_date, // YYYY-MM-DD
-          subject: p.subject ? { id: p.subject.id, name: p.subject.name } : null,
-          room: null,
+        const plans = plansInWeek.map((p) => {
+          const subjId = p?.subject?.id ?? p?.subject_id ?? null;
+          const subjName = p?.subject?.name ?? (subjId != null ? catalog[String(subjId)]?.name : null);
+          const normalizedSubject = subjName
+            ? { id: subjId, name: subjName, key: subjId ?? slugify(subjName) }
+            : p?.subject
+            ? { id: p.subject.id ?? null, name: p.subject.name ?? "Matière", key: p.subject.key ?? p.subject.id }
+            : null;
 
-          start_time: p.start_time ?? null,
-          end_time: p.end_time ?? null,
-          start_minutes: numOrNull(p?.start_minutes) ?? undefined,
-          end_minutes: numOrNull(p?.end_minutes) ?? undefined,
+          return {
+            id: p.id,
+            is_plan: true,
+            plan_date: p.plan_date, // YYYY-MM-DD
+            subject: normalizedSubject,
+            subject_id: subjId ?? undefined,
+            room: null,
 
-          day_of_week: null,
-          week_start: null,
-          timetable_id: p.id,
-          timetable: p.title ? { id: p.id, title: p.title } : null,
-        }));
+            start_time: p.start_time ?? null,
+            end_time: p.end_time ?? null,
+            start_minutes: numOrNull(p?.start_minutes) ?? undefined,
+            end_minutes: numOrNull(p?.end_minutes) ?? undefined,
+
+            day_of_week: null,
+            week_start: null,
+            timetable_id: p.id,
+            timetable: p.title ? { id: p.id, title: p.title } : null,
+          };
+        });
 
         if (!mounted) return;
         setLessons([...weekly, ...plans]);
@@ -408,7 +469,6 @@ export default function StudentTimeTable() {
             onToday={() => setWeekOffset(0)}
             onNext={() => setWeekOffset((w) => w + 1)}
           />
-            
           {weekOffset !== 0 && (
             <button
               onClick={() => setWeekOffset(0)}
@@ -445,7 +505,6 @@ export default function StudentTimeTable() {
         <AgendaList lessons={shownLessons} weekOffset={weekOffset} />
       )}
       <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
-
     </div>
   );
 }
