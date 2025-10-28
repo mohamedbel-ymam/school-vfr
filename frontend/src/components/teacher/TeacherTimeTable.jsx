@@ -952,6 +952,39 @@ function WeekGrid({ lessons, monday, degreeCatalog }) {
 
 /* ───────────────────────────── Agenda view ───────────────────────────── */
 function AgendaList({ lessons, monday }) {
+  // Prefer an explicit degree name if present; otherwise fall back to helper
+  const degreeNameStrict = (l) => {
+    const name =
+      l?.degree?.name ??
+      l?.timetable?.degree?.name ??
+      l?.classe?.degree?.name ??
+      l?.class?.degree?.name ??
+      l?.classroom?.degree?.name ??
+      l?.group?.degree?.name ??
+      l?.section?.degree?.name ??
+      l?.division?.degree?.name ??
+      l?.degree_name ??
+      l?.niveau_name ??
+      l?.level_name ??
+      l?.class_name ??
+      l?.classe_name ?? null;
+    // fall back to global helper (may return "Sans niveau" only if truly missing)
+    return (name && String(name).trim()) ? String(name) : getDegreeName(l);
+  };
+
+  // Use grid color logic; if we found a better degree name, decorate object so colors match
+  const degreeChip = (l) => {
+    const n = degreeNameStrict(l);
+    const decorated = n ? { ...l, degree: { ...(l.degree || {}), name: n }, degree_name: n } : l;
+    const c = degreeColors(decorated);
+    return {
+      softBg: c.bg,             // translucent card background
+      solid: c.border,          // solid chip/stripe
+      text: "#fff",
+      shadow: `${c.accent}33`,  // subtle shadow
+    };
+  };
+
   const byDay = useMemo(() => {
     const m = new Map(DAYS.map((d) => [d.val, []]));
     for (const l of lessons ?? []) {
@@ -991,16 +1024,14 @@ function AgendaList({ lessons, monday }) {
             <div className="space-y-2">
               {list.length ? (
                 list.map((l, i) => {
-                  const degreeFull  = getDegreeName(l);
-                  const degreeShort = getDegreeShort(l);
-                  const rName = roomName(l);
+                  const degreeFull = degreeNameStrict(l);  // 🔵 full name only
+                  const room = roomName(l);
                   const mins = resolveStartEndMins(l);
                   const timeStr = mins
                     ? `(${pad2(Math.floor(mins[0] / 60))}:${pad2(mins[0] % 60)}–${pad2(Math.floor(mins[1] / 60))}:${pad2(mins[1] % 60)})`
                     : (l?.period ? `(Période ${l.period})` : "");
 
-                  // 🎨 same colors as grid
-                  const chip = degreeChip(l);
+                  const chip = degreeChip(l); // 🎨 same palette as grid
 
                   return (
                     <div
@@ -1020,26 +1051,18 @@ function AgendaList({ lessons, monday }) {
                       />
 
                       <div className="font-medium text-foreground flex items-center gap-2 pl-2">
-                        {/* colored degree chip */}
                         <span
                           className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold"
                           style={{ background: chip.solid, color: chip.text }}
                           title={degreeFull}
                         >
-                          {degreeShort}
-                        </span>
-
-                        {/* full degree name */}
-                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-white/15">
                           {degreeFull}
                         </span>
-
-                        {/* time */}
                         {timeStr ? <span className="text-muted-foreground">{timeStr}</span> : null}
                       </div>
 
                       <div className="text-xs text-foreground/80 pl-2">
-                        {rName || ""}
+                        {room || ""}
                       </div>
                     </div>
                   );
@@ -1054,6 +1077,7 @@ function AgendaList({ lessons, monday }) {
     </div>
   );
 }
+
 
 
 /* ───────────────────────────── Floating 'Cette semaine' ───────────────────────────── */
