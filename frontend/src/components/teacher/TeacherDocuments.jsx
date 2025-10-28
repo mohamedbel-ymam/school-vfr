@@ -1,7 +1,7 @@
 // src/components/teacher/TeacherDocuments.jsx
 import { useEffect, useState } from "react";
 import DocumentApi from "../../services/api/DocumentApi";
-import { axiosClient } from "../../api/axios"; // ✅ needed for fallback fetches
+import { axiosClient } from "../../api/axios";
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -9,60 +9,21 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
-/* ---------------------------------- Helpers ---------------------------------- */
-const DEGREE_CANDIDATES = [
-  "/enseignant/degrees",
-  "/teacher/degrees",
-  "/me/degrees",
-  "/degrees",          // public list, if you expose one
-  "/admin/degrees"     // LAST resort only
-];
-
-function normalizeDegreePayload(res) {
-  const arr = res?.data?.data ?? res?.data ?? [];
-  return Array.isArray(arr)
-    ? arr
-        .map(d => ({
-          id: d?.id ?? d?.value ?? null,
-          name: d?.name ?? d?.title ?? d?.label ?? (d?.id ? `#${d.id}` : null),
-        }))
-        .filter(d => d.id && d.name)
-    : [];
-}
-
+/* ----------------------------- Helpers ----------------------------- */
 function mondayIsoToday() {
   const d = new Date();
-  const js = d.getDay(); // 0..6
+  const js = d.getDay(); // 0..6 (Sun..Sat)
   const delta = js === 0 ? -6 : 1 - js;
   d.setDate(d.getDate() + delta);
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Fetch a teacher-safe degree list. Falls back to deriving from the teacher's timetable. */
-async function fetchTeacherDegrees() {
-  // Try known teacher/public endpoints first
-  for (const url of DEGREE_CANDIDATES) {
-    try {
-      const r = await axiosClient.get(url, { params: { per_page: 1000 } });
-      if (r?.status === 200) {
-        const out = normalizeDegreePayload(r);
-        if (out.length) return out;
-      }
-    } catch (e) {
-      const s = e?.response?.status;
-      // ignore auth/perm/not-found and try next candidate
-      if (![401, 403, 404].includes(s)) {
-        // network/unknown error → bubble up
-        throw e;
-      }
-    }
-  }
-
-  // Last-chance fallback: derive from current week's teacher timetable
+// Build a teacher-safe degree list from timetable (no 404/403)
+async function fetchDegreesFromTimetable() {
   try {
-    const weekStart = mondayIsoToday();
-    const r = await axiosClient.get("/enseignant/emploi-du-temps", { params: { week_start: weekStart } });
+    const week_start = mondayIsoToday();
+    const r = await axiosClient.get("/enseignant/emploi-du-temps", { params: { week_start } });
     const rows = r?.data?.data?.lessons ?? r?.data?.lessons ?? r?.data ?? [];
     const map = new Map();
     for (const l of rows) {
@@ -79,13 +40,13 @@ async function fetchTeacherDegrees() {
         null;
       if (id && name) map.set(String(id), String(name));
     }
-    return [...map.entries()].map(([id, name]) => ({ id, name }));
+    return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   } catch {
     return [];
   }
 }
 
-/* --------------------------------- Component --------------------------------- */
+/* ----------------------------- Component ----------------------------- */
 export default function TeacherDocuments() {
   const [degrees, setDegrees] = useState([]);
   const [degreesLoading, setDegreesLoading] = useState(true);
@@ -104,13 +65,12 @@ export default function TeacherDocuments() {
     try {
       setDegreesLoading(true);
 
-      const [degList, docs] = await Promise.all([
-        fetchTeacherDegrees(),
-        DocumentApi.listTeacher(),
-      ]);
-
+      // degrees (safe, timetable-derived)
+      const degList = await fetchDegreesFromTimetable();
       setDegrees(degList);
 
+      // documents
+      const docs = await DocumentApi.listTeacher();
       const listDocs = docs?.data?.data?.data ?? docs?.data?.data ?? [];
       setList(listDocs);
     } finally {
@@ -127,7 +87,7 @@ export default function TeacherDocuments() {
     await DocumentApi.upload({
       title,
       description,
-      degree_id: degreeId ? Number(degreeId) : null, // nullable degree OK
+      degree_id: degreeId ? Number(degreeId) : null, // nullable OK
       file,
     });
     setTitle(""); setDescription(""); setDegreeId(""); setFile(null);
@@ -136,8 +96,38 @@ export default function TeacherDocuments() {
 
   async function removeItem(id) {
     if (!confirm("Supprimer ce document ?")) return;
-    await DocumentApi.deleteAsTeacher(id);
-    await loadAll();
+
+    // Try known routes in order. Stop on first success.
+    const tries = [
+      `/enseignant/documents/${id}`,
+      `/teacher/documents/${id}`,
+      `/documents/${id}`,
+    ];
+
+    for (let i = 0; i < tries.length; i++) {
+      try {
+        await axiosClient.delete(tries[i]);
+        await loadAll();
+        return;
+      } catch (e) {
+        const st = e?.response?.status;
+        // On 401/403/404, try next route; on other errors, break and show.
+        if (![401, 403, 404].includes(st)) {
+          alert(`Échec de suppression (${st ?? "erreur réseau"})`);
+          return;
+        }
+        if (i === tries.length - 1) {
+          // All attempts failed
+          if (st === 403) {
+            alert("Action interdite: vous ne pouvez supprimer que vos propres documents.");
+          } else if (st === 404) {
+            alert("Document introuvable ou déjà supprimé.");
+          } else {
+            alert("Échec de suppression.");
+          }
+        }
+      }
+    }
   }
 
   return (
@@ -160,7 +150,7 @@ export default function TeacherDocuments() {
                 <SelectContent>
                   {degreesLoading && <SelectItem value="loading" disabled>Chargement…</SelectItem>}
                   {!degreesLoading && degrees.length === 0 && (
-                    <SelectItem value="empty" disabled>Aucun degré</SelectItem>
+                    <SelectItem value="" disabled>Aucun degré détecté</SelectItem>
                   )}
                   {!degreesLoading && degrees.map((d) => (
                     <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
@@ -202,7 +192,7 @@ export default function TeacherDocuments() {
                   <div className="w-full">
                     <div className="font-medium">{d.title}</div>
                     <div className="text-xs text-muted-foreground">
-                      {d.subject_name ? `${d.subject_name} · ` : ""}Degré: {d.degree?.name ?? d.degree_id} · {d.filesize_human}
+                      {d.subject_name ? `${d.subject_name} · ` : ""}Degré: {d.degree?.name ?? d.degree_id ?? "—"} · {d.filesize_human}
                     </div>
                     <a className="text-sm underline break-all" href={d.file_url} target="_blank" rel="noreferrer">
                       Télécharger
