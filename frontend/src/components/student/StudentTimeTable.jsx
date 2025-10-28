@@ -4,10 +4,12 @@ import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../api/axios";
 import subjectColors from "../../config/subjectColors";
 
-/* ───────────────────────────── Abbreviations ───────────────────────────── */
-const _strip = (s = "") =>
-  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+/* ───────────────────────────── Text helpers ───────────────────────────── */
+const _strip = (s = "") => s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const slugify = (s = "") =>
+  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+/* ───────────────────────────── Abbreviations ───────────────────────────── */
 const SUBJECT_ABBR = {
   "physique & chimie": "PC",
   "physique et chimie": "PC",
@@ -41,14 +43,7 @@ const subjectAbbr = (name = "") => {
   return letters || name.slice(0, 4).toUpperCase();
 };
 
-const roomAbbr = (r) => {
-  if (!r) return "";
-  const s = String(r);
-  const m = s.match(/(?:salle|room)\s*([a-z]?)(\d+)/i);
-  if (m) return `S-${(m[1] || "").toUpperCase()}${m[2]}`;
-  if (/^S-\w+/i.test(s)) return s;
-  return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
-};
+/* ───────────────────────────── UI bits ───────────────────────────── */
 function BackToThisWeekFab({ show, onClick }) {
   if (!show) return null;
   return (
@@ -62,7 +57,7 @@ function BackToThisWeekFab({ show, onClick }) {
   );
 }
 
-/* ─────────────────────────────── Constants ─────────────────────────────── */
+/* ───────────────────────────── Constants ───────────────────────────── */
 const DAYS = [
   { label: "Lun", full: "Lundi", val: 1 },
   { label: "Mar", full: "Mardi", val: 2 },
@@ -72,15 +67,13 @@ const DAYS = [
   { label: "Sam", full: "Samedi", val: 6 },
   { label: "Dim", full: "Dimanche", val: 7 },
 ];
-// dynamic window clamps for grid
 const HARD_MIN = 7 * 60;
 const HARD_MAX = 22 * 60;
 const PAD_MINS = 30;
-
 const SCHOOL_START_MINS = 9 * 60;
 const PERIOD_DURATION_MINS = 90;
 
-/* ─────────────────────────────── Utilities ─────────────────────────────── */
+/* ───────────────────────────── Utilities ───────────────────────────── */
 const unwrapLessons = (r) =>
   r?.data?.data?.lessons ??
   r?.data?.lessons ??
@@ -132,9 +125,7 @@ const addDays = (date, n) => {
   d.setDate(d.getDate() + n);
   return d;
 };
-const sameMonday = (a, b) =>
-  startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
-
+const sameMonday = (a, b) => startOfWeekMonday(a).getTime() === startOfWeekMonday(b).getTime();
 const isSameDayIndex = (date, dow1to7) => {
   const js = date.getDay();
   const ours = js === 0 ? 7 : js;
@@ -147,9 +138,6 @@ const inWeek = (date, monday) => {
   end.setHours(23, 59, 59, 999);
   return date >= start && date <= end;
 };
-
-const slugify = (s = "") =>
-  s.normalize?.("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
 const subjectKey = (l) =>
   l?.subject?.key ??
@@ -184,8 +172,8 @@ const pickFirst = (...vals) => vals.find((v) => v !== undefined && v !== null &&
 const getStartStr = (l) => pickFirst(l?.start, l?.start_time, l?.from, l?.hour_from, l?.begin, l?.time_from) ?? null;
 const getEndStr = (l) => pickFirst(l?.end, l?.end_time, l?.to, l?.hour_to, l?.finish, l?.time_to) ?? null;
 
-const getStartMin = (l) => (numOrNull(l?.start_minutes) ?? toMins(getStartStr(l)));
-const getEndMin = (l) => (numOrNull(l?.end_minutes) ?? toMins(getEndStr(l)));
+const getStartMin = (l) => numOrNull(l?.start_minutes) ?? toMins(getStartStr(l));
+const getEndMin = (l) => numOrNull(l?.end_minutes) ?? toMins(getEndStr(l));
 
 const parsePeriodToMins = (period) => {
   if (!period && period !== 0) return null;
@@ -213,6 +201,7 @@ const resolveStartEndMins = (row) => {
   return null;
 };
 
+/* ───────────────────────────── ICS helpers ───────────────────────────── */
 const toIcsDate = (d) =>
   `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}00Z`;
 const buildIcs = (events) => {
@@ -235,14 +224,12 @@ const buildIcs = (events) => {
 };
 
 /* ───────────────────────────── API helpers ───────────────────────────── */
-const STUDENT_ENDPOINT = "/eleve/emploi-du-temps"; // routes/api.php
+const STUDENT_ENDPOINT = "/eleve/emploi-du-temps";
 const PLANS_ENDPOINT = "/eleve/monthly-plans";
+const STUDENT_ME_ENDPOINTS = ["/eleve/me", "/me", "/profile", "/student/me", "/auth/me"];
 
-/* If your TimeTableApi doesn’t expose student(), we fallback locally. */
 const fetchStudentWeek = async ({ week_start }) => {
-  if (TimeTableApi?.student) {
-    return TimeTableApi.student({ week_start });
-  }
+  if (TimeTableApi?.student) return TimeTableApi.student({ week_start });
   return axiosClient.get(STUDENT_ENDPOINT, { params: { week_start } });
 };
 
@@ -270,12 +257,10 @@ async function fetchSubjectCatalog() {
   return {};
 }
 
-/* Normalize/Decorate subject using catalog when needed */
 function decorateSubjectFromRaw(l, catalog) {
   const subjId = l?.subject?.id ?? l?.subject_id ?? null;
   const subjNameRaw = l?.subject?.name ?? l?.subject_name ?? null;
   const subjKey = l?.subject?.key ?? l?.subject_key ?? null;
-
   if (subjNameRaw) {
     return { id: subjId ?? null, name: subjNameRaw, key: subjKey ?? subjId ?? slugify(subjNameRaw) };
   }
@@ -283,9 +268,139 @@ function decorateSubjectFromRaw(l, catalog) {
     const c = catalog[String(subjId)];
     return { id: subjId, name: c.name, key: c.key ?? subjId };
   }
-  // Fallback if nothing available
   if (subjId != null) return { id: subjId, name: `Matière #${subjId}`, key: subjId };
   return { id: null, name: "Matière", key: slugify("Matière") };
+}
+
+/* ───────────────────── Degree extraction & guard ───────────────────── */
+const firstTruthy = (...a) => a.find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
+
+const asDegreeObj = (x, fallbackId) => {
+  if (!x) return null;
+  if (typeof x === "string") return { id: fallbackId ?? slugify(x), name: x };
+  return {
+    id: firstTruthy(x.id, fallbackId, x.value),
+    name: firstTruthy(x.name, x.title, x.label, x.fullname, x.full_name),
+  };
+};
+
+function lessonDegree(l) {
+  // try nested
+  const obj =
+    asDegreeObj(l?.degree, l?.degree_id) ||
+    asDegreeObj(l?.timetable?.degree, l?.timetable?.degree_id) ||
+    asDegreeObj(l?.classe?.degree) ||
+    asDegreeObj(l?.class?.degree) ||
+    asDegreeObj(l?.classroom?.degree) ||
+    asDegreeObj(l?.group?.degree) ||
+    asDegreeObj(l?.section?.degree) ||
+    asDegreeObj(l?.division?.degree) ||
+    // flat aliases
+    asDegreeObj(
+      {
+        name: firstTruthy(l?.degree_name, l?.niveau_name, l?.level_name, l?.class_name, l?.classe_name),
+      },
+      firstTruthy(l?.degree_id, l?.niveau_id, l?.level_id, l?.class_id, l?.classe_id)
+    );
+  if (obj) return { id: obj.id != null ? String(obj.id) : null, name: obj.name ?? null };
+  if (l?.degree_id != null) return { id: String(l.degree_id), name: null };
+  return { id: null, name: null };
+}
+
+function planDegree(p) {
+  const obj =
+    asDegreeObj(p?.degree, p?.degree_id) ||
+    asDegreeObj(p?.timetable?.degree, p?.timetable?.degree_id) ||
+    asDegreeObj(
+      { name: firstTruthy(p?.degree_name, p?.niveau_name, p?.level_name) },
+      firstTruthy(p?.degree_id, p?.niveau_id, p?.level_id)
+    );
+  if (obj) return { id: obj.id != null ? String(obj.id) : null, name: obj.name ?? null };
+  if (p?.degree_id != null) return { id: String(p.degree_id), name: null };
+  return { id: null, name: null };
+}
+
+async function fetchStudentAllowedDegrees() {
+  // returns { ids: Set<string>, names: Set<string> }
+  const ids = new Set();
+  const names = new Set();
+  for (const url of STUDENT_ME_ENDPOINTS) {
+    try {
+      const res = await axiosClient.get(url);
+      const payload = res?.data?.data ?? res?.data ?? {};
+      const user =
+        payload?.user ??
+        payload?.student ??
+        payload;
+      // common shapes
+      const one =
+        asDegreeObj(user?.degree, user?.degree_id) ||
+        asDegreeObj(user?.classe?.degree, user?.classe?.degree_id) ||
+        asDegreeObj(user?.class?.degree, user?.class?.degree_id) ||
+        asDegreeObj(user?.current_degree, user?.current_degree_id);
+
+      if (one) {
+        if (one.id != null) ids.add(String(one.id));
+        if (one.name) names.add(_strip(one.name));
+      }
+
+      // arrays (rare, but handle)
+      const arr =
+        user?.degrees ??
+        user?.allowed_degrees ??
+        user?.classrooms ??
+        user?.classes ??
+        [];
+      if (Array.isArray(arr)) {
+        for (const it of arr) {
+          const d = asDegreeObj(it?.degree ?? it, it?.degree_id ?? it?.id);
+          if (!d) continue;
+          if (d.id != null) ids.add(String(d.id));
+          if (d.name) names.add(_strip(d.name));
+        }
+      }
+
+      if (ids.size || names.size) break; // good enough
+    } catch {
+      /* try next */
+    }
+  }
+  return { ids, names };
+}
+
+function keepByAllowed(lessonOrPlan, allowed) {
+  const { ids, names } = allowed;
+  const { id, name } = ("plan_date" in lessonOrPlan) ? planDegree(lessonOrPlan) : lessonDegree(lessonOrPlan);
+
+  if (ids.size) {
+    if (id != null) return ids.has(String(id));
+    // if ids are known but lesson has no id, reject to be safe
+    return false;
+  }
+  if (names.size) {
+    if (name) return names.has(_strip(name));
+    // if names are known but lesson has no name, reject to be safe
+    return false;
+  }
+  // no allowed info known → don't filter (fallback)
+  return true;
+}
+
+function dominantDegreeFrom(lessons) {
+  const count = new Map();
+  for (const l of lessons ?? []) {
+    const { id, name } = lessonDegree(l);
+    const key = id ?? (name ? `name:${_strip(name)}` : null);
+    if (!key) continue;
+    count.set(key, (count.get(key) ?? 0) + 1);
+  }
+  let bestKey = null, bestCount = 0;
+  for (const [k, c] of count) {
+    if (c > bestCount) { bestKey = k; bestCount = c; }
+  }
+  if (!bestKey) return { ids: new Set(), names: new Set() };
+  if (bestKey.startsWith("name:")) return { ids: new Set(), names: new Set([bestKey.slice(5)]) };
+  return { ids: new Set([bestKey]), names: new Set() };
 }
 
 /* ────────────────────────────── Component ────────────────────────────── */
@@ -294,7 +409,7 @@ export default function StudentTimeTable() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const [subjectCatalog, setSubjectCatalog] = useState({}); // ✅ new
+  const [subjectCatalog, setSubjectCatalog] = useState({});
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState(() =>
@@ -303,7 +418,7 @@ export default function StudentTimeTable() {
   const [subjectFilter, setSubjectFilter] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
 
-  // auto-switch view on resize (perf-friendly)
+  // responsive switch
   const resizeTimer = useRef();
   useEffect(() => {
     const onResize = () => {
@@ -335,18 +450,18 @@ export default function StudentTimeTable() {
     (async () => {
       setLoading(true);
       try {
-        // Fetch weekly lessons and subject catalog in parallel
-        const [weekRes, catalogRes] = await Promise.allSettled([
+        // Fetch: student degree(s), weekly lessons, subject catalog, monthly plans
+        const [allowedP, weekRes, catalogRes] = await Promise.all([
+          fetchStudentAllowedDegrees(),
           fetchStudentWeek({ week_start: mondayIso }),
           fetchSubjectCatalog(),
         ]);
 
-        const catalog = catalogRes.status === "fulfilled" ? (catalogRes.value || {}) : {};
+        const catalog = catalogRes || {};
         if (mounted) setSubjectCatalog(catalog);
 
-        const raw = weekRes.status === "fulfilled" ? unwrapLessons(weekRes.value) : [];
-
-        const weekly = (raw ?? []).map((l) => {
+        const rawWeekly = unwrapLessons(weekRes);
+        const weekly = (rawWeekly ?? []).map((l) => {
           const normalizedSubject = decorateSubjectFromRaw(l, catalog);
           return {
             ...l,
@@ -366,17 +481,15 @@ export default function StudentTimeTable() {
           };
         });
 
-        // Monthly plans overlapping visible week
+        // Pull monthly plans intersecting this week
         const planPages = await Promise.all(
-          monthsForWeek.map((month) => axiosClient.get(PLANS_ENDPOINT, { params: { month } }))
+          monthsForWeek.map((month) => axiosClient.get(PLANS_ENDPOINT, { params: { month } }).catch(() => null))
         );
-        const rawPlans = planPages.flatMap((p) => unwrapPlans(p));
-
+        const rawPlans = planPages.filter(Boolean).flatMap((p) => unwrapPlans(p));
         const plansInWeek = (rawPlans ?? []).filter((p) => {
           const d = new Date(`${p?.plan_date}T00:00:00`);
           return !Number.isNaN(d) && inWeek(d, monday);
         });
-
         const plans = plansInWeek.map((p) => {
           const subjId = p?.subject?.id ?? p?.subject_id ?? null;
           const subjName = p?.subject?.name ?? (subjId != null ? catalog[String(subjId)]?.name : null);
@@ -385,29 +498,37 @@ export default function StudentTimeTable() {
             : p?.subject
             ? { id: p.subject.id ?? null, name: p.subject.name ?? "Matière", key: p.subject.key ?? p.subject.id }
             : null;
-
           return {
             id: p.id,
             is_plan: true,
-            plan_date: p.plan_date, // YYYY-MM-DD
+            plan_date: p.plan_date,
             subject: normalizedSubject,
             subject_id: subjId ?? undefined,
             room: null,
-
             start_time: p.start_time ?? null,
             end_time: p.end_time ?? null,
             start_minutes: numOrNull(p?.start_minutes) ?? undefined,
             end_minutes: numOrNull(p?.end_minutes) ?? undefined,
-
             day_of_week: null,
             week_start: null,
             timetable_id: p.id,
             timetable: p.title ? { id: p.id, title: p.title } : null,
+            degree_id: p.degree_id ?? p?.degree?.id ?? null,
+            degree_name: p?.degree?.name ?? p?.degree_name ?? null,
           };
         });
 
+        // Degree guard
+        let allowed = allowedP;
+        if (!allowed.ids.size && !allowed.names.size) {
+          // Fallback: use dominant degree from weekly lessons
+          allowed = dominantDegreeFrom(weekly);
+        }
+        const weeklyFiltered = weekly.filter((l) => keepByAllowed(l, allowed));
+        const plansFiltered = plans.filter((p) => keepByAllowed(p, allowed));
+
         if (!mounted) return;
-        setLessons([...weekly, ...plans]);
+        setLessons([...weeklyFiltered, ...plansFiltered]);
         setErr("");
       } catch (e) {
         console.error(e);
@@ -422,7 +543,7 @@ export default function StudentTimeTable() {
     };
   }, [weekOffset, monthsForWeek, mondayIso, monday]);
 
-  // filters
+  /* ───────────── Filters (subject / plan) ───────────── */
   const subjects = useMemo(() => {
     const s = new Map();
     for (const l of lessons) {
@@ -450,11 +571,16 @@ export default function StudentTimeTable() {
     });
   }, [lessons, subjectFilter, planFilter]);
 
+  /* ───────────── Rendering ───────────── */
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
-  if (!lessons?.length) return <div className="p-4 text-center">Aucun emploi du temps pour le moment.
-                                  <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
-                              </div>;
+  if (!lessons?.length)
+    return (
+      <div className="p-4 text-center">
+        Aucun emploi du temps pour le moment.
+        <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
+      </div>
+    );
 
   return (
     <div className="p-4 space-y-4">
@@ -472,10 +598,7 @@ export default function StudentTimeTable() {
             onNext={() => setWeekOffset((w) => w + 1)}
           />
           {weekOffset !== 0 && (
-            <button
-              onClick={() => setWeekOffset(0)}
-              className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
-            >
+            <button onClick={() => setWeekOffset(0)} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">
               Cette semaine
             </button>
           )}
@@ -493,7 +616,9 @@ export default function StudentTimeTable() {
           />
           <ViewToggle value={view} onChange={setView} />
           <IcsButton lessons={shownLessons} weekOffset={weekOffset} />
-          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Imprimer</button>
+          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">
+            Imprimer
+          </button>
         </div>
       </div>
 
@@ -501,11 +626,8 @@ export default function StudentTimeTable() {
       <Legend subjects={subjects} />
 
       {/* Content */}
-      {view === "grid" ? (
-        <WeekGrid lessons={shownLessons} weekOffset={weekOffset} />
-      ) : (
-        <AgendaList lessons={shownLessons} weekOffset={weekOffset} />
-      )}
+      {view === "grid" ? <WeekGrid lessons={shownLessons} weekOffset={weekOffset} /> : <AgendaList lessons={shownLessons} weekOffset={weekOffset} />}
+
       <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
     </div>
   );
@@ -624,7 +746,7 @@ function WeekGrid({ lessons, weekOffset }) {
 
   const lanesByDay = useMemo(() => {
     const out = new Map();
-    const UNT_SLOT = 30; // minutes height for untimed pills
+    const UNT_SLOT = 30;
     for (const d of DAYS) {
       const dayItems = byDay.get(d.val) ?? [];
       const timed = [], untimed = [];
@@ -639,7 +761,11 @@ function WeekGrid({ lessons, weekOffset }) {
         let placed = false;
         for (const lane of lanes) {
           const last = lane[lane.length - 1];
-          if (!last || it.s >= last.e) { lane.push(it); placed = true; break; }
+          if (!last || it.s >= last.e) {
+            lane.push(it);
+            placed = true;
+            break;
+          }
         }
         if (!placed) lanes.push([it]);
       }
@@ -810,11 +936,7 @@ function AgendaList({ lessons, weekOffset }) {
       m.get(day)?.push(l);
     }
     for (const [k, arr] of m) {
-      arr.sort((a, b) => {
-        const A = resolveStartEndMins(a)?.[0] ?? 0;
-        const B = resolveStartEndMins(b)?.[0] ?? 0;
-        return A - B;
-      });
+      arr.sort((a, b) => (resolveStartEndMins(a)?.[0] ?? 0) - (resolveStartEndMins(b)?.[0] ?? 0));
       m.set(k, arr);
     }
     return m;
@@ -870,7 +992,7 @@ function IcsButton({ lessons, weekOffset }) {
     const monday = startOfWeekMonday(addDays(new Date(), weekOffset * 7));
     const events = [];
     for (const l of lessons ?? []) {
-      if (l.is_plan) continue; // skip monthly plans in calendar export
+      if (l.is_plan) continue;
       if (l.week_start) {
         const ws = new Date(`${l.week_start}T00:00:00`);
         if (Number.isNaN(ws.getTime()) || !sameMonday(ws, monday)) continue;
@@ -907,4 +1029,14 @@ function IcsButton({ lessons, weekOffset }) {
     URL.revokeObjectURL(url);
   };
   return <button onClick={download} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">Export .ics</button>;
+}
+
+/* ───────────────────────────── Other small utils ───────────────────────────── */
+const roomAbbr = (r) => {
+  if (!r) return "";
+  const s = String(r);
+  const m = s.match(/(?:salle|room)\s*([a-z]?)(\d+)/i);
+  if (m) return `S-${(m[1] || "").toUpperCase()}${m[2]}`;
+  if (/^S-\w+/i.test(s)) return s;
+  return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
 }
