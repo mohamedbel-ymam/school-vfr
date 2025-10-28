@@ -452,7 +452,9 @@ export default function StudentTimeTable() {
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
   if (err) return <div className="p-4 text-center text-red-600 dark:text-red-400">{err}</div>;
-  if (!lessons?.length) return <div className="p-4 text-center">Aucun emploi du temps pour le moment.</div>;
+  if (!lessons?.length) return <div className="p-4 text-center">Aucun emploi du temps pour le moment.
+                                  <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
+                              </div>;
 
   return (
     <div className="p-4 space-y-4">
