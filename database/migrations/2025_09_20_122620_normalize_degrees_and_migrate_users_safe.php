@@ -14,7 +14,7 @@ return new class extends Migration {
 
     public function up(): void
     {
-        DB::transaction(function () {
+        
             // 1) Columns
             if (!Schema::hasColumn('degrees', 'slug')) {
                 Schema::table('degrees', function (Blueprint $table) {
@@ -83,15 +83,11 @@ return new class extends Migration {
 
             // 5) Upsert the 5 canonical degree rows (by slug)
             foreach ($targets as $t) {
-                DB::table('degrees')->updateOrInsert(
-                    ['slug' => $t['slug']],
-                    [
-                        'name'       => $t['label'],
-                        'position'   => $t['pos'],
-                        'updated_at' => now(),
-                        'created_at' => now(), // used if insert
-                    ]
-                );
+                $values = ['name' => $t['label'], 'position' => $t['pos']];
+                if (Schema::hasColumn('degrees', 'updated_at')) $values['updated_at'] = now();
+                if (Schema::hasColumn('degrees', 'created_at')) $values['created_at'] = now();
+                            
+                DB::table('degrees')->updateOrInsert(['slug' => $t['slug']], $values);
             }
 
             // 6) Repoint users.degree_id to canonical rows based on aliases
@@ -130,7 +126,7 @@ return new class extends Migration {
 
             // 7) Final pass: set slug+position on canonical only; leave legacy rows with slug = NULL
             // (API will only expose slug != NULL)
-        });
+        
     }
 
     public function down(): void
