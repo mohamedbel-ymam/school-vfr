@@ -1,5 +1,5 @@
 // src/components/Admin/Pages/SendNotification.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +17,9 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem
 } from "../../ui/select";
 import { useToast } from "../../ui/use-toast";
+
+// If you have it, use your auth context to detect admin
+import { useUserContext } from "../../../context/AuthContext";
 
 // --------------------------- Validation ---------------------------
 const schema = z.object({
@@ -41,7 +44,6 @@ const schema = z.object({
 });
 
 // --------------------------- Helpers ---------------------------
-const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
 const fmt = (s) => {
   if (!s) return "";
   try { return new Date(s).toLocaleString(); } catch { return String(s); }
@@ -58,13 +60,21 @@ const audienceLabel = (a) => ({
 // --------------------------- Component ---------------------------
 export default function SendNotification() {
   const { toast } = useToast();
+  const { user } = useUserContext?.() ?? {};
+  const isAdmin = useMemo(() => {
+    const col = (user?.role || "").toString().toLowerCase();
+    const spatie = Array.isArray(user?.roles)
+      ? user.roles.some((r) => (r?.name || r).toString().toLowerCase() === "admin")
+      : false;
+    return col === "admin" || spatie;
+  }, [user]);
 
-  // form + refs
+  // form states
   const [degrees, setDegrees] = useState([]);
   const [users, setUsers] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // list states
+  // list states (admin table)
   const [items, setItems] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [page, setPage] = useState(1);
@@ -95,27 +105,16 @@ export default function SendNotification() {
     if (audience !== "users") form.setValue("user_ids", []);
   }, [audience]); // eslint-disable-line
 
-  // --------------------------- Fetch list ---------------------------
+  // --------------------------- Admin list fetch ---------------------------
   const fetchList = async (opts = {}) => {
+    if (!isAdmin) return; // prevent 403 spam for non-admins
     setLoadingList(true);
     try {
       const params = { page: opts.page ?? page, per_page: perPage };
-      let res;
-
-      // Try common method names for index/list
-      if (typeof NotificationApi.list === "function") {
-        res = await NotificationApi.list(params);
-      } else if (typeof NotificationApi.index === "function") {
-        res = await NotificationApi.index(params);
-      } else if (typeof NotificationApi.all === "function") {
-        res = await NotificationApi.all(params);
-      } else {
-        // As a last resort, call .get with axios client if exposed
-        res = await NotificationApi.get?.(params);
-      }
-
-      // Accept several backend shapes
+      const res = await NotificationApi.list(params);
       const data = res?.data ?? {};
+
+      // Accept different shapes:
       const rows = Array.isArray(data) ? data
                 : Array.isArray(data.data) ? data.data
                 : Array.isArray(data.notifications) ? data.notifications
@@ -126,8 +125,15 @@ export default function SendNotification() {
       setTotal(Number(metaTotal) || rows.length);
       if (opts.page) setPage(opts.page);
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Erreur lors du chargement.";
-      toast({ title: "Liste", description: msg, variant: "destructive" });
+      const code = e?.response?.status;
+      // If unauthorized (401/403), ignore silently for non-admins
+      if (code !== 401 && code !== 403) {
+        const msg =
+          e?.response?.data?.message ||
+          (e?.response?.data?.errors && JSON.stringify(e.response.data.errors)) ||
+          e?.message || "Erreur lors du chargement.";
+        toast({ title: "Liste", description: msg, variant: "destructive" });
+      }
       setItems([]);
       setTotal(0);
     } finally {
@@ -136,38 +142,30 @@ export default function SendNotification() {
   };
 
   useEffect(() => {
-    fetchList({ page: 1 });
+    if (isAdmin) fetchList({ page: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAdmin]);
 
-  // --------------------------- Delete one ---------------------------
+  // --------------------------- Delete one (admin) ---------------------------
   const deleteItem = async (id) => {
-    if (!id) return;
+    if (!isAdmin || !id) return;
     const ok = window.confirm("Supprimer cette notification ?");
     if (!ok) return;
 
-    // optimistic
     const prev = items;
     setItems((cur) => cur.filter((n) => n.id !== id));
     setTotal((t) => Math.max(0, t - 1));
 
     try {
-      if (typeof NotificationApi.destroy === "function") {
-        await NotificationApi.destroy(id);
-      } else if (typeof NotificationApi.delete === "function") {
-        await NotificationApi.delete(id);
-      } else if (typeof NotificationApi.remove === "function") {
-        await NotificationApi.remove(id);
-      } else {
-        // Fallback: axiosClient.delete(`/notifications/${id}`)
-        await NotificationApi?.client?.delete?.(`/notifications/${id}`);
-      }
+      await NotificationApi.destroy?.(id);
       toast({ title: "Supprimée", description: "Notification supprimée." });
     } catch (e) {
-      // rollback
       setItems(prev);
       setTotal(prev.length);
-      const msg = e?.response?.data?.message || e?.message || "Suppression impossible.";
+      const msg =
+        e?.response?.data?.message ||
+        (e?.response?.data?.errors && JSON.stringify(e.response.data.errors)) ||
+        e?.message || "Suppression impossible.";
       toast({ title: "Échec", description: msg, variant: "destructive" });
     }
   };
@@ -187,22 +185,16 @@ export default function SendNotification() {
 
     try {
       setSubmitting(true);
-      if (typeof NotificationApi.broadcast === "function") {
-        await NotificationApi.broadcast(normalized);
-      } else if (typeof NotificationApi.create === "function") {
-        await NotificationApi.create(normalized);
-      } else if (typeof NotificationApi.store === "function") {
-        await NotificationApi.store(normalized);
-      } else {
-        await NotificationApi?.client?.post?.(`/notifications/broadcast`, normalized);
-      }
+      await NotificationApi.broadcast(normalized);
       toast({ title: "Envoyée", description: "Notification diffusée avec succès." });
       form.reset({ audience: "all_students", title: "", message: "", degree_id: undefined, user_id: undefined, user_ids: [] });
 
-      // Refresh list to show the new one (if backend stores it)
-      fetchList({ page: 1 });
+      if (isAdmin) fetchList({ page: 1 });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Erreur lors de l’envoi.";
+      const msg =
+        e?.response?.data?.message ||
+        (e?.response?.data?.errors && JSON.stringify(e.response.data.errors)) ||
+        e?.message || "Erreur lors de l’envoi.";
       toast({ title: "Échec", description: msg, variant: "destructive" });
     } finally {
       setSubmitting(false);
@@ -315,107 +307,83 @@ export default function SendNotification() {
             <Button disabled={submitting} onClick={form.handleSubmit(onSubmit)}>
               {submitting ? "Envoi…" : "Envoyer"}
             </Button>
-            <Button variant="outline" onClick={() => fetchList({ page: 1 })} disabled={loadingList}>
-              {loadingList ? "Chargement…" : "Actualiser la liste"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* === Notifications list === */}
-      <Card className="shadow">
-        <CardContent className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">Notifications ({total})</div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => fetchList({ page: 1 })} disabled={loadingList}>
-                {loadingList ? "…" : "Rafraîchir"}
+            {isAdmin && (
+              <Button variant="outline" onClick={() => fetchList({ page: 1 })} disabled={loadingList}>
+                {loadingList ? "Chargement…" : "Actualiser la liste"}
               </Button>
-            </div>
+            )}
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="text-left border-b">
-                <tr className="[&>th]:py-2 [&>th]:px-2">
-                  <th>ID</th>
-                  <th>Titre</th>
-                  <th>Audience</th>
-                  <th>Niveau / Cible</th>
-                  <th>Créée</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(items || []).length === 0 && (
-                  <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">
-                    {loadingList ? "Chargement…" : "Aucune notification"}
-                  </td></tr>
-                )}
-                {(items || []).map((n) => (
-                  <tr key={n.id} className="border-b align-top hover:bg-muted/30">
-                    <td className="py-2 px-2">{n.id}</td>
-                    <td className="py-2 px-2">
-                      <div className="font-medium">{n.title}</div>
-                      <div className="text-xs text-muted-foreground line-clamp-2">{n.message}</div>
-                    </td>
-                    <td className="py-2 px-2">{audienceLabel(n.audience)}</td>
-                    <td className="py-2 px-2">
-                      {/* Show degree or user targets when present */}
-                      {n.degree?.name || n.degree_name || (n.degree_id ? `#${n.degree_id}` : "")}
-                      {Array.isArray(n.user_ids) && n.user_ids?.length > 0 && (
-                        <div className="text-xs text-muted-foreground">
-                          {n.user_ids.length} utilisateur(s)
-                        </div>
-                      )}
-                      {n.user_id && (
-                        <div className="text-xs text-muted-foreground">
-                          utilisateur #{n.user_id}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-2 px-2 whitespace-nowrap">{fmt(n.created_at)}</td>
-                    <td className="py-2 px-2">
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="destructive" onClick={() => deleteItem(n.id)}>
-                          Supprimer
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Simple pager */}
-          {total > perPage && (
-            <div className="flex items-center justify-between pt-2">
-              <div className="text-xs text-muted-foreground">
-                Page {page} — {perPage} par page
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchList({ page: Math.max(1, page - 1) })}
-                  disabled={loadingList || page <= 1}
-                >
-                  Précédent
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchList({ page: page + 1 })}
-                  disabled={loadingList || (page * perPage) >= total}
-                >
-                  Suivant
-                </Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {/* === Notifications list (admin only) === */}
+      {isAdmin && (
+        <Card className="shadow">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">Notifications ({total})</div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => fetchList({ page: 1 })} disabled={loadingList}>
+                  {loadingList ? "…" : "Rafraîchir"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-left border-b">
+                  <tr className="[&>th]:py-2 [&>th]:px-2">
+                    <th>ID</th>
+                    <th>Titre</th>
+                    <th>Audience</th>
+                    <th>Niveau / Cible</th>
+                    <th>Créée</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(items || []).length === 0 && (
+                    <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">
+                      {loadingList ? "Chargement…" : "Aucune notification"}
+                    </td></tr>
+                  )}
+                  {(items || []).map((n) => (
+                    <tr key={n.id} className="border-b align-top hover:bg-muted/30">
+                      <td className="py-2 px-2">{n.id}</td>
+                      <td className="py-2 px-2">
+                        <div className="font-medium">{n.title}</div>
+                        <div className="text-xs text-muted-foreground line-clamp-2">{n.message}</div>
+                      </td>
+                      <td className="py-2 px-2">{audienceLabel(n.audience)}</td>
+                      <td className="py-2 px-2">
+                        {n.degree?.name || n.degree_name || (n.degree_id ? `#${n.degree_id}` : "")}
+                        {Array.isArray(n.user_ids) && n.user_ids?.length > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            {n.user_ids.length} utilisateur(s)
+                          </div>
+                        )}
+                        {n.user_id && (
+                          <div className="text-xs text-muted-foreground">
+                            utilisateur #{n.user_id}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 whitespace-nowrap">{fmt(n.created_at)}</td>
+                      <td className="py-2 px-2">
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="destructive" onClick={() => deleteItem(n.id)}>
+                            Supprimer
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

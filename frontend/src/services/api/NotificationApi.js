@@ -39,7 +39,7 @@ const normalize = (inp = {}) => {
     audience,
     title,
     message,
-    content: message, // some backends require 'content'
+    content: message,
     roles: [...new Set(roles)],
     degree_id: degree_ids[0] ?? null,
     user_id: user_ids[0] ?? null,
@@ -49,95 +49,97 @@ const normalize = (inp = {}) => {
   };
 };
 
-// Try a list of GET urls until one works; return the full axios response
+// GET helper (returns full axios response)
 const tryGet = async (urls, params = {}) => {
   let lastErr;
   for (const url of urls) {
     try {
-      const res = await axiosClient.get(url, { params });
-      return res; // full axios response (res.data is available)
+      return await axiosClient.get(url, { params });
     } catch (e) {
       lastErr = e;
+      const code = e?.response?.status;
+      // If unauthorized for admin, don't try again with the same /admin URL
+      if (code === 401 || code === 403) break;
     }
   }
   throw lastErr;
 };
 
-// Try a list of DELETE urls until one works
+// DELETE helper
 const tryDelete = async (urls) => {
   let lastErr;
   await ensureCsrf();
   for (const url of urls) {
     try {
-      const res = await axiosClient.delete(url);
-      return res;
+      return await axiosClient.delete(url);
     } catch (e) {
       lastErr = e;
+      const code = e?.response?.status;
+      if (code === 401 || code === 403) break;
     }
   }
   throw lastErr;
 };
 
 const NotificationApi = {
-  // ------------------------------ List/index ------------------------------
-  // Returns an axios-like response so caller can use res?.data
+  /* ------------------------------ List/index ------------------------------ */
+  // Use in admin pages. If caller is not admin (401/403), return empty structure.
   async list(params = {}) {
-    return await tryGet(
-      ["/admin/notifications", "/notifications"],
-      params
-    );
+    try {
+      return await tryGet(["/admin/notifications"], params);
+    } catch (e) {
+      const code = e?.response?.status;
+      if (code === 401 || code === 403) {
+        // graceful empty payload for non-admins
+        return { data: { data: [], meta: { total: 0 } } };
+      }
+      throw e;
+    }
   },
-  async index(params = {}) {
-    return this.list(params);
-  },
-  async all(params = {}) {
-    return this.list(params);
-  },
+  async index(params = {}) { return this.list(params); },
+  async all(params = {})   { return this.list(params); },
 
-  // ------------------------------ Actions ------------------------------
+  /* ------------------------------ Actions ------------------------------ */
   async markRead(id) {
     await ensureCsrf();
     return await axiosClient.post(`/notifications/${id}/read`);
   },
-
   async markAllRead() {
     await ensureCsrf();
     return await axiosClient.post("/notifications/read-all");
   },
 
   async destroy(id) {
-    return await tryDelete([
-      `/admin/notifications/${id}`,
-      `/notifications/${id}`,
-    ]);
+    return await tryDelete([`/admin/notifications/${id}`]);
   },
-  // aliases for convenience
-  async delete(id) {
-    return this.destroy(id);
-  },
-  async remove(id) {
-    return this.destroy(id);
-  },
+  async delete(id) { return this.destroy(id); },
+  async remove(id) { return this.destroy(id); },
 
-  // ------------------------------ Broadcast ------------------------------
+  /* ------------------------------ Broadcast ------------------------------ */
   async broadcast(formValues) {
     const payload = normalize(formValues);
-    if (!payload.title || !payload.message)
+    if (!payload.title || !payload.message) {
       throw new Error("Titre et message requis.");
-    if (!payload.roles.length && !payload.degree_ids.length && !payload.user_ids.length)
+    }
+    if (!payload.roles.length && !payload.degree_ids.length && !payload.user_ids.length) {
       throw new Error("Sélectionnez au moins un destinataire.");
+    }
 
     await ensureCsrf();
 
-    // Prefer admin route; fallback to non-admin if you mapped it that way
     try {
       return await axiosClient.post("/admin/notifications/broadcast", { payload });
-    } catch {
-      return await axiosClient.post("/notifications/broadcast", { payload });
+    } catch (e) {
+      const code = e?.response?.status;
+      // Only fallback if admin route is missing; do NOT hide validation errors (422) or auth (401/403)
+      if (code === 404 || code === 405) {
+        return await axiosClient.post("/notifications/broadcast", { payload });
+      }
+      throw e;
     }
   },
 
-  // Expose the client for last-resort fallbacks from components
+  // Expose axios client for rare fallbacks
   client: axiosClient,
 };
 
