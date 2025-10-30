@@ -4,7 +4,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import NotificationApi from "../../../services/api/NotificationApi";
+import AdminNotificationApi from "../../../services/api/admin/AdminNotificationApi.js";;
 import DegreeApi from "../../../services/api/admin/DegreeApi";
 import UserApi from "../../../services/api/UserApi";
 
@@ -104,7 +104,7 @@ export default function SendNotification() {
     setLoadingList(true);
     try {
       const params = { page: opts.page ?? page, per_page: perPage };
-      const res = await NotificationApi.list(params);
+      const res = await AdminNotificationApi.list(params);
       const data = res?.data ?? {};
       const rows = Array.isArray(data) ? data
         : Array.isArray(data.data) ? data.data
@@ -146,7 +146,7 @@ export default function SendNotification() {
     setTotal((t) => Math.max(0, t - 1));
 
     try {
-      await NotificationApi.destroy?.(id);
+      await AdminNotificationApi.destroy?.(id);
       toast({ title: "Supprimée", description: "Notification supprimée." });
     } catch (e) {
       setItems(prev);
@@ -174,7 +174,7 @@ export default function SendNotification() {
 
     try {
       setSubmitting(true);
-      await NotificationApi.broadcast(normalized);
+      await AdminNotificationApi.broadcast(normalized);
       toast({ title: "Envoyée", description: "Notification diffusée avec succès." });
       form.reset({
         audience: "all_students",
