@@ -1,5 +1,5 @@
 // src/components/Admin/Pages/SendNotification.jsx
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,33 +17,31 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem
 } from "../../ui/select";
 import { useToast } from "../../ui/use-toast";
-
-// If you have it, use your auth context to detect admin
 import { useAuth } from "../../../context/AuthContext.jsx";
 
-// --------------------------- Validation ---------------------------
+/* --------------------------- Validation --------------------------- */
 const schema = z.object({
   title: z.string().min(1, "Titre requis"),
   message: z.string().min(1, "Message requis"),
   audience: z.enum([
     "all_students", "all_teachers", "all_parents",
-    "degree_students", "user", "users"
+    "degree_students", "user", "users",
   ]),
   degree_id: z.string().optional(),
   user_id: z.string().optional(),
   user_ids: z.array(z.string()).optional(),
 })
 .refine(v => v.audience !== "degree_students" || !!v.degree_id, {
-  path: ["degree_id"], message: "Sélectionnez un niveau"
+  path: ["degree_id"], message: "Sélectionnez un niveau",
 })
 .refine(v => v.audience !== "user" || !!v.user_id, {
-  path: ["user_id"], message: "Sélectionnez un utilisateur"
+  path: ["user_id"], message: "Sélectionnez un utilisateur",
 })
 .refine(v => v.audience !== "users" || ((v.user_ids?.length ?? 0) > 0), {
-  path: ["user_ids"], message: "Sélectionnez au moins un utilisateur"
+  path: ["user_ids"], message: "Sélectionnez au moins un utilisateur",
 });
 
-// --------------------------- Helpers ---------------------------
+/* --------------------------- Helpers --------------------------- */
 const fmt = (s) => {
   if (!s) return "";
   try { return new Date(s).toLocaleString(); } catch { return String(s); }
@@ -57,24 +55,18 @@ const audienceLabel = (a) => ({
   users: "Utilisateurs multiples",
 }[a] ?? a);
 
-// --------------------------- Component ---------------------------
+/* --------------------------- Component --------------------------- */
 export default function SendNotification() {
   const { toast } = useToast();
-  const { user } = useAuth?.() ?? {};
-  const isAdmin = useMemo(() => {
-    const col = (user?.role || "").toString().toLowerCase();
-    const spatie = Array.isArray(user?.roles)
-      ? user.roles.some((r) => (r?.name || r).toString().toLowerCase() === "admin")
-      : false;
-    return col === "admin" || spatie;
-  }, [user]);
+  const { user, hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
 
-  // form states
+  // form state
   const [degrees, setDegrees] = useState([]);
   const [users, setUsers] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // list states (admin table)
+  // admin list state
   const [items, setItems] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [page, setPage] = useState(1);
@@ -83,12 +75,12 @@ export default function SendNotification() {
 
   const form = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { audience: "all_students", title: "", message: "" }
+    defaultValues: { audience: "all_students", title: "", message: "" },
   });
 
   const audience = form.watch("audience");
 
-  // bootstrap degrees & users
+  // bootstrap options
   useEffect(() => {
     DegreeApi.all()
       .then(({ data }) => setDegrees(data?.data || data || []))
@@ -103,30 +95,28 @@ export default function SendNotification() {
     if (audience !== "degree_students") form.setValue("degree_id", undefined);
     if (audience !== "user") form.setValue("user_id", undefined);
     if (audience !== "users") form.setValue("user_ids", []);
-  }, [audience]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audience]);
 
-  // --------------------------- Admin list fetch ---------------------------
+  /* --------------------------- Admin list fetch --------------------------- */
   const fetchList = async (opts = {}) => {
-    if (!isAdmin) return; // prevent 403 spam for non-admins
+    if (!isAdmin) return;
     setLoadingList(true);
     try {
       const params = { page: opts.page ?? page, per_page: perPage };
       const res = await NotificationApi.list(params);
       const data = res?.data ?? {};
-
-      // Accept different shapes:
       const rows = Array.isArray(data) ? data
-                : Array.isArray(data.data) ? data.data
-                : Array.isArray(data.notifications) ? data.notifications
-                : [];
-
+        : Array.isArray(data.data) ? data.data
+        : Array.isArray(data.notifications) ? data.notifications
+        : [];
       const metaTotal = data?.meta?.total ?? data?.total ?? rows.length;
+
       setItems(rows);
       setTotal(Number(metaTotal) || rows.length);
       if (opts.page) setPage(opts.page);
     } catch (e) {
       const code = e?.response?.status;
-      // If unauthorized (401/403), ignore silently for non-admins
       if (code !== 401 && code !== 403) {
         const msg =
           e?.response?.data?.message ||
@@ -146,11 +136,10 @@ export default function SendNotification() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
-  // --------------------------- Delete one (admin) ---------------------------
+  /* --------------------------- Delete one (admin) --------------------------- */
   const deleteItem = async (id) => {
     if (!isAdmin || !id) return;
-    const ok = window.confirm("Supprimer cette notification ?");
-    if (!ok) return;
+    if (!window.confirm("Supprimer cette notification ?")) return;
 
     const prev = items;
     setItems((cur) => cur.filter((n) => n.id !== id));
@@ -170,7 +159,7 @@ export default function SendNotification() {
     }
   };
 
-  // --------------------------- Submit (send) ---------------------------
+  /* --------------------------- Submit (send) --------------------------- */
   const onSubmit = async (values) => {
     const normalized = {
       audience: values.audience,
@@ -187,8 +176,14 @@ export default function SendNotification() {
       setSubmitting(true);
       await NotificationApi.broadcast(normalized);
       toast({ title: "Envoyée", description: "Notification diffusée avec succès." });
-      form.reset({ audience: "all_students", title: "", message: "", degree_id: undefined, user_id: undefined, user_ids: [] });
-
+      form.reset({
+        audience: "all_students",
+        title: "",
+        message: "",
+        degree_id: undefined,
+        user_id: undefined,
+        user_ids: [],
+      });
       if (isAdmin) fetchList({ page: 1 });
     } catch (e) {
       const msg =
@@ -201,7 +196,10 @@ export default function SendNotification() {
     }
   };
 
-  // --------------------------- Render ---------------------------
+  /* --------------------------- Render --------------------------- */
+  const degreeList = Array.isArray(degrees) ? degrees : [];
+  const userList = Array.isArray(users) ? users : [];
+
   return (
     <div className="space-y-6">
       {/* === Send form === */}
@@ -228,7 +226,7 @@ export default function SendNotification() {
               <Select onValueChange={(v) => form.setValue("degree_id", v, { shouldValidate: true })}>
                 <SelectTrigger><SelectValue placeholder="Sélectionner un niveau" /></SelectTrigger>
                 <SelectContent>
-                  {(Array.isArray(degrees) ? degrees : []).map((d) => (
+                  {degreeList.map((d) => (
                     <SelectItem key={d.id} value={String(d.id)}>
                       {d.title || d.name || `Niveau #${d.id}`}
                     </SelectItem>
@@ -247,7 +245,7 @@ export default function SendNotification() {
               <Select onValueChange={(v) => form.setValue("user_id", v, { shouldValidate: true })}>
                 <SelectTrigger><SelectValue placeholder="Sélectionner un utilisateur" /></SelectTrigger>
                 <SelectContent>
-                  {(Array.isArray(users) ? users : []).map((u) => (
+                  {userList.map((u) => (
                     <SelectItem key={u.id} value={String(u.id)}>
                       {(u.firstname || u.first_name || u.name) ?? ""} {(u.lastname || u.last_name) ?? ""} — {u.role ?? u.roles?.[0]?.name ?? ""}
                     </SelectItem>
@@ -264,7 +262,7 @@ export default function SendNotification() {
             <div className="grid gap-2">
               <Label>Utilisateurs (multiple)</Label>
               <div className="max-h-56 overflow-auto border rounded p-2">
-                {(Array.isArray(users) ? users : []).map((u) => (
+                {userList.map((u) => (
                   <label key={u.id} className="flex items-center gap-2 py-1">
                     <input
                       type="checkbox"
