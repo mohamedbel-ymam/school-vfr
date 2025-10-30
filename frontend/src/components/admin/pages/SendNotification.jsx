@@ -19,7 +19,7 @@ import {
 import { useToast } from "../../ui/use-toast";
 
 // If you have it, use your auth context to detect admin
-import { useUserContext } from "../../../context/AuthContext";
+import { useAuth } from "../../../context/AuthContext.jsx";
 
 // --------------------------- Validation ---------------------------
 const schema = z.object({
@@ -60,7 +60,7 @@ const audienceLabel = (a) => ({
 // --------------------------- Component ---------------------------
 export default function SendNotification() {
   const { toast } = useToast();
-  const { user } = useUserContext?.() ?? {};
+  const { user } = useAuth?.() ?? {};
   const isAdmin = useMemo(() => {
     const col = (user?.role || "").toString().toLowerCase();
     const spatie = Array.isArray(user?.roles)
