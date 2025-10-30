@@ -92,7 +92,7 @@ export default function TeacherDashboard() {
       {/* HERO */}
       <div className="relative overflow-hidden rounded-3xl mb-6">
         <div className="relative h-[220px] sm:h-[260px] md:h-[300px] rounded-3xl">
-          <SubjectBackground theme={theme} />
+          <SubjectBackground theme={theme} clarity="soft" density="high" parallax={0.9} seed={user?.id ?? 17} />
           <div className="relative z-10 h-full flex flex-col justify-center gap-3 p-6 md:p-10">
             <motion.h1
               className="text-2xl md:text-3xl font-semibold tracking-tight"
