@@ -83,17 +83,14 @@ export default function Bac1SMDashboard() {
   return (
     <DashboardScaffold
       title="1ère année Bac (SM) — Tableau de bord"
-      images={["./images/bac1-se/1.jpg","./images/bac1-se/2.jpg"]}
       stats={stats}
-      shortcuts={shortcuts}
-      onBack={() => { setSelectedDegree?.(null); nav("/élève/select-degree"); }}
-
-      // attendance blocks
-      attendance={att}               // current period
-      attendanceYear={yearAtt}       // global (always visible)
-      attendanceLoading={loading}
-      period={period}
-      onPeriodChange={setPeriod}
+  shortcuts={shortcuts}
+  attendance={att}            // att may include {streak}
+  attendanceYear={yearAtt}
+  attendanceLoading={loading}
+  period={period}
+  onPeriodChange={setPeriod}
+  homeworks={homeworks} 
     />
   );
 }

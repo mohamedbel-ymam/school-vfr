@@ -82,6 +82,7 @@ export default function Bac2Dashboard() {
       attendanceLoading={loading}
       period={period}
       onPeriodChange={setPeriod}
+      homeworks={homeworks}
     />
   );
 }
