@@ -82,7 +82,7 @@ export const SUBJECT_THEMES = {
     to: "to-emerald-500/10",
     ring: "ring-cyan-400/30",
     chip: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200",
-    motifs: ["ا","الشعر", "ت", "فعل", "ج", "النحو"],
+    motifs: ["ا","", "ت", "فعل", "ج", "النحو","📖"],
   },
 
   // (Bonus) Informatique
