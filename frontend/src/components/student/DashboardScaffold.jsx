@@ -244,8 +244,9 @@ export default function DashboardScaffold({
               value={period}
               onChange={(e) => onPeriodChange?.(e.target.value)}
             >
-              
               <option value="overall">Global</option>
+              <option value="week">Cette semaine</option>
+              <option value="month">Ce mois</option> 
             </select>
           )}
         </div>
