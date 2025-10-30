@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import DashboardScaffold from "../DashboardScaffold.jsx";
 import AttendanceApi from "../../../services/api/AttendanceApi.js";
+import HomeworkApi from "../../../services/api/HomeworkApi.js";
 import { toast } from "sonner";
 
 // helpers
@@ -82,6 +83,20 @@ export default function College3emeDashboard() {
     { label: "Examens",         onClick: () => nav("/élève/exams") },
     { label: "Emploi du temps", onClick: () => nav("/élève/emploi du temps") },
   ];
+  const [homeworks, setHomeworks] = useState([]);
+
+// fetch once (or when degree changes)
+useEffect(() => {
+  (async () => {
+    try {
+      const res = await HomeworkApi.listStudent({ per_page: 12 });
+      const items = res?.data?.data?.data ?? res?.data?.data ?? [];
+      setHomeworks(items);
+    } catch {
+      setHomeworks([]);
+    }
+  })();
+}, []);
 
   return (
     <DashboardScaffold
