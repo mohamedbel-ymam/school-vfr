@@ -26,8 +26,8 @@ export default function TeacherDevoirs() {
     try {
       setDegreesLoading(true);
       const [degRes, items] = await Promise.all([
-        DegreeApi.list({ per_page: 1000 }),
-        HomeworkApi.listTeacher(),
+      DegreeApi.publicList(),
+      HomeworkApi.listTeacher(),
       ]);
 
       const degList = Array.isArray(degRes?.data?.data) ? degRes.data.data
