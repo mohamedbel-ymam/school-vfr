@@ -85,18 +85,15 @@ export default function College3emeDashboard() {
 
   return (
     <DashboardScaffold
-      title="3ème année collège — Tableau de bord"
-      images={[]}
-      stats={stats}
-      shortcuts={shortcuts}
-      onBack={() => { setSelectedDegree?.(null); nav("/élève/select-degree"); }}
-
-      // attendance blocks
-      attendance={att}               // current period
-      attendanceYear={yearAtt}       // NEW: year/global summary
-      attendanceLoading={loading}
-      period={period}
-      onPeriodChange={setPeriod}
-    />
+  title="3ème année collège — Tableau de bord"
+  stats={stats}
+  shortcuts={shortcuts}
+  attendance={att}            // att may include {streak}
+  attendanceYear={yearAtt}
+  attendanceLoading={loading}
+  period={period}
+  onPeriodChange={setPeriod}
+  homeworks={homeworks}       // optional: array of devoirs
+/>
   );
 }

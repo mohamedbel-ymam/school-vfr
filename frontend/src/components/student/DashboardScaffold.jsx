@@ -1,5 +1,7 @@
 import { useRef } from "react";
 import Autoplay from "embla-carousel-autoplay";
+import { motion, useReducedMotion } from "framer-motion";
+import { Flame } from "lucide-react";
 
 // UI kit
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -12,18 +14,38 @@ import {
   CarouselPrevious,
 } from "../ui/carousel";
 
-// --------------------------- small helpers ----------------------------
+/* --------------------------- small helpers ---------------------------- */
 const nf = (n) => (Number.isFinite(+n) ? (+n).toLocaleString() : "—");
 
-function Ring({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
+function statusFrom(a, j) {
+  const A = Math.max(0, +a || 0);
+  const J = Math.max(0, +j || 0);
+  const total = A + J;
+  if (A >= 3 || total >= 5)
+    return { label: "Danger", className: "bg-red-100 text-red-700 border border-red-200" };
+  if (A >= 1 || total >= 3)
+    return { label: "Attention", className: "bg-amber-100 text-amber-700 border border-amber-200" };
+  return { label: "Parfait", className: "bg-green-100 text-green-700 border border-green-200" };
+}
+
+/* --------------------------- Animated ring ---------------------------- */
+function AnimatedRing({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
+  const reduced = useReducedMotion();
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, Number.isFinite(+value) ? +value : 0));
-  const dash = c - (pct / 100) * c;
+  const targetDash = c - (pct / 100) * c;
 
   return (
     <div className="relative inline-block" style={{ width: size, height: size }}>
       <svg width={size} height={size} role="img" aria-label={`${label}: ${pct}%`}>
+        <defs>
+          <linearGradient id="dashGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.65" />
+          </linearGradient>
+        </defs>
+
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -33,6 +55,44 @@ function Ring({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
           className="text-muted/30"
           stroke="currentColor"
         />
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          strokeWidth={stroke}
+          fill="none"
+          stroke="url(#dashGrad)"
+          className="text-green-600"
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          strokeDasharray={c}
+          initial={reduced ? { strokeDashoffset: targetDash } : { strokeDashoffset: c }}
+          animate={{ strokeDashoffset: targetDash }}
+          transition={reduced ? { duration: 0 } : { duration: 1.1, ease: "easeOut" }}
+        />
+      </svg>
+
+      <div className="absolute inset-0 grid place-items-center">
+        <div className="text-center">
+          <div className="text-xl font-semibold">{pct}%</div>
+          <div className="text-[11px] text-muted-foreground">{label}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------- Legacy static ring (fallback) ------------ */
+function Ring({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, Number.isFinite(+value) ? +value : 0));
+  const dash = c - (pct / 100) * c;
+
+  return (
+    <div className="relative inline-block" style={{ width: size, height: size }}>
+      <svg width={size} height={size} role="img" aria-label={`${label}: ${pct}%`}>
+        <circle cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} fill="none" className="text-muted/30" stroke="currentColor" />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -57,6 +117,7 @@ function Ring({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
   );
 }
 
+/* --------------------------- Small UI atoms --------------------------- */
 export function StatCard({ title, value, hint, right }) {
   return (
     <Card className="rounded-2xl">
@@ -72,14 +133,56 @@ export function StatCard({ title, value, hint, right }) {
   );
 }
 
-// same thresholds you used elsewhere
-function statusFrom(a, j) {
-  const A = Math.max(0, +a || 0);
-  const J = Math.max(0, +j || 0);
-  const total = A + J;
-  if (A >= 3 || total >= 5) return { label: "Danger", className: "bg-red-100 text-red-700 border border-red-200" };
-  if (A >= 1 || total >= 3) return { label: "Attention", className: "bg-amber-100 text-amber-700 border border-amber-200" };
-  return { label: "Parfait", className: "bg-green-100 text-green-700 border border-green-200" };
+/* --------------------------- Streak chip ------------------------------ */
+function StreakFlame({ days = 0 }) {
+  const d = Number(days) || 0;
+  if (d <= 0) return null;
+  return (
+    <div className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 bg-white/60 dark:bg-slate-900/40 backdrop-blur">
+      <motion.div initial={{ scale: 0.92 }}
+                  animate={{ scale: [1, 1.08, 1] }}
+                  transition={{ repeat: Infinity, duration: 2.2 }}>
+        <Flame className={`h-4 w-4 ${d >= 5 ? "text-amber-500" : "text-orange-500"}`} />
+      </motion.div>
+      <span className="text-sm"><span className="font-semibold">{d}</span> jours de suite</span>
+    </div>
+  );
+}
+
+/* --------------------------- Homework ticker -------------------------- */
+function HomeworkTicker({ items = [] }) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  const rows = items.slice(0, 12).map((d) => ({
+    id: d.id,
+    title: d.title,
+    due: d.due_at ? new Date(d.due_at).toLocaleDateString() : "—",
+    url: d.file_url,
+  }));
+
+  return (
+    <div className="rounded-xl border overflow-hidden">
+      <div className="px-3 py-2 text-xs font-medium bg-slate-50 dark:bg-slate-800/60">
+        Devoirs à venir
+      </div>
+      <div className="relative">
+        <motion.div
+          className="flex gap-6 px-3 py-2 whitespace-nowrap"
+          animate={{ x: ["0%", "-50%"] }}
+          transition={{ repeat: Infinity, duration: 24, ease: "linear" }}
+          onMouseEnter={(e) => e.currentTarget.getAnimations().forEach(a => a.pause())}
+          onMouseLeave={(e) => e.currentTarget.getAnimations().forEach(a => a.play())}
+        >
+          {[...rows, ...rows].map((d, i) => (
+            <a key={`${d.id}-${i}`} href={d.url || "#"} target="_blank" rel="noreferrer"
+               className="text-sm hover:underline">
+              <span className="font-medium">{d.title}</span>
+              <span className="opacity-60"> · échéance {d.due}</span>
+            </a>
+          ))}
+        </motion.div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -91,8 +194,9 @@ function statusFrom(a, j) {
  * - stats: Array<{ title, value, hint?, right? }>
  * - shortcuts: Array<{ label, onClick }>
  * - onBack: () => void
- * - attendance?: { a:number, j:number, p:number, rate:number, range?: {from?:string,to?:string} }          // current period
- * - attendanceYear?: { a:number, j:number, p:number, rate:number }                                        // GLOBAL YEAR
+ * - attendance?: { a:number, j:number, p:number, rate:number, range?:{from?:string,to?:string}, streak?:number }  // current period
+ * - attendanceYear?: { a:number, j:number, p:number, rate:number }                                              // GLOBAL YEAR
+ * - homeworks?: Array<any>   // optional: for the ticker
  * - attendanceLoading?: boolean
  * - period?: 'overall'|'month'|'week'
  * - onPeriodChange?: (p) => void
@@ -105,9 +209,10 @@ export default function DashboardScaffold({
   onBack,
 
   attendance,
-  attendanceYear,          // NEW
-  attendanceLoading = false,
+  attendanceYear,
+  homeworks = [],
 
+  attendanceLoading = false,
   period,
   onPeriodChange,
 }) {
@@ -117,6 +222,7 @@ export default function DashboardScaffold({
   const j = attendance?.j ?? 0;
   const p = attendance?.p ?? 0;
   const rate = attendance?.rate ?? 0;
+  const streak = attendance?.streak ?? 0;
 
   const yA = attendanceYear?.a ?? null;
   const yJ = attendanceYear?.j ?? null;
@@ -143,7 +249,6 @@ export default function DashboardScaffold({
               <option value="overall">Global</option>
             </select>
           )}
-          
         </div>
       </div>
 
@@ -159,17 +264,19 @@ export default function DashboardScaffold({
                 </div>
               ) : null}
             </div>
+            {/* Streak chip (auto-hide if 0) */}
+            <StreakFlame days={streak} />
           </div>
 
           {/* Current period + Year global */}
           <div className="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-4">
-            {/* Current period ring */}
+            {/* Current period ring (animated) */}
             <Card className="rounded-2xl lg:col-span-2">
               <CardContent className="p-4 flex items-center justify-center min-h-[152px]">
                 {attendanceLoading ? (
                   <div className="text-sm text-muted-foreground">Chargement…</div>
                 ) : (
-                  <Ring value={rate} label="Taux (période)" />
+                  <AnimatedRing value={rate} label="Taux (période)" />
                 )}
               </CardContent>
             </Card>
@@ -212,6 +319,11 @@ export default function DashboardScaffold({
           )}
         </div>
       </Card>
+
+      {/* Homework ticker (optional) */}
+      {Array.isArray(homeworks) && homeworks.length > 0 && (
+        <HomeworkTicker items={homeworks} />
+      )}
 
       {/* Carousel */}
       {!!images.length && (
