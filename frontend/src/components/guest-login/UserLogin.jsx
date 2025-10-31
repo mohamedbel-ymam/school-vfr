@@ -23,6 +23,13 @@ const schema = z.object({
 });
 
 export default function UserLogin() {
+  console.log("[UserLogin:guest-login] mounted", { at: new Date().toISOString() });
+return (
+  <div data-login-sig="guest-login"
+       className="fixed inset-0 z-[60] grid place-items-center bg-pink-200/70 text-pink-900 text-center text-xl font-bold">
+    USERLOGIN (guest-login) — if you see this, this is the file in use.
+  </div>
+);
   const { login, user, loading } = useAuth();
   const navigate = useNavigate();
 
