@@ -1,16 +1,14 @@
 import React, { useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
 import { LOGIN_ROUTE } from "../router/index.jsx";
 import { HomeIcon, LogInIcon, Menu, X } from "lucide-react";
 import { ModeToggle } from "../components/mode-toggle.jsx";
 
-// GuestLayout.jsx
-// Modern, evolutive header for unauthenticated pages.
-// No redirects here — your router's GuestOnly guard should handle access.
-
 export default function GuestLayout() {
   const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const isLoginPage = pathname === LOGIN_ROUTE;
 
   const navItem = (
     <ul className="flex flex-col md:flex-row md:items-center gap-2 md:gap-1 text-sm">
@@ -19,11 +17,12 @@ export default function GuestLayout() {
           to="/"
           end
           className={({ isActive }) =>
-            `flex items-center gap-2 rounded-full px-3 py-2 transition ${
+            [
+              "flex items-center gap-2 rounded-full px-3 py-2 transition",
               isActive
-                ? "bg-white/15 text-white ring-1 ring-white/20"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
+                ? "bg-slate-900/5 text-slate-900 ring-1 ring-slate-900/10 dark:bg-white/10 dark:text-white dark:ring-white/15"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10",
+            ].join(" ")
           }
           onClick={() => setOpen(false)}
         >
@@ -35,11 +34,12 @@ export default function GuestLayout() {
         <NavLink
           to={LOGIN_ROUTE}
           className={({ isActive }) =>
-            `flex items-center gap-2 rounded-full px-3 py-2 transition ${
+            [
+              "flex items-center gap-2 rounded-full px-3 py-2 transition",
               isActive
-                ? "bg-white/15 text-white ring-1 ring-white/20"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
+                ? "bg-slate-900/5 text-slate-900 ring-1 ring-slate-900/10 dark:bg.white/10 dark:text-white dark:ring-white/15"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10",
+            ].join(" ")
           }
           onClick={() => setOpen(false)}
         >
@@ -53,16 +53,28 @@ export default function GuestLayout() {
   return (
     <>
       {/* Accessibility skip link */}
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] rounded bg-black px-3 py-2 text-white">Aller au contenu</a>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] rounded bg-black px-3 py-2 text-white"
+      >
+        Aller au contenu
+      </a>
 
       <header className="sticky top-0 z-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mt-3 mb-3 flex items-center justify-between rounded-2xl border border-white/10 bg-gray-800/80 shadow-xl backdrop-blur px-3 py-2">
+          <div
+            className="
+              mt-3 mb-3 flex items-center justify-between rounded-2xl
+              border bg-white/70 shadow-xl backdrop-blur px-3 py-2
+              border-slate-200/60
+              dark:bg-slate-900/70 dark:border-slate-800/80
+            "
+          >
             {/* Left: Brand */}
             <div className="flex items-center gap-3">
               <Link to="/" className="inline-flex items-center gap-3">
                 <span className="sr-only">Aller à l'accueil</span>
-                <span className="hidden sm:inline text-white font-semibold tracking-wide">
+                <span className="hidden sm:inline font-semibold tracking-wide text-slate-800 dark:text-slate-100">
                   <Logo />
                 </span>
               </Link>
@@ -84,7 +96,9 @@ export default function GuestLayout() {
                 aria-label="Ouvrir le menu"
                 aria-expanded={open}
                 onClick={() => setOpen(!open)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15 active:scale-95"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl
+                           bg-slate-900/5 text-slate-700 ring-1 ring-slate-900/10 active:scale-95
+                           dark:bg-white/10 dark:text-white dark:ring-white/15"
               >
                 {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
@@ -94,16 +108,30 @@ export default function GuestLayout() {
 
         {/* Mobile drawer */}
         <div className={`md:hidden ${open ? "block" : "hidden"}`} role="dialog" aria-modal="true">
-          <div className="mx-4 rounded-2xl border border-white/10 bg-gray-900/90 text-white backdrop-blur p-4">
+          <div
+            className="
+              mx-4 rounded-2xl border backdrop-blur p-4
+              border-slate-200/60 bg-white/80 text-slate-900
+              dark:border-slate-800/80 dark:bg-slate-900/90 dark:text-white
+            "
+          >
             {navItem}
           </div>
         </div>
       </header>
 
+      {/* MAIN
+         - On /connexion we let the page take FULL control (no container),
+           so your login's full-screen gradient/card isn't constrained.
+         - On other pages, we keep a comfortable container. */}
       <main id="main" className="min-h-[calc(100vh-80px)]">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+        {isLoginPage ? (
           <Outlet />
-        </div>
+        ) : (
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+            <Outlet />
+          </div>
+        )}
       </main>
     </>
   );
