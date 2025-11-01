@@ -231,7 +231,7 @@ export default function UserLogin() {
 
           {/* Footer brand / legal */}
           <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">
-            © {new Date().getFullYear()} — Votre établissement
+            © {new Date().getFullYear()} — Takwa Etablisement
           </p>
         </div>
       </div>
