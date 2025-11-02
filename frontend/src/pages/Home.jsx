@@ -149,7 +149,7 @@ const Programmes = () => (
       <Heading kicker="Programmes" title="Ce que nous enseignons" subtitle="Des bases solides et des méthodes efficaces pour performer au collège et au lycée." />
       <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 ">
         <ProgCard title="Mathématiques" points={["Algèbre • Analyse • Probabilités", "Méthodes et astuces d'examen"]} />
-        <ProgCard title="Sciences" points={["Physique • Chimie", "TP, raisonnement et résolution"]} />
+        <ProgCard title="Sciences" points={["Physique • Chimie", "Sience de vie et terre, raisonnement et résolution"]} />
         <ProgCard title="Langues" points={["Français • Anglais •Arabe ","Expression, compréhension & étude"]} />
         <ProgCard title="Informatique" points={["Algorithmique • Python", "Web & culture numérique"]} />
         <ProgCard title="Sciences humaines" points={["Education Islamique  ", "Histoire Geographie"]} />
