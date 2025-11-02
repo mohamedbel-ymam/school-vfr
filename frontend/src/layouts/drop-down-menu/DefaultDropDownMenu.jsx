@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -12,22 +12,31 @@ import {
 import { Button } from "../../components/ui/button.tsx";
 import { User, LogOut, ChevronDown } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 /**
  * DefaultDropDownMenu
  * A sleek, evolutive account menu used across all roles (guest, student, teacher, parent, admin).
- * - Matches the new glass header look
- * - Accepts optional children to inject role‑specific items (wrapped in a Group)
- * - Optional props: profileHref (default "/account"), dashboardHref (optional)
+ * - “Mon profil” now routes to the role-nested `paramètres` page to avoid 404.
+ * - Optional children still work as before.
  */
+const ROLE_ROOTS = [
+  "élève", "eleve",    // FR variants
+  "enseignant",
+  "admin",
+  "parent",
+  "student", "teacher" // fallback English slugs if any
+];
+const PARAM_SEG = "paramètres";
+
 export default function DefaultDropDownMenu({ children, profileHref = "/account", dashboardHref }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
 
   const handleLogout = async () => {
     try {
-      await logout(); // calls your API and clears localStorage
+      await logout();
       navigate("/login", { replace: true });
     } catch (err) {
       console.error("Déconnexion failed:", err);
@@ -37,6 +46,18 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
   const displayName = user?.firstname || user?.lastname || user?.email || "Compte";
   const initials = getInitials(user);
   const roleFr = mapRoleFr(user?.role);
+
+  // Build a robust destination to /<role>/paramètres (or relative 'paramètres' as fallback)
+  const goToParams = useCallback(() => {
+    const segs = location.pathname.split("/").filter(Boolean);
+    const root = segs[0]; // first segment: role root if present
+    if (root && ROLE_ROOTS.includes(root)) {
+      navigate(`/${root}/${PARAM_SEG}`);
+    } else {
+      // If the dropdown is already rendered under a role layout, this also works:
+      navigate(PARAM_SEG);
+    }
+  }, [location.pathname, navigate]);
 
   const go = (to) => () => navigate(to);
 
@@ -49,7 +70,6 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
         >
           <div className="relative h-8 w-8 shrink-0 grid place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 text-[11px] font-semibold text-white ring-2 ring-white/20">
             {initials || <User className="h-4 w-4" />}
-            {/* status dot */}
             <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-800" />
           </div>
           <span className="hidden sm:block max-w-[140px] truncate text-sm">
@@ -66,27 +86,34 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
       >
         <DropdownMenuLabel className="text-xs/5 text-white/80">
           <div className="font-semibold text-white">Mon compte</div>
-          {roleFr && <div className="mt-0.5 text-[11px] text-white/60">Rôle : {roleFr}</div>}
+          {roleFr && <div className="mt-0.5 text-[11px] text-white/60">Rôle : {roleFr}</div>}
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-white/10" />
 
-        {/* Optional built‑ins */}
-        {profileHref && (
-          <DropdownMenuItem onSelect={go(profileHref)} className="focus:bg-white/10 focus:text-white">
-            <User className="mr-2 h-4 w-4" />
-            <span>Mon profil</span>
-            <DropdownMenuShortcut>⌘P</DropdownMenuShortcut>
-          </DropdownMenuItem>
-        )}
+        {/* Mon profil → always route to /<role>/paramètres (or relative fallback) */}
+        <DropdownMenuItem
+          onSelect={(e) => { e.preventDefault(); goToParams(); }}
+          onClick={(e) => { e.preventDefault(); goToParams(); }}
+          className="focus:bg-white/10 focus:text-white"
+        >
+          <User className="mr-2 h-4 w-4" />
+          <span>Mon profil</span>
+          <DropdownMenuShortcut>⌘P</DropdownMenuShortcut>
+        </DropdownMenuItem>
+
+        {/* Optional built-ins: keep support if you still pass dashboardHref */}
         {dashboardHref && (
-          <DropdownMenuItem onSelect={go(dashboardHref)} className="focus:bg-white/10 focus:text-white">
+          <DropdownMenuItem
+            onSelect={go(dashboardHref)}
+            className="focus:bg-white/10 focus:text-white"
+          >
             <span className="mr-2 inline-flex h-4 w-4 items-center justify-center rounded-[4px] bg-white/15 text-[10px]">🏠</span>
             <span>Mon espace</span>
             <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
 
-        {/* Role‑specific extra items */}
+        {/* Role-specific extra items */}
         {children && (
           <>
             <DropdownMenuSeparator className="bg-white/10" />
@@ -95,7 +122,10 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
         )}
 
         <DropdownMenuSeparator className="bg-white/10" />
-        <DropdownMenuItem onSelect={handleLogout} className="focus:bg-red-500/15 focus:text-red-300">
+        <DropdownMenuItem
+          onSelect={handleLogout}
+          className="focus:bg-red-500/15 focus:text-red-300"
+        >
           <LogOut className="mr-2 h-4 w-4" />
           <span>Se déconnecter</span>
           <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
