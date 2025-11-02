@@ -100,11 +100,11 @@ export default function StudentDocuments() {
 
   return (
     <>
-      <Card>
-        <CardContent className="p-6">
+       <Card className="border-0 shadow-none">
+         <CardContent className="p-4 sm:p-5 lg:p-6 max-w-7xl mx-auto">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-lg font-semibold">Documents</h2>
-            <div className="flex flex-col gap-2 md:flex-row md:items-center">
+             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="w-full md:w-64">
                 <Input
                   placeholder="Rechercher (titre, prof, matière)…"
@@ -157,8 +157,7 @@ export default function StudentDocuments() {
           ) : filtered.length === 0 ? (
             <div className="text-sm text-muted-foreground">Aucun document.</div>
           ) : grid ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((d)=>(
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">              {filtered.map((d)=>(
                 <DocCard key={d.id} d={d} onPreview={onPreview} onCopy={onCopy} />
               ))}
             </div>
