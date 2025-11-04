@@ -37,6 +37,7 @@ async function tryCallsVerbose(calls) {
       // continue to next attempt
     }
   }
+  // eslint-disable-next-line no-console
   console.table(attempts);
   const err = new Error("All parent-link attempts failed");
   err.attempts = attempts;
@@ -82,7 +83,7 @@ async function linkParents(studentId, parentIds = []) {
   ];
 
   // ---------- path candidates (with/without /admin & /api) ----------
-  const prefixes = ["", "/admin", "/api", "/api/admin"]; // axios baseURL might already include /api; covering all is safe
+  const prefixes = ["", "/admin", "/api", "/api/admin"]; // covering all is safe
 
   const studentPaths = (pfx) => [
     `${pfx}/students/${studentId}/parents`,
@@ -175,6 +176,28 @@ const UserApi = {
     // GET /api/admin/users/{id}
     return axiosClient.get(`/admin/users/${id}`);
   },
+
+  // --- Deletion (backward-compatible) ---
+  async delete(id) {
+    const tries = [
+      () => axiosClient.delete(`/admin/users/${id}`),
+      () => axiosClient.delete(`/admin/students/${id}`),
+      () => axiosClient.delete(`/users/${id}`),
+      () => axiosClient.delete(`/students/${id}`),
+    ];
+    let lastErr;
+    for (const fn of tries) {
+      try { return await fn(); }
+      catch (e) {
+        const st = e?.response?.status;
+        if (![403, 404, 405].includes(st)) throw e; // hard error → stop
+        lastErr = e; // soft → try next
+      }
+    }
+    throw lastErr || new Error("Delete failed");
+  },
+  async remove(id)  { return this.delete(id); },
+  async destroy(id) { return this.delete(id); },
 
   // ✅ shim used by SendNotification.jsx
   all() {
