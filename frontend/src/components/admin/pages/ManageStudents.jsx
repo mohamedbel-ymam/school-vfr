@@ -1,3 +1,4 @@
+// ManageStudents.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs.js";
 import { Separator } from "../../ui/separator.js";
@@ -9,6 +10,40 @@ import { ReloadIcon } from "@radix-ui/react-icons";
 import StudentUpsertForm from "../forms/StudentUpsertForm.jsx";
 import AdminStudentsList from "../data-table/AdminStudentsList.jsx";
 import UserApi from "../../../services/api/UserApi.js";
+
+// ---------- helpers to normalize parent selection coming from the form ----------
+function extractParentIds(values) {
+  // Accept the most common shapes:
+  // - values.parent_id = 12
+  // - values.parentIds = [12, 34]
+  // - values.parent_ids = [12, 34]
+  // - values.parents = [{id:12}, {id:34}] OR [12, 34]
+  const ids = new Set();
+
+  const push = (v) => {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) ids.add(n);
+  };
+
+  if (values?.parent_id != null && values.parent_id !== "") push(values.parent_id);
+
+  const arrCandidates = [
+    values?.parentIds,
+    values?.parent_ids,
+    values?.parents,
+  ].filter(Boolean);
+
+  for (const arr of arrCandidates) {
+    if (Array.isArray(arr)) {
+      for (const x of arr) {
+        if (x && typeof x === "object") push(x.id);
+        else push(x);
+      }
+    }
+  }
+
+  return Array.from(ids);
+}
 
 export default function ManageStudents() {
   const [students, setStudents] = useState([]);
@@ -22,9 +57,8 @@ export default function ManageStudents() {
   const loadStudents = async (search = "") => {
     setLoading(true);
     try {
-      // Prefer an API that accepts ?q=; falls back to all students otherwise
-      const resp = await UserApi.students({ q });
-     setStudents(resp.list);
+      const resp = await UserApi.students({ q: search });
+      setStudents(resp.list);
     } catch (e) {
       console.error("Erreur de chargement des élèves:", e);
       setStudents([]);
@@ -36,21 +70,50 @@ export default function ManageStudents() {
   useEffect(() => { loadStudents(); }, []);
 
   const handleSaveStudent = async (values) => {
-    // normalize & forward to backend
+    // 1) split parentIds from the payload (we link after create/update)
+    const parentIds = extractParentIds(values);
+
+    // 2) normalize student payload
     const payload = { ...values, role: "student" };
+    // remove parent fields so we don't break strict backends
+    delete payload.parent_id;
+    delete payload.parentIds;
+    delete payload.parent_ids;
+    delete payload.parents;
 
     if (payload.degree_id != null && payload.degree_id !== "") {
       payload.degree_id = Number(payload.degree_id);
     } else {
       payload.degree_id = null;
     }
+
+    // 3) create or update student
     const res = editingStudent
       ? await UserApi.update(values.id, payload)
-     : await UserApi.create(payload);
-     await loadStudents(q);
+      : await UserApi.create(payload);
+
+    // try to read the id from common shapes
+    const studentId =
+      values?.id ??
+      res?.data?.id ??
+      res?.data?.student?.id ??
+      res?.id ??
+      res?.student?.id;
+
+    // 4) link parents (best-effort, tries several endpoints; safely no-ops on 403/404/405)
+    if (studentId && parentIds.length) {
+      try {
+        await UserApi.linkParents(studentId, parentIds);
+      } catch (e) {
+        console.warn("Linking parents failed (non-fatal):", e);
+      }
+    }
+
+    // 5) refresh & reset
+    await loadStudents(q);
     setEditingStudent(null);
     setTab("students_list");
-    return res; // allow the UpsertForm to read {status, data}
+    return res;
   };
 
   const handleEditStudent = (student) => {
