@@ -1,6 +1,7 @@
 // src/components/parent/ParentDashboard.jsx
+// src/components/parent/ParentDashboard.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom"; // <-- changed
 import { useAuth } from "../../context/AuthContext.jsx";
 import { axiosClient } from "../../api/axios";
 import TimetableApi from "../../services/api/admin/TimeTableApi";
@@ -22,40 +23,17 @@ const DAYS = [
   { label: "Dim", full: "Dimanche",  val: 7 },
 ];
 
-const pad2 = (n) => String(n).padStart(2, "0");
-const toMins = (hhmm) => {
-  if (!hhmm) return null;
-  const [h, m] = String(hhmm).split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
-};
-
-const startOfWeekMonday = (base = new Date()) => {
-  const d = new Date(base);
-  const js = d.getDay(); // 0..6
-  const delta = js === 0 ? -6 : 1 - js;
-  d.setDate(d.getDate() + delta);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-const addDays = (date, n) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-};
-
-// Try multiple endpoints until one works; ignore 404/405/403
-async function firstOk(requestFns) {
-  for (const fn of requestFns) {
-    try {
-      const res = await fn();
-      return res;
-    } catch (e) {
-      const st = e?.response?.status;
-      if (![404, 405, 403].includes(st)) throw e;
+function firstOk(requestFns) {
+  return (async () => {
+    for (const fn of requestFns) {
+      try { return await fn(); }
+      catch (e) {
+        const st = e?.response?.status;
+        if (![404,405,403].includes(st)) throw e;
+      }
     }
-  }
-  return null;
+    return null;
+  })();
 }
 
 /* ============================= main ============================= */
@@ -63,10 +41,11 @@ async function firstOk(requestFns) {
 export default function ParentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // children
   const [children, setChildren] = useState([]);
-  const [childId, setChildId]   = useState("");
+  const [childId, setChildId]   = useState(searchParams.get("child") || "");
   const [loadingKids, setLoadingKids] = useState(true);
 
   // timetable
@@ -79,11 +58,11 @@ export default function ParentDashboard() {
   const [adminNotifs, setAdminNotifs]     = useState([]);
   const [loadingNotifs, setLoadingNotifs] = useState(true);
 
-  // FUTURE: absence count (for selected child)
+  // absence summary
   const [absences, setAbsences] = useState(null);
   const [loadingAbs, setLoadingAbs] = useState(false);
 
-  // FUTURE: student badge (for selected child)
+  // student badge (placeholder)
   const [badge, setBadge] = useState(null);
   const [loadingBadge, setLoadingBadge] = useState(false);
 
@@ -99,13 +78,37 @@ export default function ParentDashboard() {
         const kids = res ? unwrapChildren(res) : [];
         const list = Array.isArray(kids) ? kids : [];
         setChildren(list);
-        if (list.length && !childId) setChildId(String(list[0].id));
+
+        // boot child selection:
+        const urlChild = searchParams.get("child");
+        if (urlChild && list.some(k => String(k.id) === String(urlChild))) {
+          setChildId(String(urlChild));
+        } else if (list.length && !childId) {
+          // fall back to first child and sync URL
+          const first = String(list[0].id);
+          setChildId(first);
+          const sp = new URLSearchParams(searchParams);
+          sp.set("child", first);
+          setSearchParams(sp, { replace: true });
+        }
       } finally {
         setLoadingKids(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // keep URL in sync when childId changes (e.g., from <select>)
+  useEffect(() => {
+    if (!childId) return;
+    const current = searchParams.get("child");
+    if (current !== String(childId)) {
+      const sp = new URLSearchParams(searchParams);
+      sp.set("child", String(childId));
+      setSearchParams(sp, { replace: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childId]);
 
   /* --------- load selected child's timetable --------- */
   useEffect(() => {
@@ -160,25 +163,22 @@ export default function ParentDashboard() {
     })();
   }, []);
 
-  /* ---------------- FUTURE: load absences & badge ----------------
-     Replace the endpoints below with your real ones later.
-     We keep these in separate effects so they refresh whenever child changes.
-  ----------------------------------------------------------------- */
+  /* ---------------- absences summary (soft fallback) ---------------- */
   useEffect(() => {
     if (!childId) return;
     (async () => {
       setLoadingAbs(true);
       try {
-        // TODO: replace with your real endpoint(s)
-        // Example candidates:
-        //  - GET /parent/children/:id/absences/summary -> { count: number }
-        //  - GET /absences?student_id=:id&range=this_year
         const res = await firstOk([
           () => axiosClient.get(`/parent/children/${childId}/absences/summary`),
           () => axiosClient.get("/absences", { params: { student_id: childId, scope: "this_year" } }),
+          // as a last resort (may be forbidden for parent): admin endpoint filtered
+          () => axiosClient.get("/admin/attendance", { params: { q: String(childId), per_page: 1 } }),
         ]);
         const data = res ? unwrap(res) : null;
-        const count = typeof data?.count === "number" ? data.count : (Array.isArray(data) ? data.length : null);
+        const count = typeof data?.count === "number"
+          ? data.count
+          : (Array.isArray(data) ? data.length : null);
         setAbsences(count);
       } catch {
         setAbsences(null);
@@ -188,19 +188,17 @@ export default function ParentDashboard() {
     })();
   }, [childId]);
 
+  /* ---------------- badge (placeholder) ---------------- */
   useEffect(() => {
     if (!childId) return;
     (async () => {
       setLoadingBadge(true);
       try {
-        // TODO: replace with your real endpoint(s)
-        // Example: GET /parent/children/:id/badge -> { label, level, color, ... } OR a URL
         const res = await firstOk([
           () => axiosClient.get(`/parent/children/${childId}/badge`),
           () => axiosClient.get("/badges", { params: { student_id: childId, latest: 1 } }),
         ]);
         const data = res ? unwrap(res) : null;
-        // Save as-is; you’ll design the structure later.
         setBadge(data ?? null);
       } catch {
         setBadge(null);
@@ -216,6 +214,7 @@ export default function ParentDashboard() {
       ? `${selectedChild.firstname ?? ""} ${selectedChild.lastname ?? ""}`.trim() || selectedChild.name || `#${selectedChild.id}`
       : "";
 
+  // keep your UI (unchanged except <select> onChange also updates URL via setChildId)
   return (
     <div className="p-4 space-y-6">
       {/* Parent info */}
@@ -253,7 +252,7 @@ export default function ParentDashboard() {
             <label className="text-sm font-medium">Choisir l’enfant :</label>
             <select
               className="border rounded px-2 py-1 text-sm bg-background"
-              value={childId}
+              value={childId || ""}
               onChange={(e) => setChildId(e.target.value)}
               disabled={loadingKids || !children.length}
             >
@@ -266,7 +265,7 @@ export default function ParentDashboard() {
 
             <button
               type="button"
-              onClick={() => navigate("/parent/emploi-du-temps")} // TODO: adjust route if different
+              onClick={() => navigate("/parent/emploi-du-temps")}
               className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
               title="Ouvrir l’emploi du temps complet"
             >
@@ -275,39 +274,19 @@ export default function ParentDashboard() {
           </div>
         </div>
 
-        {/* Quick stats row (evolutive placeholders) */}
+        {/* Quick stats */}
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <InfoStat
-            label="Élève"
-            value={childFullName || (loadingKids ? "Chargement…" : "—")}
-          />
-          <InfoStat
-            label="Absences"
-            value={
-              loadingAbs
-                ? "Chargement…"
-                : (absences ?? "—")
-            }
-            hint="(total année / période — à brancher)"
-          />
-          <InfoStat
-            label="Badge"
-            value={loadingBadge ? "Chargement…" : (badge?.label ?? badge?.name ?? "—")}
-            hint="(niveau/couleur à brancher)"
-          />
-          <InfoStat
-            label="Séances cette semaine"
-            value={lessons?.length ?? 0}
-          />
+          <InfoStat label="Élève" value={loadingKids ? "Chargement…" : (childFullName || "—")} />
+          <InfoStat label="Absences" value={loadingAbs ? "Chargement…" : (absences ?? "—")} hint="(total année / période — à brancher)" />
+          <InfoStat label="Badge" value={loadingBadge ? "Chargement…" : (badge?.label ?? badge?.name ?? "—")} hint="(niveau/couleur à brancher)" />
+          <InfoStat label="Séances cette semaine" value={lessons?.length ?? 0} />
         </div>
 
         <div className="mt-4">
           {loadingKids ? (
             <div className="p-3 text-sm text-muted-foreground">Chargement des enfants…</div>
           ) : !children.length ? (
-            <div className="p-3 text-sm text-muted-foreground">
-              Aucun enfant rattaché.
-            </div>
+            <div className="p-3 text-sm text-muted-foreground">Aucun enfant rattaché.</div>
           ) : (
             <WeekGrid lessons={lessons} />
           )}
@@ -317,22 +296,16 @@ export default function ParentDashboard() {
 
       {/* Notifications */}
       <div className="grid md:grid-cols-2 gap-4">
-        <NotificationsCard
-          title="Notifications des enseignants"
-          items={teacherNotifs}
-          loading={loadingNotifs}
-          emptyMsg="Aucune notification enseignant."
-        />
-        <NotificationsCard
-          title="Notifications de l’administration"
-          items={adminNotifs}
-          loading={loadingNotifs}
-          emptyMsg="Aucune notification administration."
-        />
+        <NotificationsCard title="Notifications des enseignants" items={teacherNotifs} loading={loadingNotifs} emptyMsg="Aucune notification enseignant." />
+        <NotificationsCard title="Notifications de l’administration" items={adminNotifs} loading={loadingNotifs} emptyMsg="Aucune notification administration." />
       </div>
     </div>
   );
 }
+
+/* ----- subcomponents (unchanged) ----- */
+// ... keep your InfoStat, WeekGrid, NotificationsCard as-is
+
 
 /* =========================== subcomponents =========================== */
 
