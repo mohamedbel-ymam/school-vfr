@@ -103,7 +103,8 @@ export default function ManageStudents() {
     // 4) link parents (best-effort, tries several endpoints; safely no-ops on 403/404/405)
     if (studentId && parentIds.length) {
       try {
-        await UserApi.linkParents(studentId, parentIds);
+        await UserApi.linkParents(Number(studentId), parentIds);
+
       } catch (e) {
         console.warn("Linking parents failed (non-fatal):", e);
       }

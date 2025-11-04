@@ -11,67 +11,145 @@ function asArray(resp) {
   return [];
 }
 
-// Errors we should ignore silently for "best-effort" calls
+// Treat most 4xx in this probing flow as "soft" so we can try the next pattern
 function isSoftError(e) {
   const st = e?.response?.status;
-  return [403, 404, 405].includes(st);
+  return [400, 401, 403, 404, 405, 409, 422].includes(st);
 }
 
-// Run a list of axios calls until one succeeds; throw only on hard errors
-async function tryCalls(calls) {
-  let lastErr;
-  for (const fn of calls) {
+// Run a list of labeled axios calls until one succeeds; log the attempt table
+async function tryCallsVerbose(calls) {
+  const attempts = [];
+  for (const { label, fn } of calls) {
     try {
-      return await fn();
+      const res = await fn();
+      attempts.push({ ok: true, status: res?.status ?? 200, label });
+      // eslint-disable-next-line no-console
+      console.table(attempts);
+      return res;
     } catch (e) {
-      lastErr = e;
-      if (!isSoftError(e)) throw e; // bubble up 4xx/5xx except soft ones
+      const st = e?.response?.status ?? "ERR";
+      attempts.push({ ok: false, status: st, label });
+      if (!isSoftError(e)) {
+        console.table(attempts);
+        throw e;
+      }
+      // continue to next attempt
     }
   }
-  if (lastErr) throw lastErr;
+  console.table(attempts);
+  const err = new Error("All parent-link attempts failed");
+  err.attempts = attempts;
+  throw err;
 }
 
 /**
- * Link one or many parents to a student (no backend change required).
- * Tries several common REST shapes and stops at first success.
+ * Link one or many parents to a student.
+ * Tries MANY common REST shapes & prefixes, logs a table of attempts.
  * @param {number} studentId
  * @param {number[]} parentIds
  */
 async function linkParents(studentId, parentIds = []) {
   if (!studentId || !Array.isArray(parentIds) || parentIds.length === 0) return;
 
-  // Bodies different backends might expect
-  const bodies = [
-    { parent_id: parentIds[0] },                    // single parent
-    { parentIds },                                  // camelCase list
-    { parent_ids: parentIds },                      // snake_case list
-    { parents: parentIds },                         // generic list
-    { parents: parentIds.map((id) => ({ id })) },   // list of objects
+  // Deduplicate + validate
+  const uniq = Array.from(new Set(parentIds.map(Number).filter(n => Number.isFinite(n) && n > 0)));
+  if (!uniq.length) return;
+
+  // ---------- payload candidates ----------
+  const listBodies = [
+    { parentIds: uniq },
+    { parent_ids: uniq },
+    { parents: uniq },
+    { parents: uniq.map(id => ({ id })) },
+    { student_id: studentId, parentIds: uniq },
+    { student_id: studentId, parent_ids: uniq },
+    { student_id: studentId, parents: uniq },
   ];
 
-  const calls = [];
+  const singleBodies = uniq.flatMap(id => ([
+    { parent_id: id },
+    { parent: id },
+    { parent: { id } },
+  ]));
 
-  // Student-centric routes
-  for (const body of bodies) {
-    calls.push(() => axiosClient.put(`/admin/students/${studentId}/parents`, body));
-    calls.push(() => axiosClient.post(`/admin/students/${studentId}/attach-parents`, body));
-    calls.push(() => axiosClient.post(`/admin/students/${studentId}/parents/attach`, body));
-    calls.push(() => axiosClient.post(`/admin/students/${studentId}/parents/sync`, body));
+  // Parent-centric bodies (attach student to each parent)
+  const parentAttachBodies = [
+    { student_id: studentId },
+    { child_id: studentId },
+    { children_ids: [studentId] },
+    { children: [studentId] },
+  ];
+
+  // ---------- path candidates (with/without /admin & /api) ----------
+  const prefixes = ["", "/admin", "/api", "/api/admin"]; // axios baseURL might already include /api; covering all is safe
+
+  const studentPaths = (pfx) => [
+    `${pfx}/students/${studentId}/parents`,
+    `${pfx}/students/${studentId}/attach-parents`,
+    `${pfx}/students/${studentId}/parents/attach`,
+    `${pfx}/students/${studentId}/parents/sync`,
+    `${pfx}/users/${studentId}/parents`,
+    `${pfx}/users/${studentId}/parents/attach`,
+    `${pfx}/users/${studentId}/attach-parents`,
+    `${pfx}/users/${studentId}/relationships/parents`,
+  ];
+
+  const parentPaths  = (pfx, pid) => [
+    `${pfx}/parents/${pid}/children`,
+    `${pfx}/parents/${pid}/children/attach`,
+    `${pfx}/parents/${pid}/attach-child`,
+    `${pfx}/users/${pid}/children`,
+    `${pfx}/users/${pid}/children/attach`,
+  ];
+
+  const genericPaths = (pfx) => [
+    `${pfx}/families/attach`,
+    `${pfx}/relations/parents-children/attach`,
+    `${pfx}/relationships/parent-child/attach`,
+  ];
+
+  // ---------- build attempts ----------
+  const attempts = [];
+
+  // 1) Student-centric: list bodies with PUT/POST + single bodies with POST
+  for (const pfx of prefixes) {
+    for (const url of studentPaths(pfx)) {
+      for (const body of listBodies) {
+        attempts.push({ label: `PUT ${url} (list)`,  fn: () => axiosClient.put(url, body) });
+        attempts.push({ label: `POST ${url} (list)`, fn: () => axiosClient.post(url, body) });
+      }
+      for (const body of singleBodies) {
+        attempts.push({ label: `POST ${url} (single)`, fn: () => axiosClient.post(url, body) });
+      }
+    }
   }
 
-  // Parent-centric routes (loop all parents)
-  for (const pid of parentIds) {
-    calls.push(() => axiosClient.post(`/admin/parents/${pid}/attach-child`, { student_id: studentId }));
-    calls.push(() => axiosClient.post(`/admin/parents/${pid}/children`,     { student_id: studentId }));
-    calls.push(() => axiosClient.post(`/admin/parents/${pid}/children/attach`, { student_id: studentId }));
+  // 2) Parent-centric: for each parent, attach this student
+  for (const pfx of prefixes) {
+    for (const pid of uniq) {
+      for (const url of parentPaths(pfx, pid)) {
+        for (const body of parentAttachBodies) {
+          attempts.push({ label: `POST ${url}`, fn: () => axiosClient.post(url, body) });
+        }
+      }
+    }
   }
 
-  // Generic family route (if you have it)
-  for (const body of bodies) {
-    calls.push(() => axiosClient.post(`/admin/families/attach`, { student_id: studentId, ...body }));
+  // 3) Generic relations/family routes
+  for (const pfx of prefixes) {
+    for (const url of genericPaths(pfx)) {
+      for (const body of listBodies) {
+        attempts.push({
+          label: `POST ${url} (combined)`,
+          fn: () => axiosClient.post(url, { student_id: studentId, ...body }),
+        });
+      }
+    }
   }
 
-  return tryCalls(calls);
+  // ---------- run attempts (with logging) ----------
+  return tryCallsVerbose(attempts);
 }
 
 /* ------------------------------- API ------------------------------- */
