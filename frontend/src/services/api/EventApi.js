@@ -227,5 +227,3 @@ export const EventApi = {
   },
 };
 
-export default EventApi;
-export { EventApi };
