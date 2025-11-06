@@ -1,3 +1,4 @@
+// src/components/admin/forms/EventUpsertForm.jsx
 import * as z from "zod";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -8,8 +9,17 @@ import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { Textarea } from "../../ui/textarea";
 import { toast } from "sonner";
+import { X } from "lucide-react";
 
-const TEMPLATES = ["GENERAL","EXAM","MEETING","HOLIDAY","WORKSHOP","ANNOUNCEMENT","EMERGENCY"];
+const TEMPLATES = [
+  "GENERAL",
+  "EXAM",
+  "MEETING",
+  "HOLIDAY",
+  "WORKSHOP",
+  "ANNOUNCEMENT",
+  "EMERGENCY",
+];
 const MAX_IMAGE_MB = 4;
 
 const schema = z.object({
@@ -20,75 +30,91 @@ const schema = z.object({
   location: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   data: z.any().optional(),
-  image: z.any().optional(),          // File | undefined
-  remove_image: z.boolean().optional()
+  image: z.any().optional(), // File | FileList | undefined
+  remove_image: z.boolean().optional(),
 }).refine(
   (v) => !v.ends_at || !v.starts_at || v.ends_at >= v.starts_at,
   { message: "End must be after start", path: ["ends_at"] }
 );
 
-function formatDateForApi(v) {
-  if (!v) return v; // keep null/undefined/empty
-  // HTML datetime-local gives "YYYY-MM-DDTHH:MM"
-  // Server accepts "YYYY-MM-DD HH:MM:SS"
-  const withSpace = v.replace("T", " ");
-  return withSpace.length === 16 ? `${withSpace}:00` : withSpace;
-}
-
 export default function EventUpsertForm({ initial, onDone }) {
-  const [preview, setPreview] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
+  const [preview, setPreview] = useState(null); // blob preview for newly picked file
+  const [showExisting, setShowExisting] = useState(!!initial?.image_url); // toggle for existing image
   const fileInputRef = useRef(null);
 
   const form = useForm({
     resolver: zodResolver(schema),
-    defaultValues: initial ? {
-      ...initial,
-      starts_at: initial.starts_at ? initial.starts_at.slice(0, 16) : "",
-      ends_at: initial.ends_at ? initial.ends_at.slice(0, 16) : "",
-      data: initial.data ?? {},
-      remove_image: false,
-    } : {
-      template: "GENERAL",
-      title: "",
-      starts_at: "",
-      ends_at: "",
-      location: "",
-      description: "",
-      data: {},
-      remove_image: false,
-    }
+    defaultValues: initial
+      ? {
+          ...initial,
+          // ensure datetime-local compatible values (slice to yyyy-mm-ddThh:mm)
+          starts_at: initial.starts_at ? String(initial.starts_at).slice(0, 16) : "",
+          ends_at: initial.ends_at ? String(initial.ends_at).slice(0, 16) : "",
+          data: initial.data ?? {},
+          remove_image: false,
+          image: undefined,
+        }
+      : {
+          template: "GENERAL",
+          title: "",
+          starts_at: "",
+          ends_at: "",
+          location: "",
+          description: "",
+          data: {},
+          remove_image: false,
+          image: undefined,
+        },
   });
 
-  // Better preview: react to field value and cleanup URL
+  // Watchers
   const watchedImage = form.watch("image");
+  const removeExisting = form.watch("remove_image");
+
+  // Build preview when a new file is chosen
   useEffect(() => {
     let url;
-    const file = Array.isArray(watchedImage) ? watchedImage[0] : undefined;
+    const file =
+      (Array.isArray(watchedImage) && watchedImage[0]) ||
+      (watchedImage instanceof File ? watchedImage : undefined);
     if (file instanceof File) {
       url = URL.createObjectURL(file);
       setPreview(url);
+      // if we show a new preview, we don't show the existing one
+      setShowExisting(false);
+      // uncheck remove_image when picking a new file
+      if (removeExisting) form.setValue("remove_image", false, { shouldDirty: true });
     } else {
+      // no new file selected
       setPreview(null);
+      // if there was an existing image and not removed, keep showing it
+      if (initial?.image_url && !removeExisting) setShowExisting(true);
     }
     return () => { if (url) URL.revokeObjectURL(url); };
-  }, [watchedImage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedImage, removeExisting]);
 
-  const onDropFiles = useCallback((files) => {
-    if (!files?.length) return;
-    const f = files[0];
-    if (!f.type.startsWith("image/")) {
-      toast.error("Please select an image file.");
-      return;
-    }
-    if (f.size > MAX_IMAGE_MB * 1024 * 1024) {
-      toast.error(`Max ${MAX_IMAGE_MB}MB`);
-      return;
-    }
-    form.setValue("image", [f], { shouldDirty: true, shouldValidate: true });
-    form.clearErrors("image");
-  }, [form]);
+  const onDropFiles = useCallback(
+    (files) => {
+      if (!files?.length) return;
+      const f = files[0];
+      if (!f.type.startsWith("image/")) {
+        toast.error("Please select an image file.");
+        return;
+      }
+      if (f.size > MAX_IMAGE_MB * 1024 * 1024) {
+        toast.error(`Max ${MAX_IMAGE_MB}MB`);
+        return;
+      }
+      // Accept File or wrap in FileList-like array for compatibility with previous code
+      form.setValue("image", f, { shouldDirty: true, shouldValidate: true });
+      form.clearErrors("image");
+    },
+    [form]
+  );
 
+  // DnD
+  const [dragActive, setDragActive] = useState(false);
   const onDragOver = (e) => { e.preventDefault(); setDragActive(true); };
   const onDragLeave = (e) => { e.preventDefault(); setDragActive(false); };
   const onDrop = (e) => {
@@ -96,54 +122,57 @@ export default function EventUpsertForm({ initial, onDone }) {
     onDropFiles(e.dataTransfer.files);
   };
 
-  const t = form.watch("template");
+  // Click X on preview:
+  const removeNewImage = () => {
+    form.setValue("image", undefined, { shouldDirty: true });
+    setPreview(null);
+    // If there is an existing image on the record and we removed the new one,
+    // decide whether to show the existing again:
+    if (initial?.image_url && !form.getValues("remove_image")) {
+      setShowExisting(true);
+    }
+  };
+
+  // Click X on existing image (before saving): mark to remove
+  const removeExistingImage = () => {
+    form.setValue("remove_image", true, { shouldDirty: true });
+    setShowExisting(false);
+  };
+
+  // Undo removing the existing image
+  const undoRemoveExistingImage = () => {
+    form.setValue("remove_image", false, { shouldDirty: true });
+    setShowExisting(true);
+  };
 
   const onSubmit = async (vals) => {
     const loader = toast.loading(initial?.id ? "Updating event..." : "Creating event...");
     try {
-      const base = {
+      // Build values for API. We pass raw form values; AdminEventApi will:
+      // - coerce template to UPPERCASE enum
+      // - format dates into "YYYY-MM-DDTHH:MM"
+      // - build multipart with the "image" if present
+      const payload = {
         title: vals.title,
         template: vals.template,
-        starts_at: formatDateForApi(vals.starts_at),
-        ends_at: vals.ends_at ? formatDateForApi(vals.ends_at) : null,
-        location: vals.location || null,
-        description: vals.description || null,
-        data: templateSpecificData(vals.template, vals),
+        starts_at: vals.starts_at,
+        ends_at: vals.ends_at || "",
+        location: vals.location || "",
+        description: vals.description || "",
+        data: vals.data || {},
         remove_image: !!vals.remove_image,
+        image: vals.image, // can be File or undefined; AdminEventApi handles it
       };
 
-      const hasNewImage = Array.isArray(vals.image) && vals.image[0] instanceof File;
-
-      if (hasNewImage || base.remove_image) {
-        // multipart — let axios/browser set the Content-Type (do NOT set it manually)
-        const fd = new FormData();
-        Object.entries(base).forEach(([k, v]) => {
-          if (k === "data") {
-            fd.append("data", JSON.stringify(v ?? {}));
-          } else if (v !== null && v !== undefined) {
-            fd.append(k, String(v));
-          }
-        });
-        if (hasNewImage) fd.append("image", vals.image[0]);
-
-        if (initial?.id) {
-          await AdminEventApi.update(initial.id, fd);
-        } else {
-          await AdminEventApi.create(fd);
-        }
+      if (initial?.id) {
+        await AdminEventApi.update(initial.id, payload);
       } else {
-        // JSON
-        if (initial?.id) {
-          await AdminEventApi.update(initial.id, base);
-        } else {
-          await AdminEventApi.create(base);
-        }
+        await AdminEventApi.create(payload);
       }
 
       toast.success("Saved!");
       onDone && onDone();
     } catch (e) {
-      // Map backend validation errors to fields if any
       const errors = e?.response?.data?.errors;
       if (errors && typeof errors === "object") {
         Object.entries(errors).forEach(([field, msgs]) => {
@@ -157,12 +186,8 @@ export default function EventUpsertForm({ initial, onDone }) {
   };
 
   return (
-    // Scrollable shell + sticky footer so Save is always reachable
     <div className="flex flex-col max-h-[85vh]">
-      <form
-        className="flex-1 overflow-y-auto space-y-6 pr-2"
-        onSubmit={form.handleSubmit(onSubmit)}
-      >
+      <form className="flex-1 overflow-y-auto space-y-6 pr-2" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Title */}
           <div>
@@ -185,10 +210,16 @@ export default function EventUpsertForm({ initial, onDone }) {
               {...form.register("template")}
               aria-invalid={!!form.formState.errors.template}
             >
-              {TEMPLATES.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              {TEMPLATES.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
             </select>
             {form.formState.errors.template && (
-              <p className="mt-1 text-sm text-destructive">{form.formState.errors.template.message}</p>
+              <p className="mt-1 text-sm text-destructive">
+                {form.formState.errors.template.message}
+              </p>
             )}
           </div>
 
@@ -234,9 +265,11 @@ export default function EventUpsertForm({ initial, onDone }) {
         {/* Image uploader */}
         <div className="space-y-2">
           <Label>Cover image</Label>
+
+          {/* Drop zone */}
           <div
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
+            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
             onDrop={onDrop}
             className={[
               "rounded-xl border border-dashed p-4 flex items-center justify-center text-sm cursor-pointer transition",
@@ -257,32 +290,51 @@ export default function EventUpsertForm({ initial, onDone }) {
             />
           </div>
 
-          {/* Current or new preview */}
-          <div className="flex items-center gap-3">
-            {(preview || initial?.image_url) && (
+          {/* Preview container with X remove */}
+          {(preview || (showExisting && initial?.image_url)) && (
+            <div className="relative inline-block">
               <img
-                src={preview || initial?.image_url}
+                src={preview || initial.image_url}
                 alt="event"
-                className="h-20 w-32 object-cover rounded border"
+                className="h-28 w-48 object-cover rounded-lg border"
               />
-            )}
-            {initial?.image_url && (
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" {...form.register("remove_image")} />
-                Remove current image
-              </label>
-            )}
-          </div>
+              <button
+                type="button"
+                className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/85"
+                title="Remove image"
+                onClick={() => {
+                  if (preview) {
+                    // removing a newly picked file
+                    removeNewImage();
+                  } else {
+                    // removing existing image on the record
+                    removeExistingImage();
+                  }
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Undo remove existing */}
+          {!showExisting && initial?.image_url && form.getValues("remove_image") && (
+            <div className="pt-1">
+              <Button type="button" size="sm" variant="outline" onClick={undoRemoveExistingImage}>
+                Undo remove image
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Template-specific fields */}
-        <TemplateFields template={t} register={form.register} />
+        {/* Template-specific extras */}
+        <TemplateFields template={form.watch("template")} register={form.register} />
       </form>
 
       {/* Sticky footer actions */}
       <div className="sticky bottom-0 mt-4 -mx-3 px-3 py-3 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex justify-end gap-2">
-          <Button type="submit" form={form.formId || undefined} onClick={form.handleSubmit(onSubmit)}>
+          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
             Save
           </Button>
         </div>
@@ -291,45 +343,7 @@ export default function EventUpsertForm({ initial, onDone }) {
   );
 }
 
-function templateSpecificData(template, values) {
-  const d = values?.data ?? {};
-  switch (template) {
-    case "EXAM":
-      return {
-        subject: (d.subject ?? "").trim() || null,
-        degree: (d.degree ?? "").trim() || null,
-        room: (d.room ?? "").trim() || null,
-      };
-    case "MEETING":
-      return {
-        attendees: (d.attendees ?? "").trim() || null,
-        meet_url: (d.meet_url ?? "").trim() || null,
-      };
-    case "HOLIDAY": {
-      const raw = String(d.all_day ?? "true");
-      const allDay = raw === "true" || raw === "1" || raw === "yes";
-      return { all_day: allDay, region: (d.region ?? "").trim() || null };
-    }
-    case "WORKSHOP":
-      return {
-        speaker: (d.speaker ?? "").trim() || null,
-        capacity: Number.isFinite(Number(d.capacity)) ? Number(d.capacity) : null,
-      };
-    case "ANNOUNCEMENT":
-      return {
-        severity: ["info","warning","critical"].includes(d.severity) ? d.severity : "info",
-        cta_text: (d.cta_text ?? "").trim() || null,
-        cta_url: (d.cta_url ?? "").trim() || null,
-      };
-    case "EMERGENCY":
-      return {
-        severity: ["high","medium","low"].includes(d.severity) ? d.severity : "high",
-        instructions: (d.instructions ?? "").trim() || null,
-      };
-    default:
-      return {};
-  }
-}
+/* ---------------- template-specific extras ---------------- */
 
 function TemplateFields({ template, register }) {
   switch (template) {

@@ -1,7 +1,8 @@
 // src/services/api/admin/EventApi.js
 import { axiosClient, ensureCsrf } from "../../../api/axios";
 
-/* ---------- helpers ---------- */
+/* ---------------- helpers ---------------- */
+
 const MAP_TEMPLATE = {
   general: "GENERAL",
   exam: "EXAM",
@@ -11,6 +12,10 @@ const MAP_TEMPLATE = {
   announcement: "ANNOUNCEMENT",
   emergency: "EMERGENCY",
 };
+const isDataUrl = (v) =>
+  typeof v === "string" &&
+  /^data:image\/(png|jpe?g|webp|gif|avif|heic|heif);base64,/i.test(v);
+
 function normalizeTemplate(t) {
   return MAP_TEMPLATE[String(t || "").toLowerCase()] || "GENERAL";
 }
@@ -21,35 +26,58 @@ function toLocalNoSeconds(val) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-const isDataUrl = (v) =>
-  typeof v === "string" &&
-  /^data:image\/(png|jpe?g|webp|gif|avif|heic|heif);base64,/i.test(v);
-
 async function dataUrlToBlob(dataUrl) {
   const res = await fetch(dataUrl);
   return await res.blob();
 }
 
+/** Accept many front-end field names and coerce to backend keys */
+function resolveEventValues(values = {}) {
+  const v = values || {};
+  const title =
+    v.title ?? v.titre ?? v.name ?? v.label ?? ""; // <- aliases
+
+  const startsRaw =
+    v.starts_at ?? v.start_at ?? v.startAt ?? v.startsAt ??
+    v.start ?? v.debut ?? v.when ?? v.date ?? "";
+
+  const endsRaw =
+    v.ends_at ?? v.end_at ?? v.endAt ?? v.endsAt ?? v.end ?? v.fin ?? "";
+
+  const template = normalizeTemplate(v.template ?? v.type ?? v.category);
+
+  return {
+    title: String(title).trim(),
+    template,
+    starts_at: toLocalNoSeconds(startsRaw),
+    ends_at: endsRaw ? toLocalNoSeconds(endsRaw) : "",
+    location: v.location ?? v.lieu ?? "",
+    description: v.description ?? v.desc ?? "",
+    data: v.data ?? null,
+    image: v.image ?? v.file ?? null,
+    remove_image: v.remove_image ?? v.removeImage ?? undefined,
+  };
+}
+
 async function toFormData(values = {}) {
+  const r = resolveEventValues(values);
   const fd = new FormData();
 
-  // required / validated fields
-  fd.append("title", String(values.title || "").trim());
-  fd.append("template", normalizeTemplate(values.template));
+  // required
+  fd.append("title", r.title);
+  fd.append("template", r.template);
 
-  if (values.starts_at) fd.append("starts_at", toLocalNoSeconds(values.starts_at));
-  if (values.ends_at)   fd.append("ends_at",   toLocalNoSeconds(values.ends_at));
+  if (r.starts_at) fd.append("starts_at", r.starts_at);
+  if (r.ends_at)   fd.append("ends_at", r.ends_at);
 
-  if (values.location != null)    fd.append("location", String(values.location));
-  if (values.description != null) fd.append("description", String(values.description));
+  if (r.location)    fd.append("location", r.location);
+  if (r.description) fd.append("description", r.description);
 
-  // `data` may be object or string; controller accepts string/array then decodes
-  if (values.data !== undefined && values.data !== null) {
-    fd.append("data", typeof values.data === "string" ? values.data : JSON.stringify(values.data));
+  if (r.data !== null && r.data !== undefined) {
+    fd.append("data", typeof r.data === "string" ? r.data : JSON.stringify(r.data));
   }
 
-  // image: accept File, FileList, Blob, dataURL
-  const img = values.image ?? values.file ?? null;
+  const img = r.image;
   if (img) {
     if (img instanceof Blob || (typeof File !== "undefined" && img instanceof File)) {
       fd.append("image", img, img.name || "event.png");
@@ -62,21 +90,11 @@ async function toFormData(values = {}) {
     }
   }
 
-  if (values.remove_image !== undefined) {
-    fd.append("remove_image", values.remove_image ? "1" : "0");
+  if (r.remove_image !== undefined) {
+    fd.append("remove_image", r.remove_image ? "1" : "0");
   }
 
   return fd;
-}
-
-// DEV: print FormData pairs to spot issues quickly
-async function debugFormData(fd) {
-  const rows = [];
-  for (const [k, v] of fd.entries()) {
-    rows.push({ key: k, value: v instanceof Blob ? `[Blob ${v.type} ${v.size}B]` : String(v).slice(0, 120) });
-  }
-  // eslint-disable-next-line no-console
-  console.table(rows);
 }
 
 function log422(e) {
@@ -87,13 +105,11 @@ function log422(e) {
     }));
     // eslint-disable-next-line no-console
     console.table(rows);
-  } else {
-    // eslint-disable-next-line no-console
-    console.error("422 response:", e?.response?.data || e?.message);
   }
 }
 
-/* ---------- API ---------- */
+/* ---------------- API ---------------- */
+
 export const AdminEventApi = {
   async list(params = {}) {
     const r = await axiosClient.get("/admin/evenements", { params });
@@ -107,10 +123,15 @@ export const AdminEventApi = {
 
   async create(values) {
     const fd = await toFormData(values);
+
+    // Quick client-side guard: surface the exact missing fields before hitting 422
+    const t = fd.get("title");
+    const s = fd.get("starts_at");
+    if (!t || !String(t).trim()) throw new Error("Le titre est requis (title).");
+    if (!s || !String(s).trim()) throw new Error("La date de début est requise (starts_at).");
+
     await ensureCsrf();
     try {
-      // DEV: uncomment to inspect what you send
-      // await debugFormData(fd);
       const r = await axiosClient.post("/admin/evenements", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -126,7 +147,6 @@ export const AdminEventApi = {
     fd.append("_method", "PUT");
     await ensureCsrf();
     try {
-      // await debugFormData(fd);
       const r = await axiosClient.post(`/admin/evenements/${id}`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -141,29 +161,6 @@ export const AdminEventApi = {
     await ensureCsrf();
     const r = await axiosClient.delete(`/admin/evenements/${id}`);
     return r.data;
-  },
-
-  async setImage(id, fileOrDataUrl) {
-    const fd = new FormData();
-    if (fileOrDataUrl instanceof Blob || (typeof File !== "undefined" && fileOrDataUrl instanceof File)) {
-      fd.append("image", fileOrDataUrl, fileOrDataUrl.name || `event-${id}.png`);
-    } else if (isDataUrl(fileOrDataUrl)) {
-      const blob = await dataUrlToBlob(fileOrDataUrl);
-      fd.append("image", blob, `event-${id}.png`);
-    } else {
-      throw new Error("setImage expects a File/Blob or dataURL");
-    }
-    fd.append("_method", "PUT");
-    await ensureCsrf();
-    try {
-      const r = await axiosClient.post(`/admin/evenements/${id}`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return r.data;
-    } catch (e) {
-      if (e?.response?.status === 422) log422(e);
-      throw e;
-    }
   },
 };
 
