@@ -149,3 +149,83 @@ export const AdminEventApi = {
     throw lastErr || new Error("setImage failed");
   },
 };
+// src/services/api/EventApi.js
+/* ----------------------------- helpers ----------------------------- */
+
+function asArray(resp) {
+  if (!resp) return [];
+  const d = resp.data;
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.data)) return d.data;
+  if (Array.isArray(d?.items)) return d.items;
+  return [];
+}
+function metaOf(resp) {
+  const d = resp?.data;
+  return d?.meta || d?.pagination || null;
+}
+function isSoft(e) {
+  const s = e?.response?.status;
+  return [400,401,403,404,405,409,422].includes(s);
+}
+async function firstOk(calls) {
+  let lastErr;
+  for (const fn of calls) {
+    try { return await fn(); }
+    catch (e) { if (!isSoft(e)) throw e; lastErr = e; }
+  }
+  throw lastErr || new Error("No matching event endpoint");
+}
+
+/* ------------------------------- API ------------------------------- */
+
+export const EventApi = {
+  /**
+   * Public/reader list
+   * Tries several common endpoints and normalizes the response.
+   * @param {Object} params e.g. { q, template, starts_from, ends_to, per_page }
+   * @returns {Promise<{data: any[], meta: any}>}
+   */
+  async list(params = {}) {
+    // Try common public routes (both FR/EN)
+    const res = await firstOk([
+      () => axiosClient.get("/evenements", { params }),
+      () => axiosClient.get("/events", { params }),
+      () => axiosClient.get("/public/evenements", { params }),
+      () => axiosClient.get("/public/events", { params }),
+      // role-scoped read routes (if your API shows to logged-in users)
+      () => axiosClient.get("/parent/evenements", { params }),
+      () => axiosClient.get("/eleve/evenements", { params }),
+      () => axiosClient.get("/enseignant/evenements", { params }),
+    ]);
+    return { data: asArray(res), meta: metaOf(res) };
+  },
+
+  /**
+   * Show one event by id (reader)
+   */
+  async show(id) {
+    const res = await firstOk([
+      () => axiosClient.get(`/evenements/${id}`),
+      () => axiosClient.get(`/events/${id}`),
+      () => axiosClient.get(`/public/evenements/${id}`),
+      () => axiosClient.get(`/public/events/${id}`),
+    ]);
+    const arr = asArray(res);
+    // prefer object if data is object
+    const obj = Array.isArray(res?.data?.data) ? arr.find(x => String(x.id) === String(id)) : (res?.data?.data || res?.data);
+    return obj || null;
+  },
+
+  /**
+   * Convenience: upcoming events (server may filter; otherwise we pass params)
+   */
+  async upcoming(params = {}) {
+    const nowIso = new Date().toISOString();
+    const merged = { starts_from: nowIso, ...params };
+    return this.list(merged);
+  },
+};
+
+export default EventApi;
+export { EventApi };
