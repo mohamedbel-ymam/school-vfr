@@ -10,7 +10,7 @@ import College3emeDashboard from "./degrees/College3emeDashboard.jsx";
 import TroncCommunDashboard from "./degrees/TroncCommunDashboard.jsx";
 import Bac1SEDashboard      from "./degrees/Bac1SEDashboard.jsx";
 import Bac1SMDashboard      from "./degrees/Bac1SMDashboard.jsx";
-import Bac2Dashboard        from "./degrees/Bac2Dashboard.jsx";
+// import Bac2Dashboard        from "./degrees/Bac2Dashboard.jsx";
 import Bac2Gr1Dashboard     from "./degrees/Bac2Gr1Dashboard.jsx";
 import Bac2Gr2Dashboard     from "./degrees/Bac2Gr2Dashboard.jsx";
 
