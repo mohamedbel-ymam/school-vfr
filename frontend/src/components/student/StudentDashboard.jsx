@@ -11,10 +11,20 @@ import TroncCommunDashboard from "./degrees/TroncCommunDashboard.jsx";
 import Bac1SEDashboard      from "./degrees/Bac1SEDashboard.jsx";
 import Bac1SMDashboard      from "./degrees/Bac1SMDashboard.jsx";
 import Bac2Dashboard        from "./degrees/Bac2Dashboard.jsx";
+import Bac2Gr1Dashboard     from "./degrees/Bac2Gr1Dashboard.jsx";
+import Bac2Gr2Dashboard     from "./degrees/Bac2Gr2Dashboard.jsx";
 
 /* ---------------- Canon + helpers ---------------- */
 
-const CANON = new Set(["college-3eme", "tronc-commun", "bac1-se", "bac1-sm", "bac2"]);
+const CANON = new Set([
+  "college-3eme",
+  "tronc-commun",
+  "bac1-se",
+  "bac1-sm",
+  "bac2",
+  "bac2-gr1",
+  "bac2-gr2",
+]);
 
 const norm = (v) =>
   String(v ?? "")
@@ -31,27 +41,56 @@ function mapSynonymToCanon(s) {
   const n = norm(s);
   const c = compact(s);
 
-  if (CANON.has(n)) return n;                         // direct canonical
+  if (CANON.has(n)) return n; // direct canonical
 
   // Collège 3ème
-  if (c.includes("college") || c.includes("colleg") || c.includes("troisieme") || n.includes("3eme") || n === "3e")
+  if (
+    c.includes("college") ||
+    c.includes("colleg") ||
+    c.includes("troisieme") ||
+    n.includes("3eme") ||
+    n === "3e"
+  )
     return "college-3eme";
 
   // Tronc Commun
-  if (n.includes("tronc") || n.includes("commun") || c === "tronccommun" || c === "tc")
+  if (
+    n.includes("tronc") ||
+    n.includes("commun") ||
+    c === "tronccommun" ||
+    c === "tc"
+  )
     return "tronc-commun";
 
   // Bac 1 SE
-  if ((n.includes("bac 1") || c.includes("bac1") || n.includes("premiere") || n.includes("1ere")) &&
-      (n.includes("se") || n.includes("sciences experimentales") || c.includes("sciencesexperimentales")))
+  if (
+    (n.includes("bac 1") || c.includes("bac1") || n.includes("premiere") || n.includes("1ere")) &&
+    (n.includes("se") || n.includes("sciences experimentales") || c.includes("sciencesexperimentales"))
+  )
     return "bac1-se";
 
   // Bac 1 SM
-  if ((n.includes("bac 1") || c.includes("bac1") || n.includes("premiere") || n.includes("1ere")) &&
-      (n.includes("sm") || n.includes("math")))
+  if (
+    (n.includes("bac 1") || c.includes("bac1") || n.includes("premiere") || n.includes("1ere")) &&
+    (n.includes("sm") || n.includes("math"))
+  )
     return "bac1-sm";
 
-  // Bac 2
+  // Bac 2 Groupe 1
+  if (
+    (n.includes("bac 2") || c.includes("bac2")) &&
+    (n.includes("gr1") || n.includes("groupe 1") || c.includes("gr1"))
+  )
+    return "bac2-gr1";
+
+  // Bac 2 Groupe 2
+  if (
+    (n.includes("bac 2") || c.includes("bac2")) &&
+    (n.includes("gr2") || n.includes("groupe 2") || c.includes("gr2"))
+  )
+    return "bac2-gr2";
+
+  // Bac 2 (fallback legacy)
   if (n.includes("bac 2") || c.includes("bac2") || n.includes("terminale"))
     return "bac2";
 
@@ -63,8 +102,12 @@ function resolveDegreeSlugFrom(anyObj) {
 
   // 1) direct fields
   const direct =
-    anyObj.degree_slug ?? anyObj.degreeSlug ?? anyObj.degree_code ??
-    anyObj.degree_key ?? anyObj.slug ?? null;
+    anyObj.degree_slug ??
+    anyObj.degreeSlug ??
+    anyObj.degree_code ??
+    anyObj.degree_key ??
+    anyObj.slug ??
+    null;
   const directMapped = mapSynonymToCanon(direct);
   if (directMapped) return directMapped;
 
@@ -72,9 +115,9 @@ function resolveDegreeSlugFrom(anyObj) {
   const degObj = anyObj.degree ?? anyObj.current_degree ?? null;
   if (degObj) {
     const fromDeg =
-      mapSynonymToCanon(degObj.slug)  ||
-      mapSynonymToCanon(degObj.code)  ||
-      mapSynonymToCanon(degObj.name)  ||
+      mapSynonymToCanon(degObj.slug) ||
+      mapSynonymToCanon(degObj.code) ||
+      mapSynonymToCanon(degObj.name) ||
       mapSynonymToCanon(degObj.label) ||
       mapSynonymToCanon(degObj.title);
     if (fromDeg) return fromDeg;
@@ -108,9 +151,9 @@ function resolveDegreeSlugFrom(anyObj) {
 function resolveDegreeSlug(user, profile) {
   return (
     resolveDegreeSlugFrom(user?.degree) ||
-    resolveDegreeSlugFrom(user)         ||
+    resolveDegreeSlugFrom(user) ||
     resolveDegreeSlugFrom(profile?.degree) ||
-    resolveDegreeSlugFrom(profile)      ||
+    resolveDegreeSlugFrom(profile) ||
     null
   );
 }
@@ -127,7 +170,7 @@ export default function StudentDashboard() {
 
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
 
-  // defensive role check (layout should guard already)
+  // defensive role check
   const hasStudentRole = Array.isArray(user?.roles)
     ? user.roles.includes("student")
     : user?.role === "student";
@@ -136,13 +179,13 @@ export default function StudentDashboard() {
     return <div className="p-4 text-center text-red-600">Non autorisé.</div>;
   }
 
-  // Compute allowedSlug (user first, then profile when available)
+  // Compute allowedSlug
   const allowedSlug = useMemo(() => resolveDegreeSlug(user, profile) ?? null, [user, profile]);
 
-  // If we don't have a slug yet, try to fetch a richer profile ONCE
+  // If we don't have a slug yet, try to fetch profile ONCE
   useEffect(() => {
     let cancelled = false;
-    if (allowedSlug) return; // already know
+    if (allowedSlug) return;
 
     (async () => {
       setPLoading(true);
@@ -165,10 +208,12 @@ export default function StudentDashboard() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [allowedSlug]);
 
-  // Still nothing? Inform the student instead of blank page
+  // Still nothing? Inform the student
   if (!allowedSlug) {
     if (pLoading) return <div className="p-4 text-center">Chargement…</div>;
     return (
@@ -179,7 +224,7 @@ export default function StudentDashboard() {
     );
   }
 
-  // Canonicalize URL once we know the slug (prevents /…/null)
+  // Canonicalize URL once we know the slug
   useEffect(() => {
     const target = `${STUDENT_DASHBOARD_ROUTE}/${encodeURIComponent(allowedSlug)}`;
     if (!routeToken || routeToken !== allowedSlug) {
@@ -187,7 +232,7 @@ export default function StudentDashboard() {
     }
   }, [routeToken, allowedSlug, navigate]);
 
-  // While the router catches up, render nothing (no flicker)
+  // While the router catches up, render nothing
   if (routeToken !== allowedSlug) return null;
 
   // Render the matching degree dashboard
@@ -196,7 +241,9 @@ export default function StudentDashboard() {
     case "tronc-commun": return <TroncCommunDashboard />;
     case "bac1-se":      return <Bac1SEDashboard />;
     case "bac1-sm":      return <Bac1SMDashboard />;
-    case "bac2":         return <Bac2Dashboard />;
+    case "bac2-gr1":     return <Bac2Gr1Dashboard />;
+    case "bac2-gr2":     return <Bac2Gr2Dashboard />;
+    case "bac2":         return <Bac2Dashboard />; // optional legacy
     default:
       return <div className="text-center p-4">Degré inconnu.</div>;
   }

@@ -1,4 +1,3 @@
-// src/components/Student/Dashboards/Bac2Dashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext.jsx";
@@ -7,7 +6,6 @@ import AttendanceApi from "../../../services/api/AttendanceApi.js";
 import HomeworkApi from "../../../services/api/HomeworkApi.js";
 import { toast } from "sonner";
 
-// helpers
 const clamp = (n) => (Number.isFinite(+n) ? Math.max(0, +n) : 0);
 const rateFrom = (a, j, p) => {
   const A = clamp(a), J = clamp(j), P = clamp(p);
@@ -15,14 +13,15 @@ const rateFrom = (a, j, p) => {
   return d ? Math.round((P / d) * 100) : 0;
 };
 
-export default function Bac2Dashboard() {
+export default function Bac2Gr2Dashboard() {
   const { setSelectedDegree } = useAuth();
   const nav = useNavigate();
 
-  const [period, setPeriod] = useState("month"); // 'overall' | 'month' | 'week'
+  const [period, setPeriod] = useState("month");
   const [loading, setLoading] = useState(true);
   const [att, setAtt] = useState({ a: 0, j: 0, p: 0, rate: 0, range: null });
-  const [yearAtt, setYearAtt] = useState(null); // { a, j, p, rate }
+  const [yearAtt, setYearAtt] = useState(null);
+  const [homeworks, setHomeworks] = useState([]);
 
   const fetchMe = async () => {
     setLoading(true);
@@ -58,6 +57,18 @@ export default function Bac2Dashboard() {
   useEffect(() => { fetchYear(); }, []);
   useEffect(() => { fetchMe(); /* eslint-disable-next-line */ }, [period]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await HomeworkApi.listStudent({ per_page: 12 });
+        const items = res?.data?.data?.data ?? res?.data?.data ?? [];
+        setHomeworks(items);
+      } catch {
+        setHomeworks([]);
+      }
+    })();
+  }, []);
+
   const stats = useMemo(() => ([
     { title: "Séances du jour", value: 6 },
     { title: "Présences (période)", value: att.p },
@@ -69,29 +80,14 @@ export default function Bac2Dashboard() {
     { label: "Examens",         onClick: () => nav("/élève/exams") },
     { label: "Emploi du temps", onClick: () => nav("/élève/emploi du temps") },
   ];
-  const [homeworks, setHomeworks] = useState([]);
-
-// fetch once (or when degree changes)
-useEffect(() => {
-  (async () => {
-    try {
-      const res = await HomeworkApi.listStudent({ per_page: 12 });
-      const items = res?.data?.data?.data ?? res?.data?.data ?? [];
-      setHomeworks(items);
-    } catch {
-      setHomeworks([]);
-    }
-  })();
-}, []);
 
   return (
     <DashboardScaffold
-      title="2ème année Bac — Tableau de bord"
-      images={["./images/bac1-se/1.jpg","./images/bac1-se/2.jpg","./images/bac1-se/3.jpg"]}
+      title="2ème année Bac — Groupe 2"
+      images={["./images/bac2-gr2/1.jpg","./images/bac2-gr2/2.jpg","./images/bac2-gr2/3.jpg"]}
       stats={stats}
       shortcuts={shortcuts}
       onBack={() => { setSelectedDegree?.(null); nav("/élève/select-degree"); }}
-
       attendance={att}
       attendanceYear={yearAtt}
       attendanceLoading={loading}
