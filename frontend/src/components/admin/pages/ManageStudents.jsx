@@ -1,4 +1,4 @@
-// ManageStudents.jsx
+// src/components/admin/pages/ManageStudents.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs.js";
 import { Separator } from "../../ui/separator.js";
@@ -10,16 +10,11 @@ import { ReloadIcon } from "@radix-ui/react-icons";
 import StudentUpsertForm from "../forms/StudentUpsertForm.jsx";
 import AdminStudentsList from "../data-table/AdminStudentsList.jsx";
 import UserApi from "../../../services/api/UserApi.js";
+import GroupApi from "../../../services/api/admin/GroupApi.js"; // ✅ new import
 
-// ---------- helpers to normalize parent selection coming from the form ----------
+// ---------- helpers ----------
 function extractParentIds(values) {
-  // Accept the most common shapes:
-  // - values.parent_id = 12
-  // - values.parentIds = [12, 34]
-  // - values.parent_ids = [12, 34]
-  // - values.parents = [{id:12}, {id:34}] OR [12, 34]
   const ids = new Set();
-
   const push = (v) => {
     const n = Number(v);
     if (Number.isFinite(n) && n > 0) ids.add(n);
@@ -27,12 +22,7 @@ function extractParentIds(values) {
 
   if (values?.parent_id != null && values.parent_id !== "") push(values.parent_id);
 
-  const arrCandidates = [
-    values?.parentIds,
-    values?.parent_ids,
-    values?.parents,
-  ].filter(Boolean);
-
+  const arrCandidates = [values?.parentIds, values?.parent_ids, values?.parents].filter(Boolean);
   for (const arr of arrCandidates) {
     if (Array.isArray(arr)) {
       for (const x of arr) {
@@ -41,12 +31,12 @@ function extractParentIds(values) {
       }
     }
   }
-
   return Array.from(ids);
 }
 
 export default function ManageStudents() {
   const [students, setStudents] = useState([]);
+  const [groups, setGroups] = useState([]); // ✅ new
   const [loading, setLoading] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [tab, setTab] = useState("students_list");
@@ -67,32 +57,38 @@ export default function ManageStudents() {
     }
   };
 
-  useEffect(() => { loadStudents(); }, []);
+  const loadGroups = async () => {
+    try {
+      const res = await GroupApi.list();
+      setGroups(res?.data ?? []);
+    } catch (e) {
+      console.error("Erreur de chargement des groupes:", e);
+      setGroups([]);
+    }
+  };
+
+  useEffect(() => {
+    loadStudents();
+    loadGroups(); // ✅ load once
+  }, []);
 
   const handleSaveStudent = async (values) => {
-    // 1) split parentIds from the payload (we link after create/update)
     const parentIds = extractParentIds(values);
-
-    // 2) normalize student payload
     const payload = { ...values, role: "student" };
-    // remove parent fields so we don't break strict backends
+
     delete payload.parent_id;
     delete payload.parentIds;
     delete payload.parent_ids;
     delete payload.parents;
 
-    if (payload.degree_id != null && payload.degree_id !== "") {
-      payload.degree_id = Number(payload.degree_id);
-    } else {
-      payload.degree_id = null;
-    }
+    // Normalize degree + group IDs
+    payload.degree_id = values.degree_id ? Number(values.degree_id) : null;
+    payload.group_id = values.group_id ? Number(values.group_id) : null; // ✅ new optional
 
-    // 3) create or update student
     const res = editingStudent
       ? await UserApi.update(values.id, payload)
       : await UserApi.create(payload);
 
-    // try to read the id from common shapes
     const studentId =
       values?.id ??
       res?.data?.id ??
@@ -100,17 +96,14 @@ export default function ManageStudents() {
       res?.id ??
       res?.student?.id;
 
-    // 4) link parents (best-effort, tries several endpoints; safely no-ops on 403/404/405)
     if (studentId && parentIds.length) {
       try {
         await UserApi.linkParents(Number(studentId), parentIds);
-
       } catch (e) {
         console.warn("Linking parents failed (non-fatal):", e);
       }
     }
 
-    // 5) refresh & reset
     await loadStudents(q);
     setEditingStudent(null);
     setTab("students_list");
@@ -185,7 +178,9 @@ export default function ManageStudents() {
         <TabsContent value="add_student" className="mt-2">
           <Card className="rounded-2xl">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{editingStudent ? "Modifier l’élève" : "Créer un élève"}</CardTitle>
+              <CardTitle className="text-base">
+                {editingStudent ? "Modifier l’élève" : "Créer un élève"}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-w-2xl">
@@ -193,10 +188,13 @@ export default function ManageStudents() {
                   handleSubmit={handleSaveStudent}
                   values={editingStudent}
                   onCancel={handleCancelEdit}
+                  groups={groups} // ✅ pass to form
                 />
                 {editingStudent && (
                   <div className="mt-2">
-                    <Button variant="outline" onClick={handleCancelEdit}>Annuler la modification</Button>
+                    <Button variant="outline" onClick={handleCancelEdit}>
+                      Annuler la modification
+                    </Button>
                   </div>
                 )}
               </div>

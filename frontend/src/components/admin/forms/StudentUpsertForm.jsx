@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { axiosClient } from "../../../api/axios.js";
 import UserApi from "../../../services/api/UserApi.js";
+import GroupApi from "../../../services/api/admin/GroupApi.js";
 
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage
@@ -20,26 +21,28 @@ const BLOOD_TYPES = ["O-","O+","A+","A-","B+","B-","AB+","AB-"];
 const formSchema = z.object({
   firstname: z.string().min(2).max(50),
   lastname: z.string().min(2).max(50),
-  date_of_birth: z.string().optional().nullable(), // will be normalized on submit
+  date_of_birth: z.string().optional().nullable(),
   gender: z.enum(["m","f"]),
   blood_type: z.string(),
   student_parent_id: z.string().min(1, "Please select a parent."),
   degree_id: z.string().min(1, "Please select a degree."),
+  group_id: z.string().optional().nullable(), // ✅ optional
   address: z.string().min(3, "Adresse is required"),
   phone: z.string().min(3, "Téléphone is required"),
   email: z.string().email().min(2).max(50),
   password: z.string().min(8).max(30).optional(),
 });
 
-export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
+export default function StudentUpsertForm({ handleSubmit, values, onCancel, groups = [] }) {
   const isUpdate = Boolean(values?.id);
 
   const [parents, setParents] = useState([]);
   const [degrees, setDegrees] = useState([]);
+  const [groupsList, setGroupsList] = useState(groups);
   const [parentsLoading, setParentsLoading] = useState(true);
   const [degreesLoading, setDegreesLoading] = useState(true);
 
-  // ---- Load parents
+  /* ------------------------- Load Parents ------------------------- */
   useEffect(() => {
     let cancelled = false;
     setParentsLoading(true);
@@ -52,7 +55,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
     return () => { cancelled = true; };
   }, []);
 
-  // ---- Load degrees (admin endpoint, high per_page)
+  /* ------------------------- Load Degrees ------------------------- */
   useEffect(() => {
     let cancelled = false;
     setDegreesLoading(true);
@@ -67,13 +70,22 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Map id -> degree object (for slug)
+  /* ------------------------- Load Groups ------------------------- */
+  useEffect(() => {
+    if (groupsList?.length) return;
+    GroupApi.list()
+      .then((res) => setGroupsList(res?.data ?? []))
+      .catch(() => setGroupsList([]));
+  }, []);
+
+  /* ------------------------- Mapping ------------------------- */
   const degreeById = useMemo(() => {
     const m = new Map();
     for (const d of degrees) m.set(String(d.id), d);
     return m;
   }, [degrees]);
 
+  /* ------------------------- Form Setup ------------------------- */
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -84,6 +96,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
       blood_type: values?.blood_type || BLOOD_TYPES[0],
       student_parent_id: values?.student_parent_id?.toString() || "",
       degree_id: values?.degree_id?.toString() || "",
+      group_id: values?.group_id?.toString() || "",
       address: values?.address || "",
       phone: values?.phone || "",
       email: values?.email || "",
@@ -92,7 +105,6 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
     },
   });
 
-  // keep in sync when switching record
   useEffect(() => {
     form.reset({
       firstname: values?.firstname || "",
@@ -102,46 +114,36 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
       blood_type: values?.blood_type || BLOOD_TYPES[0],
       student_parent_id: values?.student_parent_id?.toString() || "",
       degree_id: values?.degree_id?.toString() || "",
+      group_id: values?.group_id?.toString() || "",
       address: values?.address || "",
       phone: values?.phone || "",
       email: values?.email || "",
       password: "",
       id: values?.id || undefined,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values?.id]);
 
   const { setError, formState: { isSubmitting } } = form;
 
+  /* ------------------------- Submit ------------------------- */
   const onSubmit = async (formData) => {
     const loader = toast.loading(isUpdate ? "Mise à jour de l’élève..." : "Création de l’élève...");
     try {
-      // Always tag role on client (backend also enforces)
       formData.role = "student";
-
-      // Optional password handling
       if (isUpdate && !formData.password) delete formData.password;
       if (isUpdate) formData.id = values.id;
 
-      // ---- Trim scalar strings
       ["firstname","lastname","email","address","phone"].forEach((k) => {
         if (typeof formData[k] === "string") formData[k] = formData[k].trim();
       });
 
-      // ---- Normalize date: "" or "0000-00-00" -> remove
       const dob = (formData.date_of_birth ?? "").trim();
-      if (!dob || dob === "0000-00-00") {
-        delete formData.date_of_birth; // backend treats missing as null
-      } else {
-        formData.date_of_birth = dob; // already YYYY-MM-DD from <input type="date">
-      }
+      if (!dob || dob === "0000-00-00") delete formData.date_of_birth;
+      else formData.date_of_birth = dob;
 
-      // ---- IDs come as strings → numbers
-      const degreeIdStr = formData.degree_id;
-      const parentIdStr = formData.student_parent_id;
-
-      const degreeId = parseInt(degreeIdStr, 10);
-      const parentId = parseInt(parentIdStr, 10);
+      const degreeId = parseInt(formData.degree_id, 10);
+      const parentId = parseInt(formData.student_parent_id, 10);
+      const groupId = formData.group_id ? parseInt(formData.group_id, 10) : null;
 
       if (!Number.isFinite(degreeId)) {
         setError("degree_id", { message: "Niveau invalide." });
@@ -156,9 +158,9 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
 
       formData.degree_id = degreeId;
       formData.student_parent_id = parentId;
+      formData.group_id = groupId;
 
-      // Also send degree slug for resolver (future-proof)
-      const d = degreeById.get(String(degreeIdStr));
+      const d = degreeById.get(String(degreeId));
       if (d?.slug) formData.degree = d.slug;
 
       const { status, data } = await handleSubmit(formData);
@@ -181,9 +183,11 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
     }
   };
 
+  /* ------------------------- Render ------------------------- */
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        
         {/* identity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
@@ -210,7 +214,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
           />
         </div>
 
-        {/* dates + gender */}
+        {/* date + gender + blood */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FormField
             control={form.control}
@@ -265,8 +269,8 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
           />
         </div>
 
-        {/* degree + parent */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* degree + group + parent */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FormField
             control={form.control}
             name="degree_id"
@@ -284,7 +288,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
                     {!degreesLoading && degrees.length === 0 && (
                       <SelectItem value="none" disabled>Aucun niveau</SelectItem>
                     )}
-                    {!degreesLoading && degrees.length > 0 && degrees.map((degree) => (
+                    {!degreesLoading && degrees.map((degree) => (
                       <SelectItem key={degree.id} value={String(degree.id)}>
                         {degree.name}
                       </SelectItem>
@@ -295,6 +299,33 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
               </FormItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name="group_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Groupe (optionnel)</FormLabel>
+                <Select disabled={isSubmitting} onValueChange={field.onChange} value={field.value || ""}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Aucun groupe" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="">Aucun</SelectItem>
+                    {groupsList?.map((g) => (
+                      <SelectItem key={g.id} value={String(g.id)}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="student_parent_id"
@@ -312,7 +343,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
                     {!parentsLoading && parents.length === 0 && (
                       <SelectItem value="none" disabled>Aucun parent</SelectItem>
                     )}
-                    {!parentsLoading && parents.length > 0 && parents.map((p) => (
+                    {!parentsLoading && parents.map((p) => (
                       <SelectItem key={p.id} value={String(p.id)}>
                         {p.firstname} {p.lastname}
                       </SelectItem>
@@ -393,6 +424,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel }) {
           )}
         </div>
 
+        {/* buttons */}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting && <Loader className="mr-2 animate-spin" />}

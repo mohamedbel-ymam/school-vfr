@@ -126,6 +126,7 @@ const ENDPOINTS = {
   degrees: "/admin/degrees",
   subjects: "/admin/subjects",
   rooms: "/admin/rooms",
+  groups: "/admin/groups",
 };
 
 const isEmpty = (v) => {
@@ -166,6 +167,7 @@ export default function ManageTimeTables() {
   const [subjects, setSubjects] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [groups, setGroups] = useState([]); // ✅ groups list
 
   // form state
   const blank = {
@@ -173,6 +175,7 @@ export default function ManageTimeTables() {
     subject_id: "",        // required
     teacher_id: "",        // required
     room_id:    "",        // optional
+    group_id:   "",        // ✅ optional
     day_of_week:"1",       // 1..7 (↤ fixed key)
     start_time: "09:00",   // H:i
     end_time:   "10:30",   // H:i
@@ -195,11 +198,12 @@ export default function ManageTimeTables() {
     (async () => {
       try {
         setLoading(true);
-        const [deg, sub, roo, teachersList, wk] = await Promise.all([
+        const [deg, sub, roo, teachersList, grp, wk] = await Promise.all([
           axiosClient.get(ENDPOINTS.degrees),
           axiosClient.get(ENDPOINTS.subjects),
           axiosClient.get(ENDPOINTS.rooms),
           fetchTeachers(),
+          axiosClient.get(ENDPOINTS.groups), // ✅ load groups
           TimeTableApi.week({ week_start: mondayIso }),
         ]);
 
@@ -208,11 +212,13 @@ export default function ManageTimeTables() {
         const degOpts = (deg?.data?.data ?? deg?.data ?? []).map(simpleOpt);
         const subOpts = (sub?.data?.data ?? sub?.data ?? []).map(simpleOpt);
         const roomOpts = (roo?.data?.data ?? roo?.data ?? []).map(simpleOpt);
+        const groupOpts = (grp?.data?.data ?? grp?.data ?? []).map(simpleOpt); // ✅ normalize
 
         setDegrees(degOpts);
         setSubjects(subOpts);
         setRooms(roomOpts);
         setTeachers(teachersList);
+        setGroups(groupOpts); // ✅ set
 
         // Preselect defaults if empty (and not editing)
         setForm((prev) => {
@@ -247,11 +253,13 @@ export default function ManageTimeTables() {
     return () => { mounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mondayIso]);
-const degreesById = useMemo(() => {
-  const m = {};
-  for (const d of degrees) m[String(d.id)] = d.name;
-  return m;
-}, [degrees]);
+
+  const degreesById = useMemo(() => {
+    const m = {};
+    for (const d of degrees) m[String(d.id)] = d.name;
+    return m;
+  }, [degrees]);
+
   /* Derived lists & shown lessons */
   const filtered = useMemo(() => {
     let arr = lessons ?? [];
@@ -316,6 +324,7 @@ const degreesById = useMemo(() => {
     const subject_id = state.subject_id ? Number(state.subject_id) : null;
     const teacher_id = state.teacher_id ? Number(state.teacher_id) : null;
     const room_id    = state.room_id    ? Number(state.room_id)    : null;
+    const group_id   = state.group_id   ? Number(state.group_id)   : null; // ✅ include
 
     // accept either explicit times OR a "period"
     let hour_from = hhmm(state.start_time);
@@ -344,6 +353,7 @@ const degreesById = useMemo(() => {
       subject_id,       // required|exists:subjects,id
       teacher_id,       // required|exists:users,id
       room_id,          // nullable|exists:rooms,id
+      group_id,         // ✅ nullable|exists:groups,id
       day_of_week,      // required_without:day
       hour_from,        // required_without:period
       hour_to,          // required_without:period|after:hour_from
@@ -357,8 +367,6 @@ const degreesById = useMemo(() => {
     try {
       setSaving(true);
       const payload = normalizePayload(form);
-      console.log("POST /admin/timetables payload →", payload);
-
       if (editingId) {
         await TimeTableApi.update(editingId, payload);
       } else {
@@ -404,6 +412,7 @@ const degreesById = useMemo(() => {
       subject_id: String(l.subject?.id ?? l.subject_id ?? ""),
       teacher_id: String(l.teacher?.id ?? l.teacher_id ?? ""),
       room_id: String(l.room?.id ?? l.room_id ?? ""),
+      group_id: String(l.group?.id ?? l.group_id ?? ""), // ✅ restore group selection
       day_of_week: String(l.day_of_week ?? ""),
       period: l.period ?? "",
       start_time: l.start_time ?? "",
@@ -484,6 +493,25 @@ const degreesById = useMemo(() => {
                 options={[{ value: "", label: "— choisir —" }, ...subjects.map(asOption)]}
                 required
               />
+
+              {/* ✅ Group select appears only for subject "Informatique" */}
+              {(() => {
+                const selectedSubject = subjects.find(
+                  (s) => String(s.id) === String(form.subject_id)
+                );
+                const isInformatique =
+                  selectedSubject?.name?.toLowerCase().includes("informatique");
+                if (!isInformatique) return null;
+                return (
+                  <LabeledSelect
+                    label="Groupe (optionnel)"
+                    value={form.group_id}
+                    onChange={(v) => setForm((f) => ({ ...f, group_id: v }))}
+                    options={[{ value: "", label: "— Aucun groupe —" }, ...groups.map(asOption)]}
+                  />
+                );
+              })()}
+
               <LabeledSelect
                 label="Enseignant"
                 value={form.teacher_id}
@@ -523,7 +551,7 @@ const degreesById = useMemo(() => {
 
             <div className="flex items-center justify-between gap-2 pt-2">
               <div className="text-xs text-muted-foreground">
-                debug → degree:{String(form.degree_id)} | subject:{String(form.subject_id)} | teacher:{String(form.teacher_id)}
+                debug → degree:{String(form.degree_id)} | subject:{String(form.subject_id)} | teacher:{String(form.teacher_id)} | group:{String(form.group_id || "—")}
               </div>
               <button
                 type="submit"
@@ -554,9 +582,9 @@ const degreesById = useMemo(() => {
             range={range}
             onEdit={onEdit}
             onDelete={onDelete}
-            degreesById={degreesById} 
+            degreesById={degreesById}
           />
-          <TableList rows={filtered} onEdit={onEdit} onDelete={onDelete} degreesById={degreesById}  />
+          <TableList rows={filtered} onEdit={onEdit} onDelete={onDelete} degreesById={degreesById} />
         </div>
       </div>
     </div>
@@ -631,7 +659,7 @@ function TimePreview({ start, end, period }) {
 }
 
 /* ────────────────────────── Grid view ────────────────────────── */
-function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete,degreesById }) {
+function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete, degreesById }) {
   const hourMarks = useMemo(() => {
     const arr = [];
     for (let m = minM; m <= maxM; m += 60) arr.push({ h: Math.floor(m / 60), m });
@@ -736,7 +764,9 @@ function WeekGrid({ monday, byDay, minM, maxM, range, onEdit, onDelete,degreesBy
                         >
                           <div className="px-2 pt-1 font-semibold leading-tight truncate">{subj}</div>
                           <div className="px-2 text-[10px] sm:text-[11px] leading-tight">{sText}–{eText}</div>
-                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">{degree}{room ? ` • ${room}` : ""}</div>
+                          <div className="px-2 pb-1 text-[10px] sm:text-[11px] leading-tight truncate">
+                            {degree}{room ? ` • ${room}` : ""}
+                          </div>
 
                           {/* actions */}
                           <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
@@ -786,7 +816,7 @@ function buildLanes(items) {
 }
 
 /* ────────────────────────── Table list view ────────────────────────── */
-function TableList({ rows, onEdit, onDelete,degreesById  }) {
+function TableList({ rows, onEdit, onDelete, degreesById }) {
   if (!rows?.length) return null;
   return (
     <div className="rounded-xl border overflow-hidden">
