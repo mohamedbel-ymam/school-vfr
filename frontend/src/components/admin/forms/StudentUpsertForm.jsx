@@ -1,3 +1,4 @@
+// StudentUpsertForm.jsx
 import * as z from "zod";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -18,6 +19,9 @@ import { toast } from "sonner";
 
 const BLOOD_TYPES = ["O-","O+","A+","A-","B+","B-","AB+","AB-"];
 
+// Use a non-empty sentinel for "no group"
+const NO_GROUP_VALUE = "none";
+
 const formSchema = z.object({
   firstname: z.string().min(2).max(50),
   lastname: z.string().min(2).max(50),
@@ -26,7 +30,7 @@ const formSchema = z.object({
   blood_type: z.string(),
   student_parent_id: z.string().min(1, "Please select a parent."),
   degree_id: z.string().min(1, "Please select a degree."),
-  group_id: z.string().optional().nullable(), // ✅ optional
+  group_id: z.string().optional().nullable(), // store "none" | id as string
   address: z.string().min(3, "Adresse is required"),
   phone: z.string().min(3, "Téléphone is required"),
   email: z.string().email().min(2).max(50),
@@ -76,7 +80,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
     GroupApi.list()
       .then((res) => setGroupsList(res?.data ?? []))
       .catch(() => setGroupsList([]));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ------------------------- Mapping ------------------------- */
   const degreeById = useMemo(() => {
@@ -84,6 +88,9 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
     for (const d of degrees) m.set(String(d.id), d);
     return m;
   }, [degrees]);
+
+  const toGroupFieldValue = (raw) =>
+    raw == null || raw === "" ? NO_GROUP_VALUE : String(raw);
 
   /* ------------------------- Form Setup ------------------------- */
   const form = useForm({
@@ -96,7 +103,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
       blood_type: values?.blood_type || BLOOD_TYPES[0],
       student_parent_id: values?.student_parent_id?.toString() || "",
       degree_id: values?.degree_id?.toString() || "",
-      group_id: values?.group_id?.toString() || "",
+      group_id: toGroupFieldValue(values?.group_id), // "none" by default
       address: values?.address || "",
       phone: values?.phone || "",
       email: values?.email || "",
@@ -114,13 +121,14 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
       blood_type: values?.blood_type || BLOOD_TYPES[0],
       student_parent_id: values?.student_parent_id?.toString() || "",
       degree_id: values?.degree_id?.toString() || "",
-      group_id: values?.group_id?.toString() || "",
+      group_id: toGroupFieldValue(values?.group_id),
       address: values?.address || "",
       phone: values?.phone || "",
       email: values?.email || "",
       password: "",
       id: values?.id || undefined,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values?.id]);
 
   const { setError, formState: { isSubmitting } } = form;
@@ -143,7 +151,12 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
 
       const degreeId = parseInt(formData.degree_id, 10);
       const parentId = parseInt(formData.student_parent_id, 10);
-      const groupId = formData.group_id ? parseInt(formData.group_id, 10) : null;
+
+      // map "none" -> null, otherwise parse
+      const groupId =
+        formData.group_id && formData.group_id !== NO_GROUP_VALUE
+          ? parseInt(formData.group_id, 10)
+          : null;
 
       if (!Number.isFinite(degreeId)) {
         setError("degree_id", { message: "Niveau invalide." });
@@ -187,7 +200,6 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        
         {/* identity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
@@ -286,7 +298,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
                   <SelectContent>
                     {degreesLoading && <SelectItem value="loading" disabled>Chargement…</SelectItem>}
                     {!degreesLoading && degrees.length === 0 && (
-                      <SelectItem value="none" disabled>Aucun niveau</SelectItem>
+                      <SelectItem value="no-degrees" disabled>Aucun niveau</SelectItem>
                     )}
                     {!degreesLoading && degrees.map((degree) => (
                       <SelectItem key={degree.id} value={String(degree.id)}>
@@ -306,14 +318,15 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Groupe (optionnel)</FormLabel>
-                <Select disabled={isSubmitting} onValueChange={field.onChange} value={field.value || ""}>
+                <Select disabled={isSubmitting} onValueChange={field.onChange} value={field.value || NO_GROUP_VALUE}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Aucun groupe" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Aucun</SelectItem>
+                    {/* use non-empty sentinel for "none" */}
+                    <SelectItem value={NO_GROUP_VALUE}>Aucun</SelectItem>
                     {groupsList?.map((g) => (
                       <SelectItem key={g.id} value={String(g.id)}>
                         {g.name}
@@ -341,7 +354,7 @@ export default function StudentUpsertForm({ handleSubmit, values, onCancel, grou
                   <SelectContent>
                     {parentsLoading && <SelectItem value="loading" disabled>Chargement…</SelectItem>}
                     {!parentsLoading && parents.length === 0 && (
-                      <SelectItem value="none" disabled>Aucun parent</SelectItem>
+                      <SelectItem value="no-parents" disabled>Aucun parent</SelectItem>
                     )}
                     {!parentsLoading && parents.map((p) => (
                       <SelectItem key={p.id} value={String(p.id)}>
