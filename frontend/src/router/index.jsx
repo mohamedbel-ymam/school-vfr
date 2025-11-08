@@ -38,7 +38,9 @@ import ManageTeachers    from "@/components/admin/pages/ManageTeachers.jsx";
 import ManageTimetables  from "@/components/admin/pages/ManageTimeTables.jsx"; // file is ManageTimeTables.jsx
 import ManageEvents      from "@/components/admin/pages/ManageEvents.jsx";
 import AdminsPage        from "@/components/admin/pages/AdminsPage.jsx";
-import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans";
+import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans.jsx";
+import ManageGroups from "@/components/admin/pages/ManageGroups.jsx";
+
 
 /* Settings */
 import AccountSettings from "@/components/settings/Account.jsx";
@@ -89,6 +91,8 @@ export const ADMIN_MANAGE_STUDENTS_ROUTE   = "/admin/manage-élèves";
 export const ADMIN_MANAGE_TEACHERS_ROUTE   = "/admin/manage-enseignants";
 export const ADMIN_MANAGE_TIMETABLES_ROUTE = "/admin/manage-timetables";
 export const ADMIN_MANAGE_EVENTS_ROUTE     = "/admin/manage-événements";
+export const ADMIN_MANAGE_GROUPS_ROUTE = "/admin/groupes";
+
 
 // Non-admin events
 export const STUDENT_EVENTS_ROUTE = "/élève/événements";
@@ -251,6 +255,7 @@ export const router = createBrowserRouter([
       { path: "exams",              element: <NotYet /> },
       { path: "messages",           element: <NotYet /> },
       { path: "presences",              element: <ManagePresence /> },
+      { path: "groupes", element: <ManageGroups />},
     ],
   },
 

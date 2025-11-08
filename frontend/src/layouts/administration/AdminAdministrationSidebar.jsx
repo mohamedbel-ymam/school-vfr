@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
+  import { Users2 } from "lucide-react"; // new icon (people outline)
+
 
 // Route constants (adjust paths if your router exports differ)
 import {
@@ -11,6 +13,7 @@ import {
   ADMIN_MANAGE_TEACHERS_ROUTE,
   ADMIN_DASHBOARD_ROUTE,
   ADMIN_MANAGE_EVENTS_ROUTE,
+ ADMIN_MANAGE_GROUPS_ROUTE 
 } from "@/router/index.jsx";
 
 // Icons
@@ -44,6 +47,7 @@ const ADMIN_SETTINGS_ROUTE = "/admin/paramètres";
 const ADMIN_PRESENCE_ROUTE = "/admin/presences";
 const ADMIN_NOTIFICATIONS_ROUTE = "/admin/notifications";
 
+
 /**
  * AdminAdministrationSidebar
  * Sidebar for admin area. Supports "collapsed" (icons only).
@@ -70,6 +74,7 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
       title: "Pédagogie",
       items: [
         { label: "Niveaux", to: ADMIN_DEGREES_ROUTE, icon: GraduationCap },
+        { label: "Groupes", to: ADMIN_MANAGE_GROUPS_ROUTE, icon: Users2 },
         { label: "Devoirs", to: ADMIN_DOCUMENTS_HOMEWORK, icon: BookOpen },
         { label: "Cours", to: ADMIN_COURSES_ROUTE, icon: BookOpen },
         { label: "Emplois du temps", to: ADMIN_TIMETABLES_ROUTE, icon: CalendarDays },
