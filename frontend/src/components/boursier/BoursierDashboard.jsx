@@ -76,7 +76,7 @@ export default function BoursierDashboard() {
   };
 
   const handleGoToAccount = () => {
-    navigate("/parametres");
+    navigate("/paramètres");
   };
 
   useEffect(() => {
