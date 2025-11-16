@@ -134,9 +134,11 @@ export default function ManageBoursier() {
       } else {
         // MODE CREATE
         await createBoursier({
-          name: payload.fullName,
-          email: payload.email,
-          password: payload.password,
+            first_name: payload.firstName,
+            last_name: payload.lastName,
+            name: payload.fullName,        // optional, backend recomputes, but ok
+            email: payload.email,
+            password: payload.password,
           // idem: tu peux enrichir :
           // phone: payload.phone,
           // gender: payload.gender,
