@@ -1,5 +1,5 @@
 // src/services/admin/boursierApi.js
-import axiosClient from "../../../api/axios";
+import {axiosClient} from "../../../api/axios";
 
 /* ---------------------- Boursiers CRUD ---------------------- */
 export async function fetchBoursiers({ q = "", page = 1 } = {}) {
