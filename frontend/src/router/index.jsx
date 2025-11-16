@@ -318,7 +318,6 @@ export const router = createBrowserRouter([
       </Guard>
     ),
     children: [
-      { index: true,             element: <BoursierDashboard /> },
       { path: "tableau de bord", element: <NotYet /> },
       { path: "paramètres",              element: <AccountSettings /> },
       
