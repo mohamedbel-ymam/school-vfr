@@ -13,7 +13,8 @@ import {
   ADMIN_MANAGE_TEACHERS_ROUTE,
   ADMIN_DASHBOARD_ROUTE,
   ADMIN_MANAGE_EVENTS_ROUTE,
- ADMIN_MANAGE_GROUPS_ROUTE 
+ ADMIN_MANAGE_GROUPS_ROUTE,
+ ADMIN_MANAGE_BOURSIERS_ROUTE 
 } from "@/router/index.jsx";
 
 // Icons
@@ -48,6 +49,7 @@ const ADMIN_PRESENCE_ROUTE = "/admin/presences";
 const ADMIN_NOTIFICATIONS_ROUTE = "/admin/notifications";
 
 
+
 /**
  * AdminAdministrationSidebar
  * Sidebar for admin area. Supports "collapsed" (icons only).
@@ -68,6 +70,7 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
         { label: "Enseignants", to: ADMIN_MANAGE_TEACHERS_ROUTE, icon: GraduationCap },
         { label: "Élèves", to: ADMIN_MANAGE_STUDENTS_ROUTE, icon: Users },
         { label: "Parents", to: ADMIN_MANAGE_PARENTS_ROUTE, icon: Users },
+        { label: "Boursiers", to: ADMIN_MANAGE_BOURSIERS_ROUTE, icon: Users },
       ],
     },
     {

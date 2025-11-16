@@ -229,9 +229,17 @@ const UserApi = {
     resp.list = asArray(resp);
     return resp;
   },
+   async boursiers({ q = "", per_page = 1000 } = {}) {
+    const resp = await axiosClient.get("/admin/users", {
+      params: { role: "boursier", per_page, ...(q ? { q } : {}) },
+    });
+    resp.list = asArray(resp);
+    return resp;
+  },
 
   // --- NEW: parent linking utility ---
   linkParents,
+  
 };
 
 export default UserApi;

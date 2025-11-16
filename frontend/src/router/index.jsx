@@ -40,6 +40,7 @@ import ManageEvents      from "@/components/admin/pages/ManageEvents.jsx";
 import AdminsPage        from "@/components/admin/pages/AdminsPage.jsx";
 import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans.jsx";
 import ManageGroups from "@/components/admin/pages/ManageGroups.jsx";
+import ManageBoursier from "../components/admin/pages/ManageBoursiers";
 
 
 /* Settings */
@@ -67,6 +68,7 @@ import AdminDevoirs   from "@/components/admin/pages/AdminDevoirs.jsx";
 /* Placeholder */
 import NotYet from "@/pages/NotYet.jsx"; // file is NotYet.jsx (capital Y)
 import ManagePresence from "@/components/admin/pages/ManagePresence";
+import BoursierDashboard from "../components/boursier/BoursierDashboard";
 
 /* ---------------- Route Constants ---------------- */
 
@@ -83,12 +85,15 @@ export const TEACHER_SCHEDULE_ROUTE        = "/enseignant/emploi du temps";
 
 // Parent
 export const PARENT_DASHBOARD_ROUTE        = "/parent/tableau de bord";
+//Boursiers
+export const BOURSIER_DASHBOARD_ROUTE      ="/boursier/tableau de bord"
 
 // Admin
 export const ADMIN_DASHBOARD_ROUTE         = "/admin/tableau de bord";
 export const ADMIN_MANAGE_PARENTS_ROUTE    = "/admin/manage-parents";
 export const ADMIN_MANAGE_STUDENTS_ROUTE   = "/admin/manage-élèves";
 export const ADMIN_MANAGE_TEACHERS_ROUTE   = "/admin/manage-enseignants";
+export const ADMIN_MANAGE_BOURSIERS_ROUTE  ="/admin/boursiers"
 export const ADMIN_MANAGE_TIMETABLES_ROUTE = "/admin/manage-timetables";
 export const ADMIN_MANAGE_EVENTS_ROUTE     = "/admin/manage-événements";
 export const ADMIN_MANAGE_GROUPS_ROUTE = "/admin/groupes";
@@ -137,6 +142,7 @@ export const redirectToDashboard = (roleType) => {
     case "teacher": return TEACHER_DASHBOARD_ROUTE;
     case "student": return STUDENT_DASHBOARD_ROUTE;
     case "parent":  return PARENT_DASHBOARD_ROUTE;
+    case "boursier": return BOURSIER_DASHBOARD_ROUTE;
     default:        return LOGIN_ROUTE;
   }
 };
@@ -151,6 +157,8 @@ export function startPathForUser(u) {
   if (top === "teacher") return TEACHER_DASHBOARD_ROUTE;
   if (top === "student") return STUDENT_DASHBOARD_ROUTE;
   if (top === "parent")  return PARENT_DASHBOARD_ROUTE;
+  if (top === "boursier")  return BOURSIER_DASHBOARD_ROUTE;
+  
 
   return LOGIN_ROUTE;
 }
@@ -240,6 +248,8 @@ export const router = createBrowserRouter([
       { path: "manage-parents",     element: <ManageParents /> },
       { path: "manage-élèves",      element: <ManageStudents /> },
       { path: "manage-enseignants", element: <ManageTeachers /> },
+      { path: "manage-boursiers", element: <ManageBoursier /> },
+
       { path: "manage-timetables",  element: <ManageTimetables /> },
       { path: "plans",              element: <ManageMonthlyPlans /> },
        // correct filename
@@ -298,6 +308,21 @@ export const router = createBrowserRouter([
       { path: "événements",      element: <ParentEvents /> },
       { path: "paramètres",      element: <AccountSettings /> },
       {path: "emploi du temps",  element:<ParentTimetable/>}
+    ],
+  },
+  {
+    path: "/boursier",
+    element: (
+      <Guard roles={["boursier"]}>
+        <BoursierDashboard />
+      </Guard>
+    ),
+    children: [
+      { index: true,             element: <BoursierDashboard /> },
+      { path: "tableau de bord", element: <NotYet /> },
+      { path: "événements",      element: <NotYet /> },
+      { path: "paramètres",      element: <NotYet/> },
+      {path: "emploi du temps",  element:<NotYet/>}
     ],
   },
 ]);
