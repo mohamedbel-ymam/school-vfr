@@ -37,7 +37,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 
-import { useNavigate } from "react-router-dom";
+import { useNavigate,Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -581,6 +581,7 @@ export default function BoursierDashboard() {
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
+      <Outlet />
     </div>
   );
 }
