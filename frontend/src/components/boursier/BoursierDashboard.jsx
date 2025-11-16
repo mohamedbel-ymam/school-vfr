@@ -32,7 +32,13 @@ import {
   CheckCircle2,
   XCircle,
   Sparkles,
+  LogOut,
+  KeyRound,
+  User as UserIcon,
 } from "lucide-react";
+
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -44,7 +50,7 @@ export default function BoursierDashboard() {
   const [submittingContrib, setSubmittingContrib] = useState(false);
   const [error, setError] = useState("");
 
-  // Contribution form state (simple controlled inputs)
+  // Contribution form state
   const [contribType, setContribType] = useState("teaching");
   const [contribTitle, setContribTitle] = useState("");
   const [contribDetails, setContribDetails] = useState("");
@@ -54,6 +60,23 @@ export default function BoursierDashboard() {
     // plug into your toast system if you have one
     // eslint-disable-next-line no-alert
     alert(msg);
+  };
+
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/connexion", { replace: true });
+    } catch (e) {
+      console.error(e);
+      notify("Erreur lors de la déconnexion.");
+    }
+  };
+
+  const handleGoToAccount = () => {
+    navigate("/account");
   };
 
   useEffect(() => {
@@ -160,18 +183,62 @@ export default function BoursierDashboard() {
   };
 
   const fullName = me?.user?.name ?? "";
+  const email = me?.user?.email ?? "";
   const uni = profile?.university ?? "Université non renseignée";
   const field = profile?.field_of_study ?? "Filière non renseignée";
   const yearNumber = profile?.year_number ?? null;
   const startYear = profile?.start_year ?? null;
 
+  const initials =
+    fullName
+      ?.split(" ")
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase())
+      .slice(0, 2)
+      .join("") || "?";
+
   return (
     <div className="space-y-6">
+      {/* Petite navbar / barre de compte */}
+      <header className="flex items-center justify-between rounded-xl border bg-white/70 px-4 py-3 shadow-sm backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white">
+            {initials}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold leading-tight">
+              {fullName || "Boursier Takwa"}
+            </span>
+            <span className="text-xs text-muted-foreground">{email}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGoToAccount}
+            className="flex items-center gap-1"
+          >
+            <KeyRound className="h-4 w-4" />
+            <span className="text-xs">Modifier mon mot de passe</span>
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-1"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="text-xs">Se déconnecter</span>
+          </Button>
+        </div>
+      </header>
+
       {/* Hero / header card */}
       <Card className="relative overflow-hidden border-none bg-gradient-to-r from-indigo-600 via-sky-500 to-emerald-400 text-white">
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <div className="absolute -top-10 -right-20 w-64 h-64 rounded-full bg-white/20 blur-3xl" />
-          <div className="absolute -bottom-10 -left-16 w-72 h-72 rounded-full bg-black/20 blur-3xl" />
+        <div className="absolute inset-0 pointer-events-none opacity-10">
+          <div className="absolute -top-10 -right-20 h-64 w-64 rounded-full bg-white/20 blur-3xl" />
+          <div className="absolute -bottom-10 -left-16 h-72 w-72 rounded-full bg-black/20 blur-3xl" />
         </div>
         <CardHeader className="relative z-10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -179,15 +246,16 @@ export default function BoursierDashboard() {
               <Sparkles className="h-3 w-3" />
               <span>Communauté Boursiers Takwa</span>
             </div>
-            <CardTitle className="mt-3 text-2xl md:text-3xl font-semibold">
+            <CardTitle className="mt-3 text-2xl font-semibold md:text-3xl">
               Bonjour, {fullName || "cher boursier"}
             </CardTitle>
             <CardDescription className="text-slate-100/80">
-              Merci de représenter l&apos;établissement à l&apos;université. Ce tableau de bord
-              est votre espace dédié : suivi de la bourse et contributions à la communauté.
+              Merci de représenter l&apos;établissement à l&apos;université. Ce
+              tableau de bord est votre espace dédié : suivi de la bourse et
+              contributions à la communauté.
             </CardDescription>
           </div>
-          <div className="flex flex-col items-start md:items-end gap-2 text-sm">
+          <div className="flex flex-col items-start gap-2 text-sm md:items-end">
             <div className="flex items-center gap-2">
               <GraduationCap className="h-4 w-4" />
               <span>{uni}</span>
@@ -200,7 +268,8 @@ export default function BoursierDashboard() {
               <div className="inline-flex items-center gap-2 rounded-full bg-black/20 px-3 py-1 text-xs">
                 <Clock className="h-3 w-3" />
                 <span>
-                  Année universitaire {yearNumber} • {startYear} → {CURRENT_YEAR}
+                  Année universitaire {yearNumber} • {startYear} →{" "}
+                  {CURRENT_YEAR}
                 </span>
               </div>
             )}
@@ -209,11 +278,13 @@ export default function BoursierDashboard() {
       </Card>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-sm font-medium">Bourse reçue</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Bourse reçue
+              </CardTitle>
               <CardDescription className="text-xs">
                 Total des versements validés
               </CardDescription>
@@ -221,15 +292,17 @@ export default function BoursierDashboard() {
             <Coins className="h-5 w-5 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{totalPaid.toLocaleString("fr-MA")} DH</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-2xl font-semibold">
+              {totalPaid.toLocaleString("fr-MA")} DH
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
               Sur {totalScheduled.toLocaleString("fr-MA")} DH programmés.
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
               <CardTitle className="text-sm font-medium">
                 Tranches de bourse
@@ -238,7 +311,6 @@ export default function BoursierDashboard() {
                 3 tranches par an universitaire
               </CardDescription>
             </div>
-            <Calendar className="h-5 w-5 text-sky-500" />
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">
@@ -250,14 +322,14 @@ export default function BoursierDashboard() {
                 style={{ width: `${paidPercent}%` }}
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="mt-1 text-xs text-muted-foreground">
               {paidPercent}% des tranches déjà reçues.
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
               <CardTitle className="text-sm font-medium">
                 Prochaine échéance
@@ -272,19 +344,21 @@ export default function BoursierDashboard() {
             {nextDisbursement ? (
               <>
                 <p className="text-sm font-medium">
-                  {nextDisbursement.period_start} → {nextDisbursement.period_end}
+                  {nextDisbursement.period_start} →{" "}
+                  {nextDisbursement.period_end}
                 </p>
-                <p className="text-lg font-semibold mt-1">
+                <p className="mt-1 text-lg font-semibold">
                   {nextDisbursement.amount.toLocaleString("fr-MA")} DH
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Statut : <span className="font-medium text-amber-600">En attente</span>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Statut :{" "}
+                  <span className="font-medium text-amber-600">En attente</span>
                 </p>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Aucune tranche en attente. Vérifiez auprès de l&apos;administration en cas de
-                question.
+                Aucune tranche en attente. Vérifiez auprès de
+                l&apos;administration en cas de question.
               </p>
             )}
           </CardContent>
@@ -292,7 +366,7 @@ export default function BoursierDashboard() {
       </div>
 
       {/* Main grid: disbursement timeline + contributions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Disbursement timeline */}
         <Card>
           <CardHeader>
@@ -322,7 +396,8 @@ export default function BoursierDashboard() {
                     {disbursements
                       .slice()
                       .sort(
-                        (a, b) => new Date(b.period_start) - new Date(a.period_start)
+                        (a, b) =>
+                          new Date(b.period_start) - new Date(a.period_start)
                       )
                       .map((d) => {
                         const paid = !!d.paid_at;
@@ -353,7 +428,9 @@ export default function BoursierDashboard() {
                                 ) : (
                                   <>
                                     <XCircle className="h-3 w-3 text-amber-500" />
-                                    <span className="text-amber-700">En attente</span>
+                                    <span className="text-amber-700">
+                                      En attente
+                                    </span>
                                   </>
                                 )}
                               </div>
@@ -373,35 +450,42 @@ export default function BoursierDashboard() {
           <CardHeader>
             <CardTitle>Contributions à l&apos;établissement</CardTitle>
             <CardDescription>
-              Proposez un atelier, un soutien, un don ou un partage d&apos;expérience.
+              Proposez un atelier, un soutien, un don ou un partage
+              d&apos;expérience.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form
-              onSubmit={handleSubmitContribution}
-              className="space-y-3"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <form onSubmit={handleSubmitContribution} className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-xs font-medium">Type de contribution</label>
-                  <Select
-                    value={contribType}
-                    onValueChange={setContribType}
-                  >
+                  <label className="text-xs font-medium">
+                    Type de contribution
+                  </label>
+                  <Select value={contribType} onValueChange={setContribType}>
                     <SelectTrigger>
                       <SelectValue placeholder="Choisir…" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="teaching">Enseignement / cours</SelectItem>
-                      <SelectItem value="mentoring">Mentorat / coaching</SelectItem>
-                      <SelectItem value="meetup">Meetup / visioconférence</SelectItem>
-                      <SelectItem value="donation">Don matériel ou financier</SelectItem>
+                      <SelectItem value="teaching">
+                        Enseignement / cours
+                      </SelectItem>
+                      <SelectItem value="mentoring">
+                        Mentorat / coaching
+                      </SelectItem>
+                      <SelectItem value="meetup">
+                        Meetup / visioconférence
+                      </SelectItem>
+                      <SelectItem value="donation">
+                        Don matériel ou financier
+                      </SelectItem>
                       <SelectItem value="other">Autre</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium">Date proposée (optionnelle)</label>
+                  <label className="text-xs font-medium">
+                    Date proposée (optionnelle)
+                  </label>
                   <Input
                     type="date"
                     value={contribDate}
@@ -411,7 +495,9 @@ export default function BoursierDashboard() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium">Titre (optionnel)</label>
+                <label className="text-xs font-medium">
+                  Titre (optionnel)
+                </label>
                 <Input
                   placeholder="Ex: Atelier Python pour les Terminales"
                   value={contribTitle}
@@ -430,10 +516,7 @@ export default function BoursierDashboard() {
               </div>
 
               <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  disabled={submittingContrib}
-                >
+                <Button type="submit" disabled={submittingContrib}>
                   {submittingContrib
                     ? "Envoi en cours…"
                     : "Envoyer ma proposition"}
@@ -442,18 +525,18 @@ export default function BoursierDashboard() {
             </form>
 
             <div className="border-t pt-3">
-              <p className="text-xs font-semibold mb-2">
+              <p className="mb-2 text-xs font-semibold">
                 Historique de vos contributions
               </p>
               {loadingContribs ? (
                 <p className="text-xs text-muted-foreground">Chargement…</p>
               ) : contributions.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Aucune contribution proposée pour l&apos;instant. Soyez le premier à
-                  lancer un projet !
+                  Aucune contribution proposée pour l&apos;instant. Soyez le
+                  premier à lancer un projet !
                 </p>
               ) : (
-                <div className="space-y-2 max-h-40 overflow-y-auto text-xs">
+                <div className="max-h-40 space-y-2 overflow-y-auto text-xs">
                   {contributions.map((c) => (
                     <div
                       key={c.id}
@@ -483,7 +566,7 @@ export default function BoursierDashboard() {
                         </p>
                       )}
                       {c.scheduled_at && (
-                        <p className="mt-1 text-[11px] text-muted-foreground flex items-center gap-1">
+                        <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
                           <Calendar className="h-3 w-3" />
                           Prévu le {c.scheduled_at}
                         </p>
@@ -497,11 +580,7 @@ export default function BoursierDashboard() {
         </Card>
       </div>
 
-      {error && (
-        <p className="text-xs text-red-600">
-          {error}
-        </p>
-      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }
