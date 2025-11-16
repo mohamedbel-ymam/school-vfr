@@ -320,6 +320,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true,             element: <BoursierDashboard /> },
       { path: "tableau de bord", element: <NotYet /> },
+      { path: "paramètres",              element: <AccountSettings /> },
       
     ],
 },
