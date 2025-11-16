@@ -93,7 +93,7 @@ export const ADMIN_DASHBOARD_ROUTE         = "/admin/tableau de bord";
 export const ADMIN_MANAGE_PARENTS_ROUTE    = "/admin/manage-parents";
 export const ADMIN_MANAGE_STUDENTS_ROUTE   = "/admin/manage-élèves";
 export const ADMIN_MANAGE_TEACHERS_ROUTE   = "/admin/manage-enseignants";
-export const ADMIN_MANAGE_BOURSIERS_ROUTE  ="/admin/boursiers"
+export const ADMIN_MANAGE_BOURSIERS_ROUTE = "/admin/manage-boursiers";
 export const ADMIN_MANAGE_TIMETABLES_ROUTE = "/admin/manage-timetables";
 export const ADMIN_MANAGE_EVENTS_ROUTE     = "/admin/manage-événements";
 export const ADMIN_MANAGE_GROUPS_ROUTE = "/admin/groupes";
@@ -147,7 +147,7 @@ export const redirectToDashboard = (roleType) => {
   }
 };
 
-export const ROLE_PRIORITY = ["admin", "teacher", "student", "parent"];
+export const ROLE_PRIORITY = ["admin", "teacher", "student", "parent","boursier"];
 
 export function startPathForUser(u) {
   const roles = Array.isArray(u?.roles) ? u.roles : (u?.role ? [u.role] : []);
@@ -311,7 +311,7 @@ export const router = createBrowserRouter([
     ],
   },
   {
-    path: "/boursier",
+  path: "/boursier",
     element: (
       <Guard roles={["boursier"]}>
         <BoursierDashboard />
@@ -320,11 +320,9 @@ export const router = createBrowserRouter([
     children: [
       { index: true,             element: <BoursierDashboard /> },
       { path: "tableau de bord", element: <NotYet /> },
-      { path: "événements",      element: <NotYet /> },
-      { path: "paramètres",      element: <NotYet/> },
-      {path: "emploi du temps",  element:<NotYet/>}
+      
     ],
-  },
+},
 ]);
 
 export default router;
