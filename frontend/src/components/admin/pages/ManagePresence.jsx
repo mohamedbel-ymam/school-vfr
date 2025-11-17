@@ -336,6 +336,22 @@ export default function ManagePresence() {
     const rate = denom ? Math.round((sumP / denom) * 100) : 0;
     return { sumA, sumJ, sumP, rate };
   }, [rows, edits]);
+  const generateFromTimetable = async () => {
+  try {
+    setSaving(true);
+
+    const res = await AttendanceApi.generateFromTimetable({
+      degree_id: degreeId,
+    });
+
+    toast.success("Présences générées depuis l’emploi du temps !");
+    fetchRows(meta.page);
+  } catch (e) {
+    toast.error("Erreur lors de la génération.");
+  } finally {
+    setSaving(false);
+  }
+};
 
   /* ----------------------------- UI ----------------------------------- */
   return (
@@ -350,6 +366,13 @@ export default function ManagePresence() {
             placeholder="Rechercher (élève, email, classe)"
             className="min-w-[220px] sm:w-64 flex-1"
           />
+          <Button
+            variant="secondary"
+            onClick={generateFromTimetable}
+            disabled={loading}
+          >
+            Générer depuis l’emploi du temps
+          </Button>
 
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[140px] whitespace-nowrap">
