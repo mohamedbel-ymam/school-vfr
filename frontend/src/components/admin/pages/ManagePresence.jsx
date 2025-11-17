@@ -131,23 +131,200 @@ export default function ManagePresence() {
   const setPres = (r, v) => applyEdit(r.id, { presences: v });
   const resetEdits = () => setEdits({});
 
-  const saveAll = async () => {
+   const saveAll = async () => {
     if (!pendingCount) return;
     setSaving(true);
+
     try {
-      const updates = Object.entries(edits).map(([student_id, vals]) => ({
-        student_id: +student_id,
-        absences: clampNonNeg(vals.absences),
-        justified_absences: clampNonNeg(vals.justified_absences),
-        presences: clampNonNeg(vals.presences),
-        period,
-      }));
-      await AttendanceApi.bulkUpdate({ updates, period });
-      toast.success("Présences mises à jour.");
+      // 1) Simple case: period = "overall" → same behavior as before
+      if (period === "overall") {
+        const updates = Object.entries(edits).map(([student_id, vals]) => ({
+          student_id: +student_id,
+          absences: clampNonNeg(vals.absences),
+          justified_absences: clampNonNeg(vals.justified_absences),
+          presences: clampNonNeg(vals.presences),
+          period: "overall",
+        }));
+
+        if (updates.length) {
+          await AttendanceApi.bulkUpdate({ updates, period: "overall" });
+        }
+
+        toast.success("Présences (global) mises à jour.");
+        setEdits({});
+        fetchRows(meta.page);
+        return;
+      }
+
+      // 2) Period = "week" or "month" → we cascade to higher levels
+      // ----------------------------------------------------------------
+      // Base values for CURRENT period (week OR month), as loaded in 'rows'
+      const baseCurrentMap = new Map(
+        rows.map((r) => [
+          r.id,
+          {
+            absences: clampNonNeg(r?.attendance?.absences ?? 0),
+            justified_absences: clampNonNeg(r?.attendance?.justified_absences ?? 0),
+            presences: clampNonNeg(r?.attendance?.presences ?? 0),
+          },
+        ])
+      );
+
+      // Common filters to refetch the same student list for other periods
+      const commonParams = {
+        q: debouncedQ,
+        page: meta.page,
+        per_page: meta.per_page,
+      };
+      if (degreeId !== "all") {
+        commonParams.degree_id = degreeId;
+      }
+
+      let monthMap = new Map();
+      let overallMap = new Map();
+
+      // If we are editing WEEK: we need MONTH + OVERALL from the API
+      if (period === "week") {
+        const [monthData, overallData] = await Promise.all([
+          AttendanceApi.list({ ...commonParams, period: "month" }),
+          AttendanceApi.list({ ...commonParams, period: "overall" }),
+        ]);
+
+        const toItems = (d) => d.items ?? d ?? [];
+        monthMap = new Map(
+          toItems(monthData).map((r) => [
+            r.id,
+            {
+              absences: clampNonNeg(r?.attendance?.absences ?? 0),
+              justified_absences: clampNonNeg(r?.attendance?.justified_absences ?? 0),
+              presences: clampNonNeg(r?.attendance?.presences ?? 0),
+            },
+          ])
+        );
+        overallMap = new Map(
+          toItems(overallData).map((r) => [
+            r.id,
+            {
+              absences: clampNonNeg(r?.attendance?.absences ?? 0),
+              justified_absences: clampNonNeg(r?.attendance?.justified_absences ?? 0),
+              presences: clampNonNeg(r?.attendance?.presences ?? 0),
+            },
+          ])
+        );
+      }
+
+      // If we are editing MONTH: we only need OVERALL from the API
+      if (period === "month") {
+        const overallData = await AttendanceApi.list({
+          ...commonParams,
+          period: "overall",
+        });
+        const toItems = (d) => d.items ?? d ?? [];
+        overallMap = new Map(
+          toItems(overallData).map((r) => [
+            r.id,
+            {
+              absences: clampNonNeg(r?.attendance?.absences ?? 0),
+              justified_absences: clampNonNeg(r?.attendance?.justified_absences ?? 0),
+              presences: clampNonNeg(r?.attendance?.presences ?? 0),
+            },
+          ])
+        );
+      }
+
+      // 3) Build updates for:
+      //    - current period (week OR month)
+      //    - month (if period === "week")
+      //    - overall (always, for week/month)
+      const updatesCurrent = [];
+      const updatesMonth = [];
+      const updatesOverall = [];
+
+      for (const [studentIdStr, draft] of Object.entries(edits)) {
+        const student_id = +studentIdStr;
+
+        const newAbs = clampNonNeg(draft.absences);
+        const newJust = clampNonNeg(draft.justified_absences);
+        const newPres = clampNonNeg(draft.presences);
+
+        const baseCurr = baseCurrentMap.get(student_id) || {
+          absences: 0,
+          justified_absences: 0,
+          presences: 0,
+        };
+
+        // delta between new and old for the current period
+        const deltaAbs = newAbs - baseCurr.absences;
+        const deltaJust = newJust - baseCurr.justified_absences;
+        const deltaPres = newPres - baseCurr.presences;
+
+        // Update for current period (week OR month) with absolute values
+        updatesCurrent.push({
+          student_id,
+          absences: newAbs,
+          justified_absences: newJust,
+          presences: newPres,
+          period,
+        });
+
+        // If we are on WEEK: add delta into MONTH
+        if (period === "week") {
+          const baseMonth = monthMap.get(student_id) || {
+            absences: 0,
+            justified_absences: 0,
+            presences: 0,
+          };
+          updatesMonth.push({
+            student_id,
+            absences: clampNonNeg(baseMonth.absences + deltaAbs),
+            justified_absences: clampNonNeg(baseMonth.justified_absences + deltaJust),
+            presences: clampNonNeg(baseMonth.presences + deltaPres),
+            period: "month",
+          });
+        }
+
+        // For both WEEK and MONTH: add delta into OVERALL
+        const baseOverall = overallMap.get(student_id) || {
+          absences: 0,
+          justified_absences: 0,
+          presences: 0,
+        };
+        updatesOverall.push({
+          student_id,
+          absences: clampNonNeg(baseOverall.absences + deltaAbs),
+          justified_absences: clampNonNeg(baseOverall.justified_absences + deltaJust),
+          presences: clampNonNeg(baseOverall.presences + deltaPres),
+          period: "overall",
+        });
+      }
+
+      // 4) Send to backend
+      if (updatesCurrent.length) {
+        await AttendanceApi.bulkUpdate({ updates: updatesCurrent, period });
+      }
+      if (period === "week" && updatesMonth.length) {
+        await AttendanceApi.bulkUpdate({ updates: updatesMonth, period: "month" });
+      }
+      if (updatesOverall.length) {
+        await AttendanceApi.bulkUpdate({
+          updates: updatesOverall,
+          period: "overall",
+        });
+      }
+
+      toast.success(
+        period === "week"
+          ? "Semaine, mois et global mis à jour."
+          : "Mois et global mis à jour."
+      );
       setEdits({});
       fetchRows(meta.page);
-    } catch { toast.error("Échec de la sauvegarde."); }
-    finally { setSaving(false); }
+    } catch (e) {
+      console.error(e);
+      toast.error("Échec de la sauvegarde (période + cumul).");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const totals = useMemo(() => {
