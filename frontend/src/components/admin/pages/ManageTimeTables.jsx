@@ -51,6 +51,41 @@ const normalizeDow = (v) => {
   if (n > 7) return (n % 7) || 7;
   return n;
 };
+//helper copie the lessons to another week
+const buildPayloadFromLesson = (lesson, targetWeekIso) => {
+  const day_of_week = normalizeDow(
+    lesson.day_of_week ?? lesson.dow ?? lesson.day
+  );
+
+  const mins = resolveStartEndMins(lesson);
+  if (!mins || !day_of_week) return null;
+
+  const [sm, em] = mins;
+  const hour_from = `${PAD(Math.floor(sm / 60))}:${PAD(sm % 60)}`;
+  const hour_to   = `${PAD(Math.floor(em / 60))}:${PAD(em % 60)}`;
+
+  const degree_id = lesson.degree?.id ?? lesson.degree_id ?? null;
+  const subject_id = lesson.subject?.id ?? lesson.subject_id ?? null;
+  const teacher_id = lesson.teacher?.id ?? lesson.teacher_id ?? null;
+  const room_id = lesson.room?.id ?? lesson.room_id ?? null;
+  const group_id = lesson.group?.id ?? lesson.group_id ?? null;
+
+  if (!(degree_id && subject_id && teacher_id)) return null;
+
+  return {
+    degree_id: Number(degree_id),
+    subject_id: Number(subject_id),
+    teacher_id: Number(teacher_id),
+    room_id: room_id ? Number(room_id) : null,
+    group_id: group_id ? Number(group_id) : null,
+    day_of_week,
+    hour_from,
+    hour_to,
+    week_start: targetWeekIso,
+    title: lesson.title?.trim() || null,
+  };
+};
+
 const startOfWeekMonday = (base = new Date()) => {
   const d = new Date(base);
   const js = d.getDay();
@@ -71,6 +106,7 @@ const isSameDayIndex = (date, dow1to7) => {
   const app = js === 0 ? 7 : js;
   return app === dow1to7;
 };
+
 
 /* period fallback (if no times) */
 const SCHOOL_START_MINS = 9 * 60;
@@ -433,6 +469,58 @@ export default function ManageTimeTables() {
       setErr(e?.response?.data?.message || "Suppression impossible");
     }
   };
+  const handleDuplicateToNextWeek = async () => {
+    // compute next Monday ISO (target week)
+    const nextMonday = addDays(monday, 7);
+    const y = nextMonday.getFullYear();
+    const m = PAD(nextMonday.getMonth() + 1);
+    const d = PAD(nextMonday.getDate());
+    const targetWeekIso = `${y}-${m}-${d}`;
+
+    const sourceLessons = lessons ?? [];
+    if (!sourceLessons.length) {
+      alert("Aucune séance à copier pour cette semaine.");
+      return;
+    }
+
+    const niceLabel = nextMonday.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+
+    if (
+      !window.confirm(
+        `Copier ${sourceLessons.length} séance(s) vers la semaine du ${niceLabel} ?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setErr("");
+
+      const payloads = sourceLessons
+        .map((l) => buildPayloadFromLesson(l, targetWeekIso))
+        .filter(Boolean);
+
+      for (const p of payloads) {
+        // utilise déjà ton endpoint existant
+        await TimeTableApi.create(p);
+      }
+
+      // après copie, on se place directement sur la semaine suivante
+      setWeekOffset((w) => w + 1);
+    } catch (e) {
+      console.error(e);
+      setErr(
+        e?.response?.data?.message ||
+          "Échec de la copie vers la semaine suivante"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   /* ─────────────── UI ─────────────── */
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
@@ -454,6 +542,14 @@ export default function ManageTimeTables() {
                   options={[{ value: "", label: "Tous les niveaux" }, ...degrees.map(asOption)]} />
           <Select value={subjectFilter} onChange={setSubjectFilter}
                   options={[{ value: "", label: "Toutes les matières" }, ...subjects.map(asOption)]} />
+          <button
+          type="button"
+          onClick={handleDuplicateToNextWeek}
+          disabled={saving || !(lessons && lessons.length)}
+          className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60 disabled:opacity-50"
+        >
+          Dupliquer vers semaine suivante
+        </button>
           <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">
             Imprimer
           </button>
