@@ -10,24 +10,33 @@ const unwrap = (r) => r?.data?.data ?? r?.data ?? [];
  *  - PUT    /admin/attendance/bulk
  *  - POST   /admin/attendance/{student}/increment
  *  - GET    /admin/attendance/summary
- *  - GET    /eleve/attendance            // student self-read (same axios client)
+ *  - GET    /eleve/attendance
+ *  - POST   /admin/attendance/generate-from-timetable   <-- NEW
  */
 const AttendanceApi = {
+
   /**
    * List students with counters for a period.
-   * @param {{ q?: string, page?: number, per_page?: number, period?: 'overall'|'month'|'week' }} params
+   * @param {{ q?: string, page?: number, per_page?: number, period?: 'overall'|'month'|'week', degree_id?:number }} params
    */
   async list(params = {}) {
-    const { q = "", page = 1, per_page = 25, period = "overall",degree_id} = params;
+    const {
+      q = "",
+      page = 1,
+      per_page = 25,
+      period = "overall",
+      degree_id,
+    } = params;
+
     const res = await axiosClient.get("/admin/attendance", {
-      params: { q, page, per_page, period,degree_id },
+      params: { q, page, per_page, period, degree_id },
     });
+
     return unwrap(res);
   },
 
   /**
    * Bulk update counters for many students.
-   * @param {{ period?: 'overall'|'month'|'week', updates: Array<{student_id:number, absences:number, presences:number, justified_absences?:number, period?:string}> }} payload
    */
   async bulkUpdate(payload) {
     const res = await axiosClient.put("/admin/attendance/bulk", payload);
@@ -36,10 +45,6 @@ const AttendanceApi = {
 
   /**
    * Quick increment for a single student.
-   * @param {number} studentId
-   * @param {'absence'|'absence_justified'|'presence'} type
-   * @param {number} amount
-   * @param {{ period?: 'overall'|'month'|'week' }} extras
    */
   async increment(studentId, type = "absence", amount = 1, extras = {}) {
     const res = await axiosClient.post(
@@ -51,21 +56,35 @@ const AttendanceApi = {
 
   /**
    * Admin dashboard summary (totals + top at-risk)
-   * @param {{ period?: 'overall'|'month'|'week' }} params
    */
   async summary(params = {}) {
     const { period = "overall" } = params;
-    const res = await axiosClient.get("/admin/attendance/summary", { params: { period } });
+    const res = await axiosClient.get("/admin/attendance/summary", {
+      params: { period },
+    });
     return unwrap(res);
   },
 
   /**
    * Student self-read of their own counters
-   * @param {{ period?: 'overall'|'month'|'week' }} params
    */
   async me(params = {}) {
     const { period = "overall" } = params;
-    const res = await axiosClient.get("/eleve/attendance", { params: { period } });
+    const res = await axiosClient.get("/eleve/attendance", {
+      params: { period },
+    });
+    return unwrap(res);
+  },
+
+  /**
+   * NEW: Generate weekly/month/global presence from real timetable
+   * @param {{ degree_id:number }} payload
+   */
+  async generateFromTimetable(payload) {
+    const res = await axiosClient.post(
+      "/admin/attendance/generate-from-timetable",
+      payload
+    );
     return unwrap(res);
   },
 };
