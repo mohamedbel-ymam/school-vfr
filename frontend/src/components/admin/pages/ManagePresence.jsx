@@ -1,6 +1,6 @@
 // src/components/Admin/Pages/ManagePresence.jsx
 import { useEffect, useMemo, useState } from "react";
-import AttendanceApi from "../../../services/api/admin/AttendanceApi";
+import AttendanceApi from "../../../services/api/AttendanceApi";
 import { axiosClient } from "../../../api/axios";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
