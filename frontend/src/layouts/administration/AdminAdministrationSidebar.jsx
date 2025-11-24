@@ -22,6 +22,7 @@ import {
   LayoutDashboard,
   Users,
   User,
+  UserPlus2,
   GraduationCap,
   BookOpen,
   CalendarDays,
@@ -47,7 +48,7 @@ const ADMIN_DOCUMENTS_HOMEWORK = "/admin/devoirs";
 const ADMIN_SETTINGS_ROUTE = "/admin/paramètres";
 const ADMIN_PRESENCE_ROUTE = "/admin/presences";
 const ADMIN_NOTIFICATIONS_ROUTE = "/admin/notifications";
-
+const ADMIN_MANAGE_WAITING_LIST="/admin/waiting-list"
 
 
 /**
@@ -71,6 +72,8 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
         { label: "Élèves", to: ADMIN_MANAGE_STUDENTS_ROUTE, icon: Users },
         { label: "Parents", to: ADMIN_MANAGE_PARENTS_ROUTE, icon: Users },
         { label: "Boursiers", to: ADMIN_MANAGE_BOURSIERS_ROUTE, icon: Users },
+        { label: "List d'attente", to: ADMIN_MANAGE_WAITING_LIST, icon: UserPlus2 },
+        
       ],
     },
     {

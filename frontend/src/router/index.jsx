@@ -7,6 +7,7 @@ import Home         from "@/pages/Home.jsx";
 import Notfound     from "@/pages/Notfound.jsx";            // file is Notfound.jsx (lowercase 'f')
 import Login        from "@/pages/Login.jsx";
 import Unauthorized from "@/pages/Unauthorized.jsx";
+import PublicWaitingList from "../pages/PublicWaitingList";
 
 /* Layouts */
 import Layout                  from "@/layouts/Layout.jsx";
@@ -41,6 +42,7 @@ import AdminsPage        from "@/components/admin/pages/AdminsPage.jsx";
 import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans.jsx";
 import ManageGroups from "@/components/admin/pages/ManageGroups.jsx";
 import ManageBoursier from "../components/admin/pages/ManageBoursiers";
+import ManageWaitingList from "../components/admin/pages/ManageWaitingList";
 
 
 /* Settings */
@@ -205,7 +207,12 @@ export const router = createBrowserRouter([
         <GuestLayout />
       </GuestOnly>
     ),
-    children: [{ path: LOGIN_ROUTE, element: <Login /> }],
+    children: [{ path: LOGIN_ROUTE, element: <Login />   
+    },
+  {
+  path: "/waiting-list",
+  element: <PublicWaitingList />
+}],
   },
 
   // Student (Protected)
@@ -264,8 +271,9 @@ export const router = createBrowserRouter([
       { path: "courses",            element: <NotYet /> },
       { path: "exams",              element: <NotYet /> },
       { path: "messages",           element: <NotYet /> },
-      { path: "presences",              element: <ManagePresence /> },
-      { path: "groupes", element: <ManageGroups />},
+      { path: "presences",          element: <ManagePresence /> },
+      { path: "groupes",            element: <ManageGroups />},
+      {path: "/admin/waiting-list", element: <ManageWaitingList />}
     ],
   },
 
