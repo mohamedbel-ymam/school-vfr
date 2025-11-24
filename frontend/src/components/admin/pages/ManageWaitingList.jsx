@@ -3,19 +3,21 @@ import { Card, CardHeader, CardTitle, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { toast } from "sonner";
 import { axiosClient } from "../../../api/axios";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 
 export default function ManageWaitingList() {
   const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingUpload, setLoadingUpload] = useState(false);
+  const [loadingDelete, setLoadingDelete] = useState(false);
 
+  /* -------------------------------- Upload Excel -------------------------------- */
   const handleUpload = async () => {
     if (!file) {
       toast.error("Veuillez sélectionner un fichier Excel.");
       return;
     }
 
-    setLoading(true);
+    setLoadingUpload(true);
     const formData = new FormData();
     formData.append("file", file);
 
@@ -30,7 +32,26 @@ export default function ManageWaitingList() {
       console.error(err);
       toast.error("Erreur lors de l'importation du fichier.");
     } finally {
-      setLoading(false);
+      setLoadingUpload(false);
+    }
+  };
+
+  /* -------------------------------- Delete List -------------------------------- */
+  const handleDelete = async () => {
+    if (!confirm("Voulez-vous vraiment supprimer toute la liste d'attente ?")) {
+      return;
+    }
+
+    setLoadingDelete(true);
+
+    try {
+      await axiosClient.delete("/admin/waiting-list/clear");
+      toast.success("Liste d’attente supprimée avec succès !");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de la suppression.");
+    } finally {
+      setLoadingDelete(false);
     }
   };
 
@@ -39,11 +60,13 @@ export default function ManageWaitingList() {
       <Card className="mx-auto max-w-xl">
         <CardHeader>
           <CardTitle className="text-xl font-semibold">
-            Importer la Liste d'Attente
+            Gestion de la Liste d'Attente
           </CardTitle>
         </CardHeader>
 
         <CardContent className="space-y-4">
+
+          {/* Upload Excel */}
           <input
             type="file"
             accept=".xlsx,.xls"
@@ -53,16 +76,36 @@ export default function ManageWaitingList() {
 
           <Button
             onClick={handleUpload}
-            disabled={loading}
+            disabled={loadingUpload}
             className="w-full"
           >
-            {loading ? (
+            {loadingUpload ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Importation...
               </span>
             ) : (
               "Importer le fichier Excel"
+            )}
+          </Button>
+
+          {/* Delete Button */}
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={handleDelete}
+            disabled={loadingDelete}
+          >
+            {loadingDelete ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Suppression...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <Trash2 className="h-4 w-4" />
+                Supprimer toute la liste
+              </span>
             )}
           </Button>
         </CardContent>

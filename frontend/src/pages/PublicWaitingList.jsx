@@ -10,6 +10,16 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Loader2 } from "lucide-react";
+const degreeLabels = {
+  "6ème": "6ème Année Collège",
+  "5ème": "5ème Année Collège",
+  "4ème": "4ème Année Collège",
+  "3ème": "3ème Année Collège",
+  "TC": "Tronc Commun",
+  "1BAC SM": "1ère Bac Sciences Mathématiques",
+  "1BAC SE": "1ère Bac Sciences Expérimentales",
+  "2BAC": "2ème Bac – Filière Générale"
+};
 
 export default function PublicWaitingList() {
   const [list, setList] = useState([]);
@@ -38,57 +48,55 @@ export default function PublicWaitingList() {
     );
   }
 
+  // GROUP BY DEGREE
+  const groups = list.reduce((acc, item) => {
+    if (!acc[item.degree]) acc[item.degree] = [];
+    acc[item.degree].push(item);
+    return acc;
+  }, {});
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6 text-center">
-        Liste d'Attente (Ordre Officiel)
+        Liste d'Attente par Filière
       </h1>
 
-      {/* RESPONSIVE WRAPPER */}
-      <div className="overflow-x-auto rounded-md border shadow-sm">
-        <Table className="min-w-[600px]">
-          <TableCaption className="text-sm">
-            Liste publique d'attente mise à jour automatiquement.
-          </TableCaption>
+      {/* For each degree */}
+      {Object.keys(groups).map((degree) => (
+        <div key={degree} className="mb-10">
+          {/* Degree Title */}
+          <h2 className="text-xl font-semibold mb-3 text-blue-700">
+            {degree}
+          </h2>
 
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[80px]">Ordre</TableHead>
-              <TableHead>Nom Complet</TableHead>
-              <TableHead>Filière</TableHead>
-            </TableRow>
-          </TableHeader>
+          <div className="overflow-x-auto rounded-md border shadow-sm">
+            <Table className="min-w-[600px]">
+              <TableCaption className="text-sm">
+                Liste d'attente officielle pour: {degreeLabels[degree] ?? degree}
 
-          <TableBody>
-            {list.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={3}
-                  className="text-center py-6 text-gray-500"
-                >
-                  Aucune donnée pour le moment.
-                </TableCell>
-              </TableRow>
-            )}
+              </TableCaption>
 
-            {list.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.order_index}</TableCell>
-                <TableCell>
-                  <span className="block text-sm sm:text-base font-semibold">
-                    {item.first_name} {item.last_name}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <span className="px-2 py-1 text-xs sm:text-sm rounded bg-blue-100 text-blue-700">
-                    {item.degree}
-                  </span>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[80px]">Ordre</TableHead>
+                  <TableHead>Nom Complet</TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {groups[degree].map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.order_index}</TableCell>
+                    <TableCell className="font-semibold">
+                      {item.first_name} {item.last_name}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
