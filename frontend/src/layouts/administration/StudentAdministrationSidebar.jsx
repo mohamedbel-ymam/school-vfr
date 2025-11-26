@@ -37,7 +37,7 @@ export function StudentAdministrationSidebar({ className, collapsed = false }) {
     { label: "Emploi du temps", to: "/élève/emploi du temps",  icon: CalendarDays },
     { label: "Notes & relevés", to: "/élève/grades",           icon: BarChart2 },
     { label: "Messages",        to: "/élève/messages",         icon: MessageSquare },
-    { label: "Examens",         to: "/élève/exams",            icon: ClipboardList },
+    { label: "Examens",         to: "/élève/tests",            icon: ClipboardList },
     { label: "Événements",      to: "/élève/événements",       icon: CalendarDays },
     { label: "Documents",       to: "/élève/documents",        icon: FileText },
     { label: "Paramètres",      to: "/élève/paramètres",       icon: Settings },

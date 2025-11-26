@@ -71,6 +71,21 @@ import AdminDevoirs   from "@/components/admin/pages/AdminDevoirs.jsx";
 import NotYet from "@/pages/NotYet.jsx"; // file is NotYet.jsx (capital Y)
 import ManagePresence from "@/components/admin/pages/ManagePresence";
 import BoursierDashboard from "../components/boursier/BoursierDashboard";
+/*Teacher test  */
+import TeacherTestsList from "../components/teacher/tests/TeacherTestsList.jsx";
+import CreateTestForm from "../components/teacher/tests/CreateTestForm.jsx";
+import AddQuestions from "../components/teacher/tests/AddQuestions.jsx";
+import AssignStudents from "../components/teacher/tests/AssignStudents.jsx";
+import ReviewAndActivate from "../components/teacher/tests/ReviewAndActivate.jsx";
+import TestResults from "../components/teacher/tests/TestResults.jsx";
+/*Student test */
+import StudentTestsList from "../components/student/tests/StudentTestsList.jsx";
+import StartTest from "../components/student/tests/StartTest.jsx";
+import TestResult from "../components/student/tests/TestResult.jsx";
+import TestScreen from "../components/student/tests/TestScreen.jsx";
+/*Admin test */
+import AdminTestsList from "@/components/admin/pages/AdminTestsList.jsx";
+import AdminTestDetails from "@/components/admin/pages/AdminTestDetails.jsx";
 
 /* ---------------- Route Constants ---------------- */
 
@@ -135,6 +150,13 @@ export const STUDENT_COURSES_ROUTE = "/élève/courses";
 export const STUDENT_GRADES_ROUTE  = "/élève/grades";
 export const STUDENT_MSGS_ROUTE    = "/élève/messages";
 export const STUDENT_EXAMS_ROUTE   = "/élève/exams";
+// Teacher Test const
+export const TEACHER_TESTS_ROUTE = "/enseignant/tests";
+export const TEACHER_TEST_CREATE_ROUTE = "/enseignant/tests/create";
+export const TEACHER_TEST_QUESTIONS_ROUTE = "/enseignant/tests/:id/questions";
+export const TEACHER_TEST_ASSIGN_ROUTE = "/enseignant/tests/:id/assign";
+export const TEACHER_TEST_REVIEW_ROUTE = "/enseignant/tests/:id/review";
+export const TEACHER_TEST_RESULTS_ROUTE = "/enseignant/tests/:id/results";
 
 /* ---------------- Helpers ---------------- */
 
@@ -217,29 +239,46 @@ export const router = createBrowserRouter([
 
   // Student (Protected)
   {
-    path: "/élève",
-    element: (
-      <Guard roles={["student"]}>
-        <StudentDashboardLayout />
-      </Guard>
-    ),
-    children: [
-      { index: true,                     element: <Navigate to="tableau de bord" replace /> },
-      { path: "tableau de bord",         element: <StudentDashboard /> },
-      { path: "tableau de bord/:degree", element: <StudentDashboard /> },
-      { path: "emploi du temps",         element: <StudentTimetable /> },
-      { path: "événements",              element: <StudentEvents /> },
-      { path: "paramètres",              element: <AccountSettings /> },
-      { path: "notifications",           element: <NotificationsPage /> },
-      { path: "documents",               element: <StudentDocuments /> },
-      { path: "devoirs",                 element: <StudentDevoirs /> },
-      // placeholders
-      { path: "courses",                 element: <NotYet /> },
-      { path: "grades",                  element: <NotYet /> },
-      { path: "messages",                element: <NotYet /> },
-      { path: "exams",                   element: <NotYet /> },
-    ],
-  },
+  path: "/élève",
+  element: (
+    <Guard roles={["student"]}>
+      <StudentDashboardLayout />
+    </Guard>
+  ),
+  children: [
+    /* Page d’accueil - redirection */
+    { index: true, element: <Navigate to="tableau de bord" replace /> },
+
+    /* Tableau de bord */
+    { path: "tableau de bord", element: <StudentDashboard /> },
+    { path: "tableau de bord/:degree", element: <StudentDashboard /> },
+
+    /* Pages principales */
+    { path: "emploi du temps", element: <StudentTimetable /> },
+    { path: "événements", element: <StudentEvents /> },
+    { path: "paramètres", element: <AccountSettings /> },
+    { path: "notifications", element: <NotificationsPage /> },
+    { path: "documents", element: <StudentDocuments /> },
+    { path: "devoirs", element: <StudentDevoirs /> },
+
+    /* Tests (Nouvel Examen en ligne) */
+    {
+      path: "tests",
+      children: [
+        { index: true, element: <StudentTestsList /> },
+        { path: ":id/start", element: <StartTest /> },
+        { path: "attempt/:id", element: <TestScreen /> },
+        { path: "resultat/:id", element: <TestResult /> },
+      ],
+    },
+
+    /* Sections non encore développées */
+    { path: "courses", element: <NotYet /> },
+    { path: "grades", element: <NotYet /> },
+    { path: "messages", element: <NotYet /> },
+    { path: "exams", element: <NotYet /> },
+  ],
+},
 
   // Admin (Protected)
   {
@@ -273,7 +312,9 @@ export const router = createBrowserRouter([
       { path: "messages",           element: <NotYet /> },
       { path: "presences",          element: <ManagePresence /> },
       { path: "groupes",            element: <ManageGroups />},
-      {path: "/admin/waiting-list", element: <ManageWaitingList />}
+      {path: "/waiting-list", element: <ManageWaitingList />},
+      { path: "tests",         element: <AdminTestsList /> },
+    { path: "tests/:id",     element: <AdminTestDetails /> },
     ],
   },
 
@@ -299,6 +340,13 @@ export const router = createBrowserRouter([
       { path: "exams",           element: <NotYet /> },
       { path: "grades",          element: <NotYet /> },
       { path: "messages",        element: <NotYet /> },
+       /* ------------------ TEACHER TEST MODULE ------------------ */
+      { path: "tests", element: <TeacherTestsList /> },
+      { path: "tests/create", element: <CreateTestForm /> },
+      { path: "tests/:id/questions", element: <AddQuestions /> },
+      { path: "tests/:id/assign", element: <AssignStudents /> },
+      { path: "tests/:id/review", element: <ReviewAndActivate /> },
+      { path: "tests/:id/results", element: <TestResults /> },
     ],
   },
 
