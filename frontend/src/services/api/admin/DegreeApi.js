@@ -10,5 +10,6 @@ const DegreeApi = {
   // ✅ Shim so SendNotification.jsx keeps working
   all: () => axiosClient.get("/degrees", { params: { per_page: 1000 } }),
 };
-
 export default DegreeApi;
+
+ 
