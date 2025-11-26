@@ -312,7 +312,7 @@ export const router = createBrowserRouter([
       { path: "messages",           element: <NotYet /> },
       { path: "presences",          element: <ManagePresence /> },
       { path: "groupes",            element: <ManageGroups />},
-      {path: "/waiting-list", element: <ManageWaitingList />},
+      {path: "waiting-list", element: <ManageWaitingList />},
       { path: "tests",         element: <AdminTestsList /> },
     { path: "tests/:id",     element: <AdminTestDetails /> },
     ],
