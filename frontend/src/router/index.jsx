@@ -84,8 +84,8 @@ import StartTest from "../components/student/tests/StartTest.jsx";
 import TestResult from "../components/student/tests/TestResult.jsx";
 import TestScreen from "../components/student/tests/TestScreen.jsx";
 /*Admin test */
-import AdminTestsList from "@/components/admin/pages/AdminTestsList.jsx";
-import AdminTestDetails from "@/components/admin/pages/AdminTestDetails.jsx";
+import AdminTestsList from "../components/admin/pages/AdminTestsList.jsx";
+import AdminTestDetails from "../components/admin/pages/AdminTestsDetails.jsx";
 
 /* ---------------- Route Constants ---------------- */
 
