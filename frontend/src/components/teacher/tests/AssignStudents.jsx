@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import {DegreeApi} from "../../../services/api/Admin/DegreeApi";
+import {DegreeApi} from "../../../services/api/admin/DegreeApi";
 import {StudentApi} from "../../../services/api/admin/StudentApi";
 import { axiosClient } from "../../../api/axios";
 import { useParams, useNavigate } from "react-router-dom";
