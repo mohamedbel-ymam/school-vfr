@@ -22,7 +22,7 @@ export default function TeacherTestsList() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between">
-        <h2 className="text-xl font-semibold">Mes Tests</h2>
+        <h2 className="text-xl font-semibold">Mes Examens</h2>
         <Button onClick={() => navigate("/enseignant/tests/create")}>
           + Creer un nouveau examen
         </Button>
