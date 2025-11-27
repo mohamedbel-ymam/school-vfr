@@ -58,7 +58,7 @@ export default function CreateTestForm() {
     setLoading(true);
 
     try {
-      const res = await axiosClient.post("/teacher/tests", form);
+      const res = await axiosClient.post("/enseignant/tests", form);
       toast.success("Test créé avec succès !");
 
       navigate(`/enseignant/tests/${res.data.id}/questions`);
