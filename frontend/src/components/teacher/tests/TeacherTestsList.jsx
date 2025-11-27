@@ -11,8 +11,7 @@ export default function TeacherTestsList() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    axiosClient
-      .get("/teacher/tests/list") // create this endpoint or use your index()
+    axiosClient.get("/teacher/tests")
       .then((res) => setTests(res.data))
       .catch(() => toast.error("Failed to load tests"))
       .finally(() => setLoading(false));
@@ -23,9 +22,9 @@ export default function TeacherTestsList() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between">
-        <h2 className="text-xl font-semibold">My Tests</h2>
+        <h2 className="text-xl font-semibold">Mes Tests</h2>
         <Button onClick={() => navigate("/enseignant/tests/create")}>
-          + Create New Test
+          + Creer un nouveau examen
         </Button>
       </div>
 
@@ -54,7 +53,7 @@ export default function TeacherTestsList() {
                   variant="outline"
                   onClick={() => navigate(`/enseignant/tests/${t.id}/questions`)}
                 >
-                  Edit Questions
+                  Modifier les questions
                 </Button>
 
                 <Button
@@ -62,7 +61,7 @@ export default function TeacherTestsList() {
                   variant="outline"
                   onClick={() => navigate(`/enseignant/tests/${t.id}/assign`)}
                 >
-                  Assign Students
+                  Attribuer les étudiants
                 </Button>
 
                 <Button
@@ -70,14 +69,14 @@ export default function TeacherTestsList() {
                   variant="outline"
                   onClick={() => navigate(`/enseignant/tests/${t.id}/review`)}
                 >
-                  Review & Activate
+                  Vérifier et activer
                 </Button>
 
                 <Button
                   size="sm"
                   onClick={() => navigate(`/enseignant/tests/${t.id}/results`)}
                 >
-                  Results
+                  Resultats
                 </Button>
               </div>
             </CardContent>
