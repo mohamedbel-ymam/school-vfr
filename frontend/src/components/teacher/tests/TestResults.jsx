@@ -12,7 +12,7 @@ export default function TestResults() {
 
   useEffect(() => {
     axiosClient
-      .get(`/teacher/tests/${testId}/results`)
+      .get(`/enseignant/tests/${testId}/results`)
       .then((res) => setAttempts(res.data))
       .catch(() => toast.error("Failed to load results"))
       .finally(() => setLoading(false));
@@ -20,7 +20,7 @@ export default function TestResults() {
 
   const invalidate = async (attemptId) => {
     try {
-      await axiosClient.delete(`/teacher/tests/attempts/${attemptId}`);
+      await axiosClient.delete(`/enseignant/tests/attempts/${attemptId}`);
       toast.success("Attempt invalidated");
       setAttempts((prev) => prev.filter((a) => a.id !== attemptId));
     } catch {
@@ -33,7 +33,7 @@ export default function TestResults() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Test Results</CardTitle>
+        <CardTitle>Résultat du test</CardTitle>
       </CardHeader>
 
       <CardContent className="space-y-3">
@@ -45,7 +45,7 @@ export default function TestResults() {
                 Score: {a.score}
               </div>
               <div className="text-xs">
-                Time: {a.time_spent_seconds}s
+                Temps: {a.time_spent_seconds}s
               </div>
             </div>
 
@@ -53,7 +53,7 @@ export default function TestResults() {
               variant="destructive"
               onClick={() => invalidate(a.id)}
             >
-              Invalidate
+              Invalider
             </Button>
           </div>
         ))}

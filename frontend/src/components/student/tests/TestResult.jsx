@@ -9,7 +9,7 @@ export default function TestResult() {
 
   useEffect(() => {
     axiosClient
-      .get(`/student/attempts/${attemptId}/result`)
+      .get(`/eleve/attempts/${attemptId}/result`)
       .then((res) => setData(res.data));
   }, [attemptId]);
 

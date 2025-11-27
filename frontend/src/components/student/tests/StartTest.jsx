@@ -13,8 +13,8 @@ export default function StartTest() {
 
   const start = async () => {
     try {
-      const res = await axiosClient.post(`/student/tests/${testId}/start`);
-      navigate(`/élève/tests/attempt/${res.data.attempt_id}`);
+      const res = await axiosClient.post(`/eleve/tests/${testId}/start`);
+      navigate(`/eleve/tests/attempt/${res.data.attempt_id}`);
     } catch (err) {
       toast.error(err.response?.data?.error || "Impossible de démarrer le test.");
     }
@@ -22,7 +22,7 @@ export default function StartTest() {
 
   useEffect(() => {
     axiosClient
-      .get(`/teacher/tests/${testId}`)
+      .get(`/enseignant/tests/${testId}`)
       .then((res) => setTest(res.data.test))
       .catch(() => toast.error("Impossible de charger le test."))
       .finally(() => setLoading(false));

@@ -15,7 +15,7 @@ export default function ReviewAndActivate() {
 
   useEffect(() => {
     axiosClient
-      .get(`/teacher/tests/${testId}/review`) // backend method needed
+      .get(`/enseignant/tests/${testId}/review`) // backend method needed
       .then((res) => {
         setTest(res.data.test);
         setQuestions(res.data.questions);
@@ -43,15 +43,15 @@ export default function ReviewAndActivate() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div><strong>Title:</strong> {test.title}</div>
+        <div><strong>Titre:</strong> {test.title}</div>
         <div><strong>Description:</strong> {test.description}</div>
         <div><strong>Questions:</strong> {questions.length}</div>
-        <div><strong>Assigned Students:</strong> {assignments.length}</div>
-        <div><strong>Timer:</strong> {test.global_time_minutes} minutes</div>
-        <div><strong>Grade:</strong> {test.grade_value}</div>
+        <div><strong>Attribuer les étudiants:</strong> {assignments.length}</div>
+        <div><strong>Temps:</strong> {test.global_time_minutes} minutes</div>
+        <div><strong>Note:</strong> {test.grade_value}</div>
 
         <Button onClick={activate} className="w-full">
-          Activate Test
+          Activer le Test
         </Button>
       </CardContent>
     </Card>

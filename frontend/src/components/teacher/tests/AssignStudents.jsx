@@ -54,7 +54,7 @@ export default function AssignStudents() {
     }
 
     try {
-      await axiosClient.post(`/teacher/tests/${testId}/assign`, {
+      await axiosClient.post(`/enseignant/tests/${testId}/assign`, {
         student_ids: selectedStudents,
       });
 

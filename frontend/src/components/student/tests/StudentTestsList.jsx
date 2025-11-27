@@ -12,7 +12,7 @@ export default function StudentTestsList() {
 
   useEffect(() => {
     axiosClient
-      .get("/student/tests")
+      .get("/eleve/tests")
       .then((res) => setTests(res.data))
       .catch(() => toast.error("Impossible de charger les tests disponibles."))
       .finally(() => setLoading(false));

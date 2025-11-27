@@ -11,7 +11,7 @@ export default function TeacherTestsList() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    axiosClient.get("/teacher/tests")
+    axiosClient.get("/enseignant/tests")
       .then((res) => setTests(res.data))
       .catch(() => toast.error("Failed to load tests"))
       .finally(() => setLoading(false));

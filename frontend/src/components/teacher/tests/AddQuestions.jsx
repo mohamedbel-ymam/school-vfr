@@ -34,7 +34,7 @@ export default function AddQuestions() {
 
     async function load() {
       try {
-        const res = await axiosClient.get(`/teacher/tests/${testId}`);
+        const res = await axiosClient.get(`/enseignant/tests/${testId}`);
 
         if (!ignore) {
           setTest(res.data.test);

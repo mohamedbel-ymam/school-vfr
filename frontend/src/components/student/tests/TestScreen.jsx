@@ -18,7 +18,7 @@ export default function TestScreen() {
   /* Charger */
   useEffect(() => {
     axiosClient
-      .get(`/student/attempts/${attemptId}`)
+      .get(`/eleve/attempts/${attemptId}`)
       .then((res) => {
         setData(res.data);
         setRemaining(res.data.remaining_seconds);
@@ -38,7 +38,7 @@ export default function TestScreen() {
   const save = async () => {
     const q = data.questions[index];
 
-    await axiosClient.post(`/student/attempts/${attemptId}/answer`, {
+    await axiosClient.post(`/eleve/attempts/${attemptId}/answer`, {
       question_id: q.id,
       answer: selected,
     });
