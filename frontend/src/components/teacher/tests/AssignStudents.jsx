@@ -21,9 +21,9 @@ export default function AssignStudents() {
   /* Charger les degrés existants */
   useEffect(() => {
     DegreeApi.publicList()
-      .then((res) => setDegrees(res.data))
+      .then((res) => setDegrees(res.data?.data || res.data || []))
       .catch(() => toast.error("Impossible de charger les degrés."));
-  }, []);
+    }, []);
 
   /* Charger les élèves pour le degré sélectionné */
   const loadStudents = (degreeId) => {
