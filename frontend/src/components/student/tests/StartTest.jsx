@@ -36,13 +36,13 @@ export default function StartTest() {
         <CardTitle>Démarrer le test</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <h3 className="text-lg font-semibold">{test.title}</h3>
+        <h3 className="text-lg font-semibold">{test?.title}</h3>
 
-        <p className="text-sm text-muted-foreground">{test.description}</p>
+        <p className="text-sm text-muted-foreground">{test?.description}</p>
 
         <div className="text-sm space-y-1">
-          <p>Durée totale : {test.global_time_minutes} min</p>
-          <p>Nombre de questions : {test.total_questions}</p>
+          <p>Durée totale : {test?.global_time_minutes} min</p>
+          <p>Nombre de questions : {test?.total_questions}</p>
         </div>
 
         <Button className="w-full" onClick={start}>
