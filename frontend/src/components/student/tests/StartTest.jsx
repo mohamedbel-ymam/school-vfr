@@ -21,9 +21,8 @@ export default function StartTest() {
   };
 
   useEffect(() => {
-    axiosClient
-      .get(`/enseignant/tests/${testId}`)
-      .then((res) => setTest(res.data.test))
+    axiosClient.get(`/eleve/tests/${testId}`)
+    .then((res) => setTest(res.data.test))
       .catch(() => toast.error("Impossible de charger le test."))
       .finally(() => setLoading(false));
   }, [testId]);
