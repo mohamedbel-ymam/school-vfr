@@ -63,7 +63,8 @@ export default function AssignStudents() {
 
     try {
       await axiosClient.post(`/enseignant/tests/${testId}/assign`, {
-        student_ids: selectedStudents,
+      students: selectedStudents,
+
       });
 
       toast.success("Test attribué avec succès !");
