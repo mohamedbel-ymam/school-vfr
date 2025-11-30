@@ -10,12 +10,29 @@ export default function TeacherTestsList() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  /* Charger la liste des tests */
   useEffect(() => {
     axiosClient.get("/enseignant/tests")
       .then((res) => setTests(res.data))
-      .catch(() => toast.error("Failed to load tests"))
+      .catch(() => toast.error("Impossible de charger les examens."))
       .finally(() => setLoading(false));
   }, []);
+
+  /* Suppression d'un test */
+  const deleteTest = async (testId) => {
+    const ok = confirm("Voulez-vous vraiment supprimer ce test ?");
+    if (!ok) return;
+
+    try {
+      await axiosClient.delete(`/enseignant/tests/${testId}`);
+      toast.success("Test supprimé avec succès");
+
+      setTests((prev) => prev.filter((t) => t.id !== testId));
+    } catch (err) {
+      toast.error("Erreur lors de la suppression du test.");
+      console.error(err);
+    }
+  };
 
   if (loading) return <div className="p-4">Chargement…</div>;
 
@@ -24,14 +41,14 @@ export default function TeacherTestsList() {
       <div className="flex justify-between">
         <h2 className="text-xl font-semibold">Mes Examens</h2>
         <Button onClick={() => navigate("/enseignant/tests/create")}>
-          + Creer un nouveau examen
+          + Créer un nouvel examen
         </Button>
       </div>
 
       {tests.length === 0 && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            No tests created yet. Click “Create New Test”.
+            Aucun examen créé pour le moment.
           </CardContent>
         </Card>
       )}
@@ -42,6 +59,7 @@ export default function TeacherTestsList() {
             <CardHeader>
               <CardTitle>{t.title}</CardTitle>
             </CardHeader>
+
             <CardContent className="space-y-2">
               <div className="text-sm text-muted-foreground">
                 {t.description?.slice(0, 120)}…
@@ -61,7 +79,7 @@ export default function TeacherTestsList() {
                   variant="outline"
                   onClick={() => navigate(`/enseignant/tests/${t.id}/assign`)}
                 >
-                  Attribuer les étudiants
+                  Attribuer aux élèves
                 </Button>
 
                 <Button
@@ -69,14 +87,23 @@ export default function TeacherTestsList() {
                   variant="outline"
                   onClick={() => navigate(`/enseignant/tests/${t.id}/review`)}
                 >
-                  Vérifier et activer
+                  Vérifier & activer
                 </Button>
 
                 <Button
                   size="sm"
                   onClick={() => navigate(`/enseignant/tests/${t.id}/results`)}
                 >
-                  Resultats
+                  Résultats
+                </Button>
+
+                {/* 🔥 Bouton supprimer */}
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => deleteTest(t.id)}
+                >
+                  Supprimer
                 </Button>
               </div>
             </CardContent>
@@ -86,26 +113,3 @@ export default function TeacherTestsList() {
     </div>
   );
 }
-/*
-“Ajouter une question”
-
-“Enregistrer”
-
-“Attribuer aux élèves”
-
-“Activer le test”
-
-“Uploader une image”
-
-“Difficulté”
-
-“Catégories”
-
-“Options”
-
-“Corriger”
-
-“Résultats”
-
-“Temps écoulé”
-*/
