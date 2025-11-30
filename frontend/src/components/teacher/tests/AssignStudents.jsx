@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import DegreeApi from "../../../services/api/admin/DegreeApi";
-import StudentApi from "../../../services/api/admin/StudentApi";
 import { axiosClient } from "../../../api/axios";
 import { useParams, useNavigate } from "react-router-dom";
+
 import { Card, CardHeader, CardTitle, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
@@ -18,35 +18,53 @@ export default function AssignStudents() {
   const [selectedDegree, setSelectedDegree] = useState("");
   const [selectedStudents, setSelectedStudents] = useState([]);
 
-  /* Charger les degrés existants */
+  /* ---- Charger les degrés ---- */
   useEffect(() => {
     DegreeApi.publicList()
       .then((res) => setDegrees(res.data?.data || res.data || []))
       .catch(() => toast.error("Impossible de charger les degrés."));
-    }, []);
+  }, []);
 
-  /* Charger les élèves pour le degré sélectionné */
-  const loadStudents = (degreeId) => {
+  /* ---- Charger les élèves ---- */
+  const loadStudents = async (degreeId) => {
     setSelectedDegree(degreeId);
     setSelectedStudents([]);
+    setStudents([]);
 
-    StudentApi.list({ degree_id: degreeId })
-      .then((res) => {
-        setStudents(res.data.data || res.data); // support pagination or not
-      })
-      .catch(() => toast.error("Impossible de charger les élèves."));
+    if (!degreeId) return;
+
+    try {
+      const res = await axiosClient.get("/enseignant/students", {
+        params: { degree_id: degreeId },
+      });
+
+      // support: array OR {data: []}
+      const list = res.data?.data || res.data || [];
+
+      setStudents(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Impossible de charger les élèves.");
+    }
   };
 
-  /* Toggle */
+  /* ---- Sélection d’un élève ---- */
   const toggleStudent = (id) => {
     setSelectedStudents((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
-  /* Attribuer le test */
+  /* ---- Tout sélectionner ---- */
+  const toggleAll = () => {
+    if (selectedStudents.length === students.length) {
+      setSelectedStudents([]);
+    } else {
+      setSelectedStudents(students.map((s) => s.id));
+    }
+  };
+
+  /* ---- Envoyer l’attribution ---- */
   const assign = async () => {
     if (!selectedStudents.length) {
       toast.error("Sélectionnez au moins un élève.");
@@ -58,10 +76,11 @@ export default function AssignStudents() {
         student_ids: selectedStudents,
       });
 
-      toast.success("Test activé pour les élèves sélectionnés.");
-      navigate("/enseignant/tableau de bord");
+      toast.success("Test attribué avec succès !");
+      navigate("/enseignant/tableau-de-bord");
     } catch (err) {
-      toast.error("Erreur lors de l'activation du test.");
+      console.error(err);
+      toast.error("Erreur lors de l'attribution.");
     }
   };
 
@@ -73,8 +92,7 @@ export default function AssignStudents() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-
-          {/* Sélection du degré */}
+          {/* ---- Sélection du diplôme ---- */}
           <div className="space-y-1">
             <label className="text-sm font-medium">Sélectionner un degré :</label>
 
@@ -92,12 +110,26 @@ export default function AssignStudents() {
             </select>
           </div>
 
-          {/* Liste des élèves */}
+          {/* ---- Liste des élèves ---- */}
           {selectedDegree && (
             <div className="space-y-2">
-              <h3 className="text-sm font-medium">
-                Élèves du degré ({students.length})
-              </h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-medium">
+                  Élèves ({students.length})
+                </h3>
+
+                {students.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={toggleAll}
+                  >
+                    {selectedStudents.length === students.length
+                      ? "Tout désélectionner"
+                      : "Tout sélectionner"}
+                  </Button>
+                )}
+              </div>
 
               <div className="border rounded p-2 max-h-72 overflow-y-auto space-y-1">
                 {students.map((s) => (
@@ -109,11 +141,14 @@ export default function AssignStudents() {
                       checked={selectedStudents.includes(s.id)}
                       onCheckedChange={() => toggleStudent(s.id)}
                     />
-                    <span>{s.name}</span>
+
+                    <span>
+                      {s.firstname} {s.lastname}
+                    </span>
                   </label>
                 ))}
 
-                {!students.length && (
+                {students.length === 0 && (
                   <div className="text-xs text-muted-foreground">
                     Aucun élève trouvé.
                   </div>
@@ -122,7 +157,7 @@ export default function AssignStudents() {
             </div>
           )}
 
-          {/* Bouton final */}
+          {/* ---- Bouton final ---- */}
           <Button className="w-full" onClick={assign}>
             Activer le test
           </Button>
