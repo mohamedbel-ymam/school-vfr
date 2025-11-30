@@ -26,26 +26,16 @@ export default function AssignStudents() {
   }, []);
 
   /* ---- Charger les élèves ---- */
-  const loadStudents = async (degreeId) => {
+  const loadStudents = (degreeId) => {
     setSelectedDegree(degreeId);
     setSelectedStudents([]);
-    setStudents([]);
 
-    if (!degreeId) return;
-
-    try {
-      const res = await axiosClient.get("/enseignant/students", {
-        params: { degree_id: degreeId },
-      });
-
-      // support: array OR {data: []}
-      const list = res.data?.data || res.data || [];
-
-      setStudents(Array.isArray(list) ? list : []);
-    } catch (err) {
-      console.error(err);
-      toast.error("Impossible de charger les élèves.");
-    }
+    axiosClient
+      .get(`/enseignant/tests/students?degree_id=${degreeId}`)
+      .then((res) => {
+        setStudents(res.data.data || res.data || []);
+      })
+      .catch(() => toast.error("Impossible de charger les élèves."));
   };
 
   /* ---- Sélection d’un élève ---- */
