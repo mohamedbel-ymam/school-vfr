@@ -13,17 +13,13 @@ export default function StartTest() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Preview test info WITHOUT starting it
     axiosClient
-      .get(`/eleve/tests`)   // student list
+      .get(`/eleve/tests`)
       .then((res) => {
         const found = res.data.find((t) => t.id == testId);
-        if (!found) throw new Error();
-        setTest(found);
+        setTest(found || null);
       })
-      .catch(() => {
-        toast.error("Impossible de charger le test.");
-      })
+      .catch(() => toast.error("Impossible de charger le test."))
       .finally(() => setLoading(false));
   }, [testId]);
 
@@ -36,7 +32,8 @@ export default function StartTest() {
     }
   };
 
-  if (loading) return <div className="p-4">Chargement…</div>;
+  if (loading || !test)
+    return <div className="p-4">Chargement du test…</div>;
 
   return (
     <Card>
@@ -45,13 +42,15 @@ export default function StartTest() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <h3 className="text-lg font-semibold">{test.title}</h3>
+        <h3 className="text-lg font-semibold">{test?.title}</h3>
 
-        <p className="text-sm text-muted-foreground">{test.description}</p>
+        <p className="text-sm text-muted-foreground">
+          {test?.description}
+        </p>
 
         <div className="text-sm space-y-1">
-          <p>Durée totale : {test.global_time_minutes} min</p>
-          <p>Nombre de questions : {test.total_questions}</p>
+          <p>Durée totale : {test?.global_time_minutes} min</p>
+          <p>Nombre de questions : {test?.total_questions}</p>
         </div>
 
         <Button className="w-full" onClick={start}>
