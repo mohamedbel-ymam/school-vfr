@@ -8,8 +8,24 @@ import { toast } from "sonner";
 export default function StartTest() {
   const { id: testId } = useParams();
   const navigate = useNavigate();
+
   const [test, setTest] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Preview test info WITHOUT starting it
+    axiosClient
+      .get(`/eleve/tests`)   // student list
+      .then((res) => {
+        const found = res.data.find((t) => t.id == testId);
+        if (!found) throw new Error();
+        setTest(found);
+      })
+      .catch(() => {
+        toast.error("Impossible de charger le test.");
+      })
+      .finally(() => setLoading(false));
+  }, [testId]);
 
   const start = async () => {
     try {
@@ -20,13 +36,6 @@ export default function StartTest() {
     }
   };
 
-  useEffect(() => {
-    axiosClient.get(`/eleve/tests/${testId}`)
-    .then((res) => setTest(res.data.test))
-      .catch(() => toast.error("Impossible de charger le test."))
-      .finally(() => setLoading(false));
-  }, [testId]);
-
   if (loading) return <div className="p-4">Chargement…</div>;
 
   return (
@@ -34,6 +43,7 @@ export default function StartTest() {
       <CardHeader>
         <CardTitle>Démarrer le test</CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-4">
         <h3 className="text-lg font-semibold">{test.title}</h3>
 
