@@ -68,7 +68,7 @@ export default function AssignStudents() {
       });
 
       toast.success("Test attribué avec succès !");
-      navigate("/enseignant/tableau-de-bord");
+        navigate(`/enseignant/tests/${testId}/results`);
     } catch (err) {
       console.error(err);
       toast.error("Erreur lors de l'attribution.");
