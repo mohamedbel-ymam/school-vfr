@@ -63,7 +63,7 @@ export default function AssignStudents() {
 
     try {
       await axiosClient.post(`/enseignant/tests/${testId}/assign`, {
-      students: selectedStudents,
+        student_ids: selectedStudents,
 
       });
 
