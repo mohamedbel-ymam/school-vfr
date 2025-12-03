@@ -270,7 +270,7 @@ const GratuitBourse = () => (
             <div className="text-lg font-semibold">Gratuité</div>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Aucun frais d'inscription ni de scolarité. En contrepartie : présence, rigueur et progression mesurable.</p>
             <div className="mt-6 text-lg font-semibold">Bourse Top 3</div>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Après le baccalauréat , les 5 meilleurs obtiennent une <strong>bourse d'excellence</strong> pour leurs études universitaires.</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Après le baccalauréat , les 3 meilleurs obtiennent une <strong>bourse d'excellence</strong> pour leurs études universitaires.</p>
           </Card>
         </div>
         <div className="md:col-span-2 order-1 md:order-2">
