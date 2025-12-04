@@ -11,18 +11,18 @@ export default function StartTest() {
   const [test, setTest] = useState(null);
   const [loading, setLoading] = useState(true);
 
-const start = async () => {
-  try {
-    const res = await axiosClient.get(`/eleve/tests/${testId}/start`);
-    navigate(`/eleve/tests/attempt/${res.data.attempt_id}`);
-  } catch (err) {
-    toast.error(err.response?.data?.error || "Impossible de démarrer le test.");
-  }
-};
+  const start = async () => {
+    try {
+      const res = await axiosClient.get(`/eleve/tests/${testId}/start`);
+      navigate(`/eleve/tests/attempt/${res.data.attempt_id}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Impossible de démarrer le test.");
+    }
+  };
 
   useEffect(() => {
     axiosClient
-      .get(`/eleve/tests/${testId}/start`)
+      .get(`/enseignant/tests/${testId}`)   // ✅ FIXED — preview only
       .then((res) => setTest(res.data.test))
       .catch(() => toast.error("Impossible de charger le test."))
       .finally(() => setLoading(false));
