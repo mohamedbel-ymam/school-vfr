@@ -15,8 +15,8 @@ export default function StartTest() {
   /** Load test preview (title, description, etc.) */
   useEffect(() => {
     axiosClient
-      .get(`/enseignant/tests/${testId}`) // ✔ student cannot see details, so we fetch TEACHER version
-      .then((res) => setTest(res.data.test))
+      axiosClient.get(`/tests/${testId}`) // ✔ student cannot see details, so we fetch TEACHER version
+      .then((res) => setTest(res.data))
       .catch(() => toast.error("Impossible de charger le test."))
       .finally(() => setLoading(false));
   }, [testId]);
