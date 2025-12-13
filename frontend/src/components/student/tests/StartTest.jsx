@@ -13,10 +13,10 @@ export default function StartTest() {
   const [loading, setLoading] = useState(true);
 
   /** Load test preview (title, description, etc.) */
-  useEffect(() => {
+   useEffect(() => {
     axiosClient
-      axiosClient.get(`/tests/${testId}`) // ✔ student cannot see details, so we fetch TEACHER version
-      .then((res) => setTest(res.data))
+      .get(`/enseignant/tests/${testId}`)
+      .then((res) => setTest(res.data))   // FIX: backend returns raw test
       .catch(() => toast.error("Impossible de charger le test."))
       .finally(() => setLoading(false));
   }, [testId]);
