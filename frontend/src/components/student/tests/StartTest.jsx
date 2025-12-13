@@ -14,8 +14,7 @@ export default function StartTest() {
 
   /** Load test preview (title, description, etc.) */
    useEffect(() => {
-    axiosClient
-      .get(`/enseignant/tests/${testId}`)
+      axiosClient.get(`/eleve/tests/${testId}/preview`)
       .then((res) => setTest(res.data))   // FIX: backend returns raw test
       .catch(() => toast.error("Impossible de charger le test."))
       .finally(() => setLoading(false));
