@@ -24,7 +24,7 @@ export default function StartTest() {
   const start = async () => {
     try {
       const res = await axiosClient.post(`/eleve/tests/${testId}/start`);
-      navigate(`/eleve/tests/attempt/${res.data.attempt_id}`); // ✔ correct path
+        navigate(`/élève/tests/attempt/${res.data.attempt_id}`);
     } catch (err) {
       toast.error(err.response?.data?.error || "Impossible de démarrer le test.");
     }
