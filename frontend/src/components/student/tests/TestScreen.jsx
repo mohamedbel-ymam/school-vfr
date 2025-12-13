@@ -56,7 +56,7 @@ export default function TestScreen() {
 
   const submit = async () => {
     try {
-      await axiosClient.post(`/student/attempts/${attemptId}/submit`);
+      await axiosClient.post(`/eleve/attempts/${attemptId}/submit`);
       navigate(`/élève/tests/resultat/${attemptId}`);
     } catch {
       toast.error("Erreur lors de la soumission.");
