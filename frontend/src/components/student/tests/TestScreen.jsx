@@ -15,10 +15,10 @@ export default function TestScreen() {
 
   const [remaining, setRemaining] = useState(null);
 
-  /* Charger */
+  /* ------------------ 1. Load Attempt Data ------------------ */
   useEffect(() => {
     axiosClient
-      .get(`/eleve/attempts/${attemptId}`)
+      .get(`/eleve/attempts/${attemptId}`) // ABSOLUTE path → prevents router rewriting
       .then((res) => {
         setData(res.data);
         setRemaining(res.data.remaining_seconds);
@@ -26,7 +26,7 @@ export default function TestScreen() {
       .catch(() => toast.error("Impossible de charger le test."));
   }, [attemptId]);
 
-  /* Timer */
+  /* ------------------ 2. Global Timer ------------------ */
   useEffect(() => {
     if (remaining === null) return;
     if (remaining <= 0) return submit();
@@ -35,30 +35,36 @@ export default function TestScreen() {
     return () => clearInterval(t);
   }, [remaining]);
 
+  /* ------------------ 3. Save Current Answer ------------------ */
   const save = async () => {
     const q = data.questions[index];
 
-    await axiosClient.post(`/eleve/attempts/${attemptId}/answer`, {
+    return axiosClient.post(`/eleve/attempts/${attemptId}/answer`, {
       question_id: q.id,
       answer: selected,
     });
   };
 
+  /* ------------------ 4. Next Question ------------------ */
   const next = async () => {
     if (selected === null) {
       toast.error("Choisissez une réponse.");
       return;
     }
+
     await save();
     setSelected(null);
     setIndex((i) => i + 1);
   };
 
+  /* ------------------ 5. Submit Attempt ------------------ */
   const submit = async () => {
     try {
       await axiosClient.post(`/eleve/attempts/${attemptId}/submit`);
+
       navigate(`/élève/tests/resultat/${attemptId}`);
-    } catch {
+    } catch (err) {
+      console.log(err);
       toast.error("Erreur lors de la soumission.");
     }
   };
@@ -69,21 +75,30 @@ export default function TestScreen() {
 
   return (
     <div className="space-y-4">
+      
+      {/* Header + Timer */}
       <Card>
         <CardContent className="flex justify-between">
           <div>
             <h2 className="text-xl font-bold">{data.test.title}</h2>
-            <p className="text-sm">Question {index + 1}/{data.questions.length}</p>
+            <p className="text-sm">
+              Question {index + 1}/{data.questions.length}
+            </p>
           </div>
+
           <div className="text-xl font-bold text-red-600">
-            {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}
+            {Math.floor(remaining / 60)}:
+            {String(remaining % 60).padStart(2, "0")}
           </div>
         </CardContent>
       </Card>
 
+      {/* Question */}
       <Card>
         <CardHeader>
-          <CardTitle dangerouslySetInnerHTML={{ __html: q.statement }} />
+          <CardTitle
+            dangerouslySetInnerHTML={{ __html: q.statement }}
+          />
         </CardHeader>
 
         <CardContent className="space-y-3">
@@ -96,7 +111,9 @@ export default function TestScreen() {
               key={i}
               onClick={() => setSelected(i)}
               className={`p-3 rounded border cursor-pointer ${
-                selected === i ? "bg-blue-100 border-blue-500" : "border-gray-200"
+                selected === i
+                  ? "bg-blue-100 border-blue-500"
+                  : "border-gray-200"
               }`}
               dangerouslySetInnerHTML={{ __html: opt }}
             />
@@ -104,6 +121,7 @@ export default function TestScreen() {
         </CardContent>
       </Card>
 
+      {/* Navigation Buttons */}
       {index + 1 < data.questions.length ? (
         <Button className="w-full" onClick={next}>
           Suivant
