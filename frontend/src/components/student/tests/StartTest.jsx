@@ -22,13 +22,14 @@ export default function StartTest() {
 
   /** Start test (POST) → backend creates attempt */
   const start = async () => {
-    try {
-      const res = await axiosClient.post(`/eleve/tests/${testId}/start`);
-        navigate(`/élève/tests/attempt/${res.data.attempt_id}`);
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Impossible de démarrer le test.");
-    }
-  };
+  try {
+    const res = await axiosClient.post(`/eleve/tests/${testId}/start`);
+    const attemptId = res.data.attempt_id;
+    navigate(`/élève/tests/attempt/${attemptId}`);
+  } catch (err) {
+    toast.error(err.response?.data?.error || "Impossible de démarrer le test.");
+  }
+};
 
   if (loading) return <div className="p-4">Chargement…</div>;
 
