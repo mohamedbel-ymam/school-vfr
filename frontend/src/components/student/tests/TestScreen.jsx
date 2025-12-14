@@ -36,15 +36,14 @@ export default function TestScreen() {
   }, [remaining]);
 
   /* ------------------ 3. Save Current Answer ------------------ */
-  const save = async () => {
-    const q = data.questions[index];
+const save = async () => {
+  const q = data.questions[index];
 
-    return axiosClient.post(`/eleve/attempts/${attemptId}/answer`, {
-      question_id: q.id,
-      answer: selected,
-    });
-  };
-
+  return await axiosClient.post(`/eleve/attempts/${attemptId}/answer`, {
+    question_id: q.id,
+    answer: selected,
+  });
+};
   /* ------------------ 4. Next Question ------------------ */
   const next = async () => {
     if (selected === null) {
@@ -58,16 +57,21 @@ export default function TestScreen() {
   };
 
   /* ------------------ 5. Submit Attempt ------------------ */
-  const submit = async () => {
-    try {
-      await axiosClient.post(`/eleve/attempts/${attemptId}/submit`);
-
-      navigate(`/élève/tests/resultat/${data.test.id}`);
-    } catch (err) {
-      console.log(err);
-      toast.error("Erreur lors de la soumission.");
+const submit = async () => {
+  try {
+    // Save last answer if any
+    if (selected !== null) {
+      await save();
     }
-  };
+
+    // Submit
+    await axiosClient.post(`/eleve/attempts/${attemptId}/submit`);
+
+    navigate(`/élève/tests/resultat/${attemptId}`);
+  } catch (err) {
+    toast.error("Erreur lors de la soumission.");
+  }
+};
 
   if (!data) return <div className="p-4">Chargement…</div>;
 
