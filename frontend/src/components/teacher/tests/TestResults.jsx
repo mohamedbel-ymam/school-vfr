@@ -50,6 +50,7 @@ export default function TestResults() {
     <Card>
       <CardHeader>
         <CardTitle>Résultats du test</CardTitle>
+        <h3 className="text-lg font-semibold">{test.title}</h3>
       </CardHeader>
 
       <CardContent className="space-y-3">
