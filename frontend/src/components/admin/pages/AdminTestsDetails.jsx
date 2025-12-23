@@ -44,7 +44,7 @@ export default function AdminTestDetails() {
     if (!valid.length) return null;
 
     const scores = valid.map((a) => a.score ?? 0);
-    const times = valid.map((a) => a.time_spent_seconds ?? 0);
+    const times = valid.map((a) => a.time_spent_seconds).filter((t) => Number.isFinite(t));
 
     return {
       avgScore: (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
@@ -133,14 +133,14 @@ export default function AdminTestDetails() {
             >
               <div>
                 <div className="font-medium">
-                  {a.student_fullname}
+                  {a.student_fullname || "—"}
                   <span className="text-xs text-muted-foreground">
                     (Tentative {a.attempt_number})
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Score : {a.score} / {test.grade_value} — Temps :{" "}
-                  {formatDuration(a.time_spent_seconds)}
+                    {formatDuration(a.time_spent_seconds ?? 0)}
                 </div>
                 <div className="text-xs">
                   Statut :{" "}

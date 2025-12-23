@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { axiosClient } from "../../../api/axios";
 import { useParams } from "react-router-dom";
 import { Card, CardHeader, CardContent, CardTitle } from "../../ui/card";
-
+function formatDuration(seconds) {
+  const s = Math.max(0, Number(seconds || 0));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m} min ${sec.toString().padStart(2, "0")} s`;
+}
 export default function TestResult() {
   const { id: testId } = useParams();
   const [data, setData] = useState(null);
@@ -25,7 +30,7 @@ export default function TestResult() {
       <CardContent className="space-y-3">
         <div className="text-xl font-bold">Score : {data.score}</div>
         <p className="text-sm text-muted-foreground">
-          Temps utilisé : {data.time_spent_seconds}s
+        Temps utilisé : {formatDuration(data.time_spent_seconds)} s
         </p>
       </CardContent>
     </Card>
