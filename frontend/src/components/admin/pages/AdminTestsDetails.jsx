@@ -5,13 +5,12 @@ import { Card, CardHeader, CardTitle, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { toast } from "sonner";
 
-function formatSeconds(s) {
-  if (s === null || s === undefined) return "—";
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${sec.toString().padStart(2, "0")}`;
+function formatDuration(seconds) {
+  const s = Math.max(0, Number(seconds || 0));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${mm}:${String(ss).padStart(2, "0")}`;
 }
-
 export default function AdminTestDetails() {
   const { id: testId } = useParams();
   const navigate = useNavigate();
@@ -106,7 +105,7 @@ export default function AdminTestDetails() {
             <div>
               Meilleur / Pire : {stats.maxScore} / {stats.minScore}
             </div>
-            <div>Temps moyen : {formatSeconds(stats.avgTime)}</div>
+            <div>Temps moyen : {formatDuration(stats.avgTime)}</div>
             <div>
               Tentatives valides : {stats.validAttempts} /{" "}
               {stats.totalAttempts}
@@ -141,7 +140,7 @@ export default function AdminTestDetails() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Score : {a.score} / {test.grade_value} — Temps :{" "}
-                  {formatSeconds(a.time_spent_seconds)}
+                  {formatDuration(a.time_spent_seconds)}
                 </div>
                 <div className="text-xs">
                   Statut :{" "}

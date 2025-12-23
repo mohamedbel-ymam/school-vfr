@@ -6,7 +6,7 @@ import { Button } from "../../ui/button";
 import { toast } from "sonner";
 
 function formatDuration(seconds) {
-  const s = Number(seconds || 0);
+  const s = Math.max(0, Number(seconds || 0));
   const mm = Math.floor(s / 60);
   const ss = s % 60;
   return `${mm}:${String(ss).padStart(2, "0")}`;
