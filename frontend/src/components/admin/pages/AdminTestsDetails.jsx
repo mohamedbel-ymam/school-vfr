@@ -140,7 +140,10 @@ export default function AdminTestDetails() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Score : {a.score} / {test.grade_value} — Temps :{" "}
-                    {formatDuration(a.time_spent_seconds ?? 0)}
+                  <div className="text-xs">
+                    Temps écoulé: {formatDuration(a.time_spent_seconds)}{" "}
+                    ({a.time_spent_seconds ?? 0}s)
+                </div>
                 </div>
                 <div className="text-xs">
                   Statut :{" "}
