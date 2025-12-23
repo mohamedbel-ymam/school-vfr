@@ -134,7 +134,7 @@ export default function AdminTestDetails() {
             >
               <div>
                 <div className="font-medium">
-                  {a.student_fullname}{" "}
+                  {a.student_fullname}
                   <span className="text-xs text-muted-foreground">
                     (Tentative {a.attempt_number})
                   </span>

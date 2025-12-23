@@ -9,7 +9,7 @@ export default function TestResult() {
 
   useEffect(() => {
     axiosClient
-      .get(`/eleve/attempts/${testId}/result`)
+      .get(`/eleve/tests/${testId}/result`)
       .then((res) => setData(res.data))
       .catch(() => console.log("Error loading result"));
   }, [testId]);

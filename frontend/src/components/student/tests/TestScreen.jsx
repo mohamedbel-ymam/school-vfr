@@ -68,7 +68,7 @@ const submit = async () => {
     });
 
     // Redirect using the TEST ID, not the attempt ID
-    navigate(`/élève/tests/resultat/${attemptId}`);
+  navigate(`/élève/tests/resultat/${data.test.id}`);
   } catch (err) {
     toast.error("Erreur lors de la soumission.");
   }
