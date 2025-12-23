@@ -15,6 +15,7 @@ function formatDuration(seconds) {
 export default function TestResults() {
   const { id: testId } = useParams();
   const [test, setTest] = useState(null);
+
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,15 +26,20 @@ export default function TestResults() {
     );
   }, [attempts]);
 
-  useEffect(() => {
-    setLoading(true);
-    axiosClient
-      .get(`/enseignant/tests/${testId}/results`)
-      .then((res) => setAttempts(Array.isArray(res.data) ? res.data : []))
-      .catch(() => toast.error("Failed to load results"))
-      .finally(() => setLoading(false));
-  }, [testId]);
+useEffect(() => {
+  setLoading(true);
 
+  Promise.all([
+    axiosClient.get(`/enseignant/tests/${testId}`),        // test info
+    axiosClient.get(`/enseignant/tests/${testId}/results`) // results
+  ])
+    .then(([testRes, resultsRes]) => {
+      setTest(testRes.data); // teacher show() returns the test
+      setAttempts(Array.isArray(resultsRes.data) ? resultsRes.data : []);
+    })
+    .catch(() => toast.error("Failed to load test results"))
+    .finally(() => setLoading(false));
+}, [testId]);
   const invalidate = async (attemptId) => {
     try {
       await axiosClient.delete(`/enseignant/tests/attempts/${attemptId}`);
