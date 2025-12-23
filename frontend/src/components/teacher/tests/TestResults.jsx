@@ -14,6 +14,7 @@ function formatDuration(seconds) {
 
 export default function TestResults() {
   const { id: testId } = useParams();
+  const [test, setTest] = useState(null);
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
 
