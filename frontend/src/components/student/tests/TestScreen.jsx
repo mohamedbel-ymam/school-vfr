@@ -63,7 +63,9 @@ const submit = async () => {
       await save();
     }
 
-    await axiosClient.post(`/eleve/attempts/${attemptId}/submit`);
+    await axiosClient.post(`/eleve/attempts/${attemptId}/submit`,{
+      remaining_seconds: remaining,
+    });
 
     // Redirect using the TEST ID, not the attempt ID
     navigate(`/élève/tests/resultat/${attemptId}`);
