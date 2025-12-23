@@ -66,7 +66,7 @@ const submit = async () => {
     await axiosClient.post(`/eleve/attempts/${attemptId}/submit`);
 
     // Redirect using the TEST ID, not the attempt ID
-    navigate(`/élève/tests/resultat/${data.test.id}`);
+    navigate(`/élève/tests/resultat/${attemptId}`);
   } catch (err) {
     toast.error("Erreur lors de la soumission.");
   }

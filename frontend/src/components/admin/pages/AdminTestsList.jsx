@@ -42,8 +42,12 @@ export default function AdminTestsList() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="text-muted-foreground">
-                Enseignant : <span className="font-medium">{t.teacher?.name}</span>
-              </div>
+                Enseignant :{" "}
+                <span className="font-medium">
+                  {t.teacher
+                    ? `${t.teacher.firstname} ${t.teacher.lastname}`
+                    : "—"}
+                </span>              </div>
               <div>Note sur : {t.grade_value}</div>
               <div>Durée : {t.global_time_minutes} min</div>
               <div>
