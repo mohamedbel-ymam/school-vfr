@@ -30,7 +30,7 @@ export default function TestResult() {
       <CardContent className="space-y-3">
         <div className="text-xl font-bold">Score : {data.score}</div>
         <p className="text-sm text-muted-foreground">
-        Temps utilisé : {formatDuration(data.time_spent_seconds)} s
+        Temps utilisé : {formatDuration(data.time_spent_seconds)}
         </p>
       </CardContent>
     </Card>
