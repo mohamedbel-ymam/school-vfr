@@ -119,6 +119,10 @@ export default function BoursierDashboard() {
     navigate("/connexion", { replace: true });
   };
 
+  const handleGoToAccount = () => {
+    navigate("paramètres");
+  };
+
   const handleSaveProfile = async () => {
     if (!university || !field) {
       notify("Merci de renseigner l’université et la filière.");
@@ -131,7 +135,7 @@ export default function BoursierDashboard() {
         field_of_study: field,
       });
       notify("Parcours universitaire mis à jour ✔");
-    } catch (e) {
+    } catch {
       notify("Erreur lors de l’enregistrement.");
     } finally {
       setSavingProfile(false);
@@ -169,7 +173,8 @@ export default function BoursierDashboard() {
   return (
     <div className="space-y-6">
       {/* Top Bar */}
-      <header className="flex items-center justify-between rounded-xl border bg-white/70 px-4 py-3 shadow-sm backdrop-blur">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-xl border bg-white/70 px-4 py-3 shadow-sm backdrop-blur">
+        {/* Left */}
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white font-semibold">
             {initials}
@@ -179,9 +184,38 @@ export default function BoursierDashboard() {
             <p className="text-xs text-muted-foreground">{email}</p>
           </div>
         </div>
-        <Button variant="destructive" size="sm" onClick={handleLogout}>
-          <LogOut className="h-4 w-4 mr-1" /> Déconnexion
-        </Button>
+
+        {/* Right */}
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <GraduationCap className="h-4 w-4" />
+            <span>{university || "Université non renseignée"}</span>
+          </div>
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Calendar className="h-4 w-4" />
+            <span>{field || "Filière non renseignée"}</span>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGoToAccount}
+            className="flex items-center gap-1"
+          >
+            <KeyRound className="h-4 w-4" />
+            <span>Modifier mot de passe</span>
+          </Button>
+
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-1"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Déconnexion</span>
+          </Button>
+        </div>
       </header>
 
       {/* Hero */}
