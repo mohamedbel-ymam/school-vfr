@@ -20,7 +20,12 @@ export default function TestResult() {
   }, [testId]);
 
   if (!data) return <div className="p-4">Chargement…</div>;
-
+  const sorted = useMemo(() => {
+    // Keep newest attempt_number first (already done by backend, but safe)
+    return [...attempts].sort(
+      (a, b) => (b.attempt_number ?? 0) - (a.attempt_number ?? 0)
+    );
+  }, [attempts]);
   return (
     <Card>
       <CardHeader>
@@ -29,10 +34,7 @@ export default function TestResult() {
 
       <CardContent className="space-y-3">
         <div className="text-xl font-bold">Score : {data.score}</div>
-        <div className="text-xs">
-                  Temps utilisé: {formatDuration(a.time_spent_seconds)}{" "}
-                  ({a.time_spent_seconds ?? 0}s)
-          </div>
+      
       </CardContent>
     </Card>
   );
