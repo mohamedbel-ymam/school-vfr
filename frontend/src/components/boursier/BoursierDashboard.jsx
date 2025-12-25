@@ -293,6 +293,7 @@ export default function BoursierDashboard() {
                     <SelectItem value="mentoring">Mentorat</SelectItem>
                     <SelectItem value="meetup">Conférence</SelectItem>
                     <SelectItem value="material">Don matériel</SelectItem>
+                    <SelectItem value="app-service">Créer une application ou un service</SelectItem>
                     <SelectItem value="other">Autre</SelectItem>
                   </SelectContent>
                 </Select>
