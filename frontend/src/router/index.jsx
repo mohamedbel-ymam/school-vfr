@@ -3,7 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext.jsx";
 
 /* Pages */
-import Home         from "@/pages/Home.jsx";
+import HomePageFR         from "@/pages/HomePageFR";
 import Notfound     from "@/pages/Notfound.jsx";            // file is Notfound.jsx (lowercase 'f')
 import Login        from "@/pages/Login.jsx";
 import Unauthorized from "@/pages/Unauthorized.jsx";

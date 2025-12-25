@@ -27,9 +27,9 @@ import {
 
 /**
  * Admin page: ManageBoursier
- * - Liste des boursiers
- * - Création / édition
- * - Suppression
+ * - Create boursier
+ * - Auto-generate scholarship tranches (3/year)
+ * - Flexible current year handling
  */
 export default function ManageBoursier() {
   const [items, setItems] = useState([]);
@@ -40,6 +40,10 @@ export default function ManageBoursier() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
+
+  /* ---- Scholarship logic (NEW) ---- */
+  const [currentAcademicYear, setCurrentAcademicYear] = useState("");
+  const [paidTranchesThisYear, setPaidTranchesThisYear] = useState(0);
 
   const notify = (msg) => alert(msg);
 
@@ -76,6 +80,8 @@ export default function ManageBoursier() {
   /* ---------------- Actions ---------------- */
   const handleCreateClick = () => {
     setEditTarget(null);
+    setCurrentAcademicYear("");
+    setPaidTranchesThisYear(0);
     setDialogOpen(true);
   };
 
@@ -117,6 +123,7 @@ export default function ManageBoursier() {
   /* ---------------- Submit form ---------------- */
   const handleFormSubmit = async (payload) => {
     setSubmitting(true);
+
     try {
       if (editTarget) {
         // UPDATE
@@ -129,7 +136,7 @@ export default function ManageBoursier() {
         });
         notify("Boursier mis à jour");
       } else {
-        // CREATE
+        // CREATE + SCHOLARSHIP LOGIC
         await createBoursier({
           first_name: payload.firstName,
           last_name: payload.lastName,
@@ -137,8 +144,13 @@ export default function ManageBoursier() {
           password: payload.password,
           phone: payload.phone,
           final_school_year: payload.finalSchoolYear,
+
+          // 🔥 Scholarship logic
+          current_academic_year: currentAcademicYear,
+          paid_tranches_this_year: paidTranchesThisYear,
         });
-        notify("Boursier créé");
+
+        notify("Boursier créé avec ses tranches");
       }
 
       setDialogOpen(false);
@@ -163,6 +175,12 @@ export default function ManageBoursier() {
               Anciens élèves ayant obtenu une bourse après leur scolarité.
             </p>
           </div>
+          <Button
+              variant="outline"
+              onClick={() => navigate("/admin/boursiers/contributions")}
+            >
+              Contributions des boursiers
+            </Button>
 
           <div className="flex gap-2">
             <Input
@@ -198,7 +216,7 @@ export default function ManageBoursier() {
                   <th className="px-3 py-2 text-left">Email</th>
                   <th className="px-3 py-2 text-left">Téléphone</th>
                   <th className="px-3 py-2 text-left">
-                    Année finale chez Takwa
+                    Année finale Takwa
                   </th>
                   <th className="px-3 py-2 text-right">Actions</th>
                 </tr>
@@ -297,6 +315,36 @@ export default function ManageBoursier() {
             }}
             submitting={submitting}
           />
+
+          {!editTarget && (
+            <div className="mt-4 space-y-2 border-t pt-3">
+              <p className="text-sm font-medium">
+                Paramètres de bourse
+              </p>
+
+              <Input
+                placeholder="Année universitaire actuelle (ex: 2024-2025)"
+                value={currentAcademicYear}
+                onChange={(e) => setCurrentAcademicYear(e.target.value)}
+              />
+
+              <Input
+                type="number"
+                min={0}
+                max={3}
+                placeholder="Tranches déjà payées cette année (0–3)"
+                value={paidTranchesThisYear}
+                onChange={(e) =>
+                  setPaidTranchesThisYear(Number(e.target.value))
+                }
+              />
+
+              <p className="text-xs text-muted-foreground">
+                ℹ️ 3 tranches par an. Les années passées sont
+                automatiquement générées et considérées comme payées.
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
