@@ -29,17 +29,12 @@ import {
   Calendar,
   Sparkles,
   LogOut,
-  KeyRound,
-  User,
   Save,
+  User,
   HeartHandshake,
 } from "lucide-react";
 
-import {
-  useNavigate,
-  Outlet,
-  useMatch,
-} from "react-router-dom";
+import { useNavigate, Outlet, useMatch } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 
 export default function BoursierDashboard() {
@@ -106,8 +101,15 @@ export default function BoursierDashboard() {
     : "";
 
   const email = user?.email ?? "";
+
   const finalSchoolYear =
     profile?.final_school_year ?? "—";
+
+  const universityLabel =
+    university || "Université non renseignée";
+
+  const fieldLabel =
+    field || "Filière non renseignée";
 
   const initials =
     fullName
@@ -123,21 +125,28 @@ export default function BoursierDashboard() {
     navigate("/connexion", { replace: true });
   };
 
-  const handleGoToAccount = () => {
-    navigate("paramètres");
-  };
-
   const handleSaveProfile = async () => {
     if (!university || !field) {
       notify("Université et filière obligatoires.");
       return;
     }
+
     setSavingProfile(true);
     try {
       await updateMyProfile({
         university,
         field_of_study: field,
       });
+
+      setMe((prev) => ({
+        ...prev,
+        profile: {
+          ...prev.profile,
+          university,
+          field_of_study: field,
+        },
+      }));
+
       notify("Profil mis à jour ✔");
     } finally {
       setSavingProfile(false);
@@ -146,7 +155,11 @@ export default function BoursierDashboard() {
 
   const handleSubmitContribution = async (e) => {
     e.preventDefault();
-    if (!contribDetails.trim()) return notify("Description requise");
+
+    if (!contribDetails.trim()) {
+      notify("Description requise.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -156,9 +169,11 @@ export default function BoursierDashboard() {
         details: contribDetails,
         scheduled_at: contribDate || null,
       });
+
       setContribTitle("");
       setContribDetails("");
       setContribDate("");
+
       setContributions(await fetchMyContributions());
       notify("Contribution envoyée ✔");
     } finally {
@@ -169,7 +184,7 @@ export default function BoursierDashboard() {
   /* -------- Render -------- */
   return (
     <div className="space-y-6">
-      {/* ===== NAVBAR (always visible) ===== */}
+      {/* ===== NAVBAR ===== */}
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-xl border bg-white/70 px-4 py-3 shadow-sm backdrop-blur">
         {/* LEFT */}
         <div className="flex items-center gap-3">
@@ -183,37 +198,27 @@ export default function BoursierDashboard() {
         </div>
 
         {/* RIGHT */}
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <div className="flex items-center gap-1 text-muted-foreground">
+        <div className="flex flex-col text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
             <GraduationCap className="h-4 w-4" />
-            {university || "Université non renseignée"}
+            {universityLabel}
           </div>
-          <div className="flex items-center gap-1 text-muted-foreground">
+          <div className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
-            {field || "Filière non renseignée"}
+            {fieldLabel}
           </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGoToAccount}
-          >
-            <KeyRound className="h-4 w-4 mr-1" />
-            Modifier mot de passe
-          </Button>
-
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4 mr-1" />
-            Déconnexion
-          </Button>
+          <div className="italic">
+            Promo Takwa {finalSchoolYear}
+          </div>
         </div>
+
+        <Button variant="destructive" size="sm" onClick={handleLogout}>
+          <LogOut className="h-4 w-4 mr-1" />
+          Déconnexion
+        </Button>
       </header>
 
-      {/* ===== MAIN CONTENT ===== */}
+      {/* ===== SETTINGS PAGE ===== */}
       {isSettingsPage ? (
         <Outlet />
       ) : (
@@ -316,9 +321,7 @@ export default function BoursierDashboard() {
               </form>
 
               <div className="border-t pt-3">
-                <p className="text-xs font-semibold mb-2">
-                  Historique
-                </p>
+                <p className="text-xs font-semibold mb-2">Historique</p>
                 {loadingContribs ? (
                   <p className="text-xs text-muted-foreground">Chargement…</p>
                 ) : contributions.length === 0 ? (
