@@ -1,12 +1,26 @@
-// src/services/boursier/selfApi.js
 import { axiosClient } from "../../api/axios";
 
 /**
- * Fetch the authenticated boursier profile + disbursements.
+ * Fetch the authenticated boursier profile + related data.
  * Backend: GET /api/boursier/me
  */
 export async function fetchMe() {
   const resp = await axiosClient.get("/boursier/me");
+  return resp.data;
+}
+
+/**
+ * Update the authenticated boursier academic profile (SELF).
+ * Backend: PUT /api/boursier/profile
+ *
+ * payload:
+ * {
+ *   university: string,
+ *   field_of_study: string
+ * }
+ */
+export async function updateMyProfile(payload) {
+  const resp = await axiosClient.put("/boursier/profile", payload);
   return resp.data;
 }
 
@@ -20,25 +34,18 @@ export async function fetchMyContributions() {
 }
 
 /**
- * Create a new contribution proposal for the authenticated boursier.
+ * Create a new contribution proposal (NON-FINANCIAL).
  * Backend: POST /api/boursier/contributions
- *
- * payload shape:
- * {
- *   type: 'teaching' | 'mentoring' | 'meetup' | 'donation' | 'other',
- *   title?: string | null,
- *   details?: string,
- *   scheduled_at?: string (YYYY-MM-DD) | null
- * }
  */
 export async function createMyContribution(payload) {
   const resp = await axiosClient.post("/boursier/contributions", payload);
   return resp.data;
 }
 
-// Optional convenience export
+/* Optional grouped export */
 const SelfApi = {
   fetchMe,
+  updateMyProfile,
   fetchMyContributions,
   createMyContribution,
 };

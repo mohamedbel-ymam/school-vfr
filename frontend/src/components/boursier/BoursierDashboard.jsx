@@ -21,6 +21,7 @@ import {
   fetchMe,
   fetchMyContributions,
   createMyContribution,
+  updateMyProfile,
 } from "../../services/boursier/selfApi";
 
 import {
@@ -29,7 +30,9 @@ import {
   Sparkles,
   LogOut,
   KeyRound,
-  User as UserIcon,
+  User,
+  Save,
+  HeartHandshake,
 } from "lucide-react";
 
 import { useNavigate, Outlet } from "react-router-dom";
@@ -41,26 +44,33 @@ export default function BoursierDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadingContribs, setLoadingContribs] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [error, setError] = useState("");
 
-  /* ---------------- Contribution form ---------------- */
+  /* ---------- Editable academic profile ---------- */
+  const [university, setUniversity] = useState("");
+  const [field, setField] = useState("");
+
+  /* ---------- Contribution form ---------- */
   const [contribType, setContribType] = useState("teaching");
   const [contribTitle, setContribTitle] = useState("");
   const [contribDetails, setContribDetails] = useState("");
   const [contribDate, setContribDate] = useState("");
 
   const notify = (msg) => alert(msg);
-
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  /* ---------------- Load data ---------------- */
+  /* ---------- Load data ---------- */
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
         const data = await fetchMe();
         setMe(data);
+
+        setUniversity(data?.profile?.university ?? "");
+        setField(data?.profile?.field_of_study ?? "");
       } catch (e) {
         console.error(e);
         setError("Erreur lors du chargement de vos informations.");
@@ -74,8 +84,6 @@ export default function BoursierDashboard() {
       try {
         const data = await fetchMyContributions();
         setContributions(data || []);
-      } catch (e) {
-        console.error(e);
       } finally {
         setLoadingContribs(false);
       }
@@ -85,18 +93,15 @@ export default function BoursierDashboard() {
     loadContribs();
   }, []);
 
-  /* ---------------- Identity ---------------- */
-  const user = me?.user;
+  /* ---------- Identity ---------- */
+  const userData = me?.user;
   const profile = me?.profile;
 
-  const fullName = user
-    ? `${user.firstname ?? ""} ${user.lastname ?? ""}`.trim()
+  const fullName = userData
+    ? `${userData.firstname ?? ""} ${userData.lastname ?? ""}`.trim()
     : "";
 
-  const email = user?.email ?? "";
-
-  const university = profile?.university ?? "Université non renseignée";
-  const field = profile?.field_of_study ?? "Filière non renseignée";
+  const email = userData?.email ?? "";
   const finalSchoolYear =
     profile?.final_school_year ?? "Année finale non renseignée";
 
@@ -108,28 +113,37 @@ export default function BoursierDashboard() {
       .slice(0, 2)
       .join("") || "?";
 
-  /* ---------------- Actions ---------------- */
+  /* ---------- Actions ---------- */
   const handleLogout = async () => {
-    try {
-      await logout();
-      navigate("/connexion", { replace: true });
-    } catch {
-      notify("Erreur lors de la déconnexion.");
-    }
+    await logout();
+    navigate("/connexion", { replace: true });
   };
 
-  const handleGoToAccount = () => {
-    navigate("paramètres");
+  const handleSaveProfile = async () => {
+    if (!university || !field) {
+      notify("Merci de renseigner l’université et la filière.");
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      await updateMyProfile({
+        university,
+        field_of_study: field,
+      });
+      notify("Parcours universitaire mis à jour ✔");
+    } catch (e) {
+      notify("Erreur lors de l’enregistrement.");
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleSubmitContribution = async (e) => {
     e.preventDefault();
-
     if (!contribDetails.trim()) {
       notify("Merci de décrire votre contribution.");
       return;
     }
-
     setSubmitting(true);
     try {
       await createMyContribution({
@@ -139,101 +153,100 @@ export default function BoursierDashboard() {
         scheduled_at: contribDate || null,
       });
 
-      notify("Merci pour votre contribution 💙");
+      notify("Contribution envoyée à l’administration ✔");
       setContribTitle("");
       setContribDetails("");
       setContribDate("");
 
       const updated = await fetchMyContributions();
       setContributions(updated || []);
-    } catch (e) {
-      console.error(e);
-      notify("Erreur lors de l’envoi.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  /* ---------------- Render ---------------- */
+  /* ---------- Render ---------- */
   return (
     <div className="space-y-6">
-      {/* Header / Account bar */}
-      <header className="flex items-center justify-between rounded-xl border bg-white/70 px-4 py-3 shadow-sm backdrop-blur-sm">
+      {/* Top Bar */}
+      <header className="flex items-center justify-between rounded-xl border bg-white/70 px-4 py-3 shadow-sm backdrop-blur">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white font-semibold">
             {initials}
           </div>
           <div>
-            <p className="text-sm font-semibold">{fullName || "Boursier Takwa"}</p>
+            <p className="text-sm font-semibold">{fullName}</p>
             <p className="text-xs text-muted-foreground">{email}</p>
           </div>
         </div>
-
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGoToAccount}
-            className="flex items-center gap-1"
-          >
-            <KeyRound className="h-4 w-4" />
-            <span className="text-xs">Mon compte</span>
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleLogout}
-            className="flex items-center gap-1"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="text-xs">Déconnexion</span>
-          </Button>
-        </div>
+        <Button variant="destructive" size="sm" onClick={handleLogout}>
+          <LogOut className="h-4 w-4 mr-1" /> Déconnexion
+        </Button>
       </header>
 
       {/* Hero */}
       <Card className="border-none bg-gradient-to-r from-indigo-600 via-sky-500 to-emerald-400 text-white">
         <CardHeader>
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs">
+          <div className="inline-flex items-center gap-2 bg-white/15 px-3 py-1 rounded-full text-xs">
             <Sparkles className="h-3 w-3" />
-            Communauté des boursiers Takwa
+            Communauté Boursiers Takwa
           </div>
           <CardTitle className="mt-3 text-2xl">
             Bienvenue {fullName || "cher boursier"}
           </CardTitle>
           <CardDescription className="text-white/80">
-            Cet espace est dédié aux anciens élèves boursiers.
-            Vous pouvez y présenter votre parcours universitaire
-            et proposer des contributions éducatives, humaines ou professionnelles.
+            Cet espace valorise votre parcours universitaire et vos contributions
+            à la communauté éducative Takwa.
           </CardDescription>
-
-          <div className="mt-4 space-y-1 text-sm">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="h-4 w-4" />
-              {university}
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              {field}
-            </div>
-            <div className="flex items-center gap-2">
-              <UserIcon className="h-4 w-4" />
-              Dernière année à Takwa : {finalSchoolYear}
-            </div>
-          </div>
         </CardHeader>
+      </Card>
+
+      {/* Academic profile */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <GraduationCap className="h-5 w-5" />
+            Parcours universitaire
+          </CardTitle>
+          <CardDescription>
+            Ces informations sont visibles par l’administration.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            placeholder="Université"
+            value={university}
+            onChange={(e) => setUniversity(e.target.value)}
+          />
+          <Input
+            placeholder="Filière / spécialité"
+            value={field}
+            onChange={(e) => setField(e.target.value)}
+          />
+          <div className="text-xs text-muted-foreground flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Dernière année à Takwa : {finalSchoolYear}
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveProfile} disabled={savingProfile}>
+              <Save className="h-4 w-4 mr-1" />
+              {savingProfile ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+          </div>
+        </CardContent>
       </Card>
 
       {/* Contributions */}
       <Card>
         <CardHeader>
-          <CardTitle>Contribuer à la communauté</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <HeartHandshake className="h-5 w-5" />
+            Contributions à la communauté
+          </CardTitle>
           <CardDescription>
-            Partagez votre expérience, proposez un atelier, un mentorat
-            ou un don de matériel. Aucune contribution financière n’est demandée.
+            Aucune contribution financière n’est demandée.
           </CardDescription>
         </CardHeader>
-
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmitContribution} className="space-y-3">
             <Select value={contribType} onValueChange={setContribType}>
@@ -254,32 +267,28 @@ export default function BoursierDashboard() {
               value={contribTitle}
               onChange={(e) => setContribTitle(e.target.value)}
             />
-
             <Textarea
               rows={4}
               placeholder="Décrivez votre contribution"
               value={contribDetails}
               onChange={(e) => setContribDetails(e.target.value)}
             />
-
             <Input
               type="date"
               value={contribDate}
               onChange={(e) => setContribDate(e.target.value)}
             />
-
             <div className="flex justify-end">
               <Button type="submit" disabled={submitting}>
-                {submitting ? "Envoi…" : "Envoyer"}
+                {submitting ? "Envoi…" : "Envoyer à l’administration"}
               </Button>
             </div>
           </form>
 
           <div className="border-t pt-3">
             <p className="text-xs font-semibold mb-2">
-              Vos contributions précédentes
+              Historique de vos contributions
             </p>
-
             {loadingContribs ? (
               <p className="text-xs text-muted-foreground">Chargement…</p>
             ) : contributions.length === 0 ? (
@@ -289,15 +298,11 @@ export default function BoursierDashboard() {
             ) : (
               <div className="space-y-2 text-xs">
                 {contributions.map((c) => (
-                  <div key={c.id} className="rounded-md border p-2">
+                  <div key={c.id} className="border rounded-md p-2">
                     <p className="font-medium">
                       [{c.type}] {c.title || "Sans titre"}
                     </p>
-                    {c.details && (
-                      <p className="text-muted-foreground mt-1">
-                        {c.details}
-                      </p>
-                    )}
+                    <p className="text-muted-foreground mt-1">{c.details}</p>
                   </div>
                 ))}
               </div>
