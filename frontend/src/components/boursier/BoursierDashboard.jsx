@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Card,
   CardHeader,
@@ -32,6 +32,11 @@ import {
   Save,
   User,
   HeartHandshake,
+  KeyRound,
+  Coins,
+  Clock,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 import { useNavigate, Outlet, useMatch } from "react-router-dom";
@@ -95,6 +100,7 @@ export default function BoursierDashboard() {
   /* -------- Identity -------- */
   const user = me?.user;
   const profile = me?.profile;
+  const disbursements = me?.disbursements || [];
 
   const fullName = user
     ? `${user.firstname ?? ""} ${user.lastname ?? ""}`.trim()
@@ -102,14 +108,9 @@ export default function BoursierDashboard() {
 
   const email = user?.email ?? "";
 
-  const finalSchoolYear =
-    profile?.final_school_year ?? "—";
-
-  const universityLabel =
-    university || "Université non renseignée";
-
-  const fieldLabel =
-    field || "Filière non renseignée";
+  const finalSchoolYear = profile?.final_school_year ?? "—";
+  const universityLabel = university || "Université non renseignée";
+  const fieldLabel = field || "Filière non renseignée";
 
   const initials =
     fullName
@@ -119,10 +120,28 @@ export default function BoursierDashboard() {
       .slice(0, 2)
       .join("") || "?";
 
+  /* -------- Disbursement summary -------- */
+  const disbSummary = useMemo(() => {
+    const total = disbursements.reduce((s, d) => s + (d.amount || 0), 0);
+    const paid = disbursements
+      .filter((d) => d.paid_at)
+      .reduce((s, d) => s + (d.amount || 0), 0);
+
+    const next = disbursements
+      .filter((d) => !d.paid_at)
+      .sort((a, b) => new Date(a.period_start) - new Date(b.period_start))[0];
+
+    return { total, paid, next };
+  }, [disbursements]);
+
   /* -------- Actions -------- */
   const handleLogout = async () => {
     await logout();
     navigate("/connexion", { replace: true });
+  };
+
+  const handleGoToPassword = () => {
+    navigate("paramètres");
   };
 
   const handleSaveProfile = async () => {
@@ -133,20 +152,11 @@ export default function BoursierDashboard() {
 
     setSavingProfile(true);
     try {
-      await updateMyProfile({
-        university,
-        field_of_study: field,
-      });
-
+      await updateMyProfile({ university, field_of_study: field });
       setMe((prev) => ({
         ...prev,
-        profile: {
-          ...prev.profile,
-          university,
-          field_of_study: field,
-        },
+        profile: { ...prev.profile, university, field_of_study: field },
       }));
-
       notify("Profil mis à jour ✔");
     } finally {
       setSavingProfile(false);
@@ -155,11 +165,7 @@ export default function BoursierDashboard() {
 
   const handleSubmitContribution = async (e) => {
     e.preventDefault();
-
-    if (!contribDetails.trim()) {
-      notify("Description requise.");
-      return;
-    }
+    if (!contribDetails.trim()) return notify("Description requise.");
 
     setSubmitting(true);
     try {
@@ -173,7 +179,6 @@ export default function BoursierDashboard() {
       setContribTitle("");
       setContribDetails("");
       setContribDate("");
-
       setContributions(await fetchMyContributions());
       notify("Contribution envoyée ✔");
     } finally {
@@ -186,7 +191,6 @@ export default function BoursierDashboard() {
     <div className="space-y-6">
       {/* ===== NAVBAR ===== */}
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-xl border bg-white/70 px-4 py-3 shadow-sm backdrop-blur">
-        {/* LEFT */}
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white font-semibold">
             {initials}
@@ -197,25 +201,26 @@ export default function BoursierDashboard() {
           </div>
         </div>
 
-        {/* RIGHT */}
         <div className="flex flex-col text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
-            <GraduationCap className="h-4 w-4" />
-            {universityLabel}
+            <GraduationCap className="h-4 w-4" /> {universityLabel}
           </div>
           <div className="flex items-center gap-1">
-            <Calendar className="h-4 w-4" />
-            {fieldLabel}
+            <Calendar className="h-4 w-4" /> {fieldLabel}
           </div>
-          <div className="italic">
-            Promo Takwa {finalSchoolYear}
-          </div>
+          <div className="italic">Promo Takwa {finalSchoolYear}</div>
         </div>
 
-        <Button variant="destructive" size="sm" onClick={handleLogout}>
-          <LogOut className="h-4 w-4 mr-1" />
-          Déconnexion
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleGoToPassword}>
+            <KeyRound className="h-4 w-4 mr-1" />
+            Mot de passe
+          </Button>
+          <Button variant="destructive" size="sm" onClick={handleLogout}>
+            <LogOut className="h-4 w-4 mr-1" />
+            Déconnexion
+          </Button>
+        </div>
       </header>
 
       {/* ===== SETTINGS PAGE ===== */}
@@ -234,9 +239,34 @@ export default function BoursierDashboard() {
                 Bienvenue {fullName || "cher boursier"}
               </CardTitle>
               <CardDescription className="text-white/80">
-                Valorisez votre parcours universitaire et vos contributions.
+                Suivi de votre bourse et contributions à la communauté.
               </CardDescription>
             </CardHeader>
+          </Card>
+
+          {/* ECHEANCES */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Coins className="h-5 w-5" />
+                Échéances de la bourse
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>Total reçu : <b>{disbSummary.paid} DH</b></p>
+              <p>Total prévu : <b>{disbSummary.total} DH</b></p>
+              {disbSummary.next ? (
+                <div className="flex items-center gap-2 text-amber-600">
+                  <Clock className="h-4 w-4" />
+                  Prochaine tranche : {disbSummary.next.amount} DH
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-emerald-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Toutes les tranches sont réglées
+                </div>
+              )}
+            </CardContent>
           </Card>
 
           {/* ACADEMIC PROFILE */}
@@ -248,16 +278,8 @@ export default function BoursierDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Input
-                placeholder="Université"
-                value={university}
-                onChange={(e) => setUniversity(e.target.value)}
-              />
-              <Input
-                placeholder="Filière"
-                value={field}
-                onChange={(e) => setField(e.target.value)}
-              />
+              <Input value={university} onChange={(e) => setUniversity(e.target.value)} />
+              <Input value={field} onChange={(e) => setField(e.target.value)} />
               <div className="text-xs text-muted-foreground flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Dernière année à Takwa : {finalSchoolYear}
@@ -278,9 +300,6 @@ export default function BoursierDashboard() {
                 <HeartHandshake className="h-5 w-5" />
                 Contributions
               </CardTitle>
-              <CardDescription>
-                Aucune contribution financière n’est demandée.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <form onSubmit={handleSubmitContribution} className="space-y-3">
@@ -293,7 +312,7 @@ export default function BoursierDashboard() {
                     <SelectItem value="mentoring">Mentorat</SelectItem>
                     <SelectItem value="meetup">Conférence</SelectItem>
                     <SelectItem value="material">Don matériel</SelectItem>
-                    <SelectItem value="app-service">Créer une application ou un service</SelectItem>
+                    <SelectItem value="app-service">Créer un service</SelectItem>
                     <SelectItem value="other">Autre</SelectItem>
                   </SelectContent>
                 </Select>
@@ -309,41 +328,11 @@ export default function BoursierDashboard() {
                   value={contribDetails}
                   onChange={(e) => setContribDetails(e.target.value)}
                 />
-                <Input
-                  type="date"
-                  value={contribDate}
-                  onChange={(e) => setContribDate(e.target.value)}
-                />
+                <Input type="date" value={contribDate} onChange={(e) => setContribDate(e.target.value)} />
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={submitting}>
-                    Envoyer
-                  </Button>
+                  <Button type="submit" disabled={submitting}>Envoyer</Button>
                 </div>
               </form>
-
-              <div className="border-t pt-3">
-                <p className="text-xs font-semibold mb-2">Historique</p>
-                {loadingContribs ? (
-                  <p className="text-xs text-muted-foreground">Chargement…</p>
-                ) : contributions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Aucune contribution.
-                  </p>
-                ) : (
-                  <div className="space-y-2 text-xs">
-                    {contributions.map((c) => (
-                      <div key={c.id} className="border rounded-md p-2">
-                        <p className="font-medium">
-                          [{c.type}] {c.title || "Sans titre"}
-                        </p>
-                        <p className="text-muted-foreground mt-1">
-                          {c.details}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </CardContent>
           </Card>
         </>
