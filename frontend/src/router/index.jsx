@@ -216,7 +216,7 @@ export const router = createBrowserRouter([
   {
     element: <Layout />,
     children: [
-      { path: "/", element: <Home /> },
+      { path: "/", element: <HomePageFR /> },
       { path: "/unauthorized", element: <Unauthorized /> }, // public
       { path: "*", element: <Notfound /> },
     ],
