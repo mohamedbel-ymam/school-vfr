@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { axiosClient } from "../../api/axios";
-import { STUDENT_DASHBOARD_ROUTE } from "../../router/index.jsx";
+import { STUDENT_DASHBOARD_ROUTE } from "../../router/pahts.js";
 
 // Degree dashboards
 import College3emeDashboard from "./degrees/College3emeDashboard.jsx";

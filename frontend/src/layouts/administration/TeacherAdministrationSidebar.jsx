@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import SidebarNotificationsLink from "../../components/notifications/SidebarNotificationsLink.jsx";
-import { LOGIN_ROUTE } from "../../router/index.jsx";
+import { LOGIN_ROUTE } from "../../router/pahts.js";
 
 import {
   House,

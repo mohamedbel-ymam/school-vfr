@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
-import { LOGIN_ROUTE } from "../router/index.jsx";
+import { LOGIN_ROUTE } from "../router/pahts.js";
 import { HomeIcon, LogInIcon, Menu, X } from "lucide-react";
 import { ModeToggle } from "../components/mode-toggle.jsx";
 

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, NavLink, Outlet, Navigate } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
-import { LOGIN_ROUTE, redirectToDashboard, STUDENT_DASHBOARD_ROUTE } from "../router/index.jsx";
+import { LOGIN_ROUTE, startPathForUser, STUDENT_DASHBOARD_ROUTE } from "../router/pahts.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { GaugeIcon, Menu, X } from "lucide-react";
 import { ModeToggle } from "../components/mode-toggle.jsx";
@@ -21,7 +21,7 @@ export default function AdminDashboardLayout() {
 
   if (loading) return <div className="p-6 text-sm">Chargement…</div>;
   if (!user) return <Navigate to={LOGIN_ROUTE} replace />;
-  if (user.role !== "admin") return <Navigate to={redirectToDashboard(user.role)} replace />;
+  if (user.role !== "admin") return <Navigate to={startPathForUser(user.role)} replace />;
 
   const DashboardLink = ({ onClick }) => (
     <NavLink

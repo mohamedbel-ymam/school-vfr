@@ -20,7 +20,7 @@ import HomeworkApi from "../../services/api/HomeworkApi";
 import DegreeApi from "../../services/api/admin/DegreeApi";
 
 import { useAuth } from "../../context/AuthContext";
-import { TEACHER_SCHEDULE_ROUTE } from "../../router";
+import { TEACHER_SCHEDULE_ROUTE } from "../../router/pahts";
 
 // ------------------------------------------------------------
 // Utils

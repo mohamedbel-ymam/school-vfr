@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LOGIN_ROUTE } from "../../router/index.jsx";
+import { LOGIN_ROUTE } from "../../router/pahts.js";
 import { House, Settings, CalendarDays, CalendarClock, LogOut, UserCircle2 } from "lucide-react";
 import { axiosClient } from "../../api/axios";
 

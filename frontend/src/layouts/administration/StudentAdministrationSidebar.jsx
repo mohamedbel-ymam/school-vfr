@@ -4,7 +4,7 @@ import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import SidebarNotificationsLink from "../../components/notifications/SidebarNotificationsLink.jsx";
-import { LOGIN_ROUTE } from "../../router/index.jsx";
+import { LOGIN_ROUTE } from "../../router/pahts.js";
 
 // Icons
 import {

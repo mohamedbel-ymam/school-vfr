@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, Navigate, useNavigate, useLocation } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
-import { LOGIN_ROUTE } from "../router/index.jsx";
+import { LOGIN_ROUTE } from "../router/pahts.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { GaugeIcon, Menu, X } from "lucide-react";
 import { ModeToggle } from "../components/mode-toggle.jsx";

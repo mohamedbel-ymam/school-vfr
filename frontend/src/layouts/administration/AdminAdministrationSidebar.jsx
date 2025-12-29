@@ -15,7 +15,7 @@ import {
   ADMIN_MANAGE_EVENTS_ROUTE,
  ADMIN_MANAGE_GROUPS_ROUTE,
  ADMIN_MANAGE_BOURSIERS_ROUTE 
-} from "@/router/index.jsx";
+} from "../../router/pahts.js";
 
 // Icons
 import {

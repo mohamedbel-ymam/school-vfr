@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, NavLink, Outlet, Navigate } from "react-router-dom";
 import { ModeToggle } from "../components/mode-toggle.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
-import { LOGIN_ROUTE, STUDENT_DASHBOARD_ROUTE } from "../router/index.jsx";
+import { LOGIN_ROUTE, STUDENT_DASHBOARD_ROUTE } from "../router/pahts.js";
 
 import Logo from "../components/Logo.jsx";
 import StudentDropDownMenu from "./drop-down-menu/StudentDropDownMenu.jsx";
