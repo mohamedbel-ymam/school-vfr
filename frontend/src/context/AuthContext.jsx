@@ -75,12 +75,12 @@ export function AuthProvider({ children }) {
 
   /* ---------- Helpers ---------- */
   const refreshUser = async () => {
-    const res = await axiosClient.get("/me");
-    const payload = res?.data?.data ?? res?.data ?? null;
-    const normalized = normalizeUser(payload);
-    setUser(normalized);
-    return normalized;
-  };
+  const res = await axiosClient.get("/me");
+  const user = res?.data; // 👈 DIRECT
+  const normalized = normalizeUser(user);
+  setUser(normalized);
+  return normalized;
+};
 
   // Initial bootstrap: set CSRF + try to fetch current user
   useEffect(() => {
