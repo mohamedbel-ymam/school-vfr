@@ -1,47 +1,28 @@
-// HomePageFR.jsx — version avec images (Hero + Bourse + Forums + Informatique + Équipe)
-// Place tes fichiers dans /public/images et renomme ainsi :
-//  - joker.jpg (HERO)
-//  - bourse.jpg (section Bourse)
-//  - forum-orientation.jpg (Forum d'orientation)
-//  - forum-coach.jpg (Forum coaching)
-//  - info-1.jpg, info-2.jpg (Informatique)
-//  - enseignants.jpg (Photo profs / profs+élèves)
+
 
 import React from "react";
-import { motion } from "framer-motion";
 import {
   CalendarDays,
   QrCode,
   MessageSquare,
   BellRing,
-  Award,
   Shield,
   FileText,
   Users,
   GraduationCap,
   Building2,
-  Sparkles,
   ChevronRight,
+  CheckCircle2,
 } from "lucide-react";
 
 /***********************************
- * Design Tokens & Utils
+ * Helpers
  ***********************************/
-const tokens = {
-  radius: "rounded-2xl",
-  pill: "rounded-full",
-  shadow: "shadow-[0_10px_40px_rgba(0,0,0,0.08)]",
-  ring: "ring-1 ring-white/10",
-  glass: "bg-white/5 backdrop-blur-md",
-  card: "bg-gradient-to-b from-white/70 to-white/40 dark:from-white/10 dark:to-white/5",
-  accent: "from-indigo-500 via-violet-500 to-sky-500",
-  soft: "from-indigo-500/10 via-violet-500/10 to-sky-500/10",
-  grid: "[background:radial-gradient(circle_at_1px_1px,theme(colors.white/8)_1px,transparent_1px)]",
-};
-
 const cn = (...c) => c.filter(Boolean).join(" ");
 
-// centralise les chemins d'images
+/***********************************
+ * Images
+ ***********************************/
 const imgs = {
   hero: "/Img/jokerInit.jpg",
   bourse: "/Img/bourse.jpg",
@@ -50,90 +31,141 @@ const imgs = {
   info1: "/Img/info-1.jpeg",
   info2: "/Img/info-2.jpeg",
   enseignants: "/Img/enseignant-éleve.jpg",
-  enseignants2:"Img/enseignant-etudiants.jpg",
+  enseignants2: "/Img/enseignant-etudiants.jpg",
 };
 
 /***********************************
- * Primitives
+ * Primitives (MODEL 3)
  ***********************************/
 const Container = ({ className = "", children }) => (
   <div className={cn("mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8", className)}>{children}</div>
 );
 
 const Section = ({ id, className = "", children }) => (
-  <section id={id} className={cn("relative py-12 sm:py-16 lg:py-24", className)}>{children}</section>
+  <section id={id} className={cn("relative py-12 sm:py-16 lg:py-20", className)}>
+    {children}
+  </section>
 );
 
 const Card = ({ className = "", children }) => (
-  <div className={cn(tokens.card, tokens.radius, tokens.shadow, tokens.ring, "p-6", className)}>{children}</div>
+  <div
+    className={cn(
+      "rounded-lg border border-slate-200 bg-white shadow-sm",
+      "p-6",
+      className
+    )}
+  >
+    {children}
+  </div>
 );
 
-const ButtonLink = ({ href = "#", className = "", children }) => (
-  <a href={href} className={cn("inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white", tokens.pill, tokens.shadow, "bg-gradient-to-r", tokens.accent, "hover:brightness-110 active:scale-[.98]", className)}>{children}</a>
+const Kicker = ({ children }) => (
+  <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">{children}</div>
 );
 
-const Badge = ({ children, className = "" }) => (
-  <span className={cn("inline-flex items-center gap-1 px-3 py-1 text-xs font-medium", tokens.pill, tokens.ring, tokens.glass, className)}>{children}</span>
-);
+const ButtonLink = ({ href = "#", variant = "primary", className = "", children }) => {
+  const base =
+    "inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-colors";
+  const styles =
+    variant === "primary"
+      ? "bg-slate-800 text-white hover:bg-slate-700"
+      : "bg-white text-slate-900 border border-slate-300 hover:bg-slate-50";
+  return (
+    <a href={href} className={cn(base, styles, className)}>
+      {children}
+    </a>
+  );
+};
 
 const Heading = ({ kicker, title, subtitle, align = "center" }) => (
-  <div className={cn("max-w-3xl", align === "center" ? "mx-auto text-center" : "")}> 
-    {kicker && (
-      <div className="mb-3">
-        <Badge><Sparkles className="h-3.5 w-3.5" /> <span>{kicker}</span></Badge>
-      </div>
-    )}
-    <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
-      <GradientText>{title}</GradientText>
+  <div className={cn("max-w-3xl", align === "center" ? "mx-auto text-center" : "")}>
+    {kicker ? <div className="mb-2"><Kicker>{kicker}</Kicker></div> : null}
+    <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900">
+      {title}
     </h2>
-    {subtitle && (<p className="mt-4 text-slate-600 dark:text-slate-300 text-base/7 sm:text-lg/8">{subtitle}</p>)}
+    {subtitle ? (
+      <p className="mt-3 text-base sm:text-lg leading-7 text-slate-600">{subtitle}</p>
+    ) : null}
   </div>
 );
 
-const GradientText = ({ children }) => (
-  <span className="bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 dark:from-white dark:via-indigo-200 dark:to-white bg-clip-text text-transparent">{children}</span>
+const Divider = () => <div className="my-10 border-t border-slate-200" />;
+
+const Photo = ({ img, caption }) => (
+  <figure className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <img src={img} alt={caption} className="h-72 w-full object-cover" loading="lazy" />
+    <figcaption className="px-4 py-3 text-sm text-slate-600">{caption}</figcaption>
+  </figure>
 );
 
 /***********************************
- * Background décoratif doux
+ * Page Background (MODEL 3)
  ***********************************/
-const Background = () => (
-  <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-    <div className={cn("absolute -top-24 left-1/2 -translate-x-1/2 h-[35rem] w-[80rem] blur-3xl", "bg-gradient-to-tr", tokens.soft)} />
-    <div className={cn("absolute inset-0 opacity-[.25]", tokens.grid)} style={{ backgroundSize: '20px 20px' }} />
+const PageShell = ({ children }) => (
+  <div className="min-h-screen bg-slate-50 text-slate-900">
+    {/* bande institutionnelle discrète */}
+    <div className="h-2 bg-slate-800" />
+    {children}
   </div>
 );
 
 /***********************************
- * 1) Hero / Mission + photo "joker"
+ * 1) Hero
  ***********************************/
 const Hero = () => (
-  <Section id="hero" className="pt-6 sm:pt-10">
-    <Background />
+  <Section id="hero" className="pt-8 sm:pt-10">
     <Container>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
         <div className="lg:col-span-7">
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}>
-            <Badge className="mb-3">Cours supplémentaires 100% gratuits</Badge>
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Enseigner les collégiens & lycéens, gratuitement — avec exigence
-            </h1>
-            <p className="mt-4 text-slate-600 dark:text-slate-300 text-base sm:text-lg max-w-2xl">
-              Notre établissement offre des cours d'appui sélectifs pour améliorer nettement les notes en <strong>sciences</strong>, <strong>mathématiques</strong>, <strong>langues</strong> et <strong>informatique</strong>. L'accès est <strong>gratuit</strong>, mais la sélection et les seuils d'assiduité sont stricts. Les meilleurs élèves (Top 3 après le baccalauréat ) reçoivent une <strong>bourse d'excellence</strong>.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <ButtonLink href="/#plateforme">Voir la plateforme</ButtonLink>
-              <a href="/#programmes" className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 border border-white/20 rounded-full hover:bg-white/10">Découvrir nos programmes</a>
-            </div>
-          </motion.div>
+          <Kicker>Cours supplémentaires gratuits</Kicker>
+          <h1 className="mt-2 text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900">
+            Enseigner aux collégiens & lycéens — gratuitement, avec exigence
+          </h1>
+          <p className="mt-4 text-slate-600 text-base sm:text-lg leading-7 max-w-2xl">
+            Notre établissement offre des cours d’appui sélectifs pour améliorer les résultats en{" "}
+            <strong>sciences</strong>, <strong>mathématiques</strong>, <strong>langues</strong> et{" "}
+            <strong>informatique</strong>. L’accès est <strong>gratuit</strong>, avec une sélection
+            et des seuils d’assiduité stricts. Les meilleurs élèves (Top 3 après le baccalauréat)
+            peuvent bénéficier d’une <strong>bourse d’excellence</strong>.
+          </p>
+
+          <div className="mt-7 flex flex-wrap gap-3">
+            <ButtonLink href="/#plateforme" variant="primary">
+              Voir la plateforme
+            </ButtonLink>
+            <ButtonLink href="/#programmes" variant="secondary">
+              Découvrir nos programmes
+            </ButtonLink>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-4 text-sm text-slate-600">
+            <span className="inline-flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-slate-700" />
+              Suivi & assiduité
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-slate-700" />
+              Orientation & coaching
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-slate-700" />
+              Plateforme sécurisée par rôles
+            </span>
+          </div>
         </div>
 
-        {/* Photo HERO */}
         <div className="lg:col-span-5">
-          <motion.figure initial={{ opacity: 0, scale: 0.98 }} whileInView={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, delay: 0.05 }} viewport={{ once: true }} className="relative overflow-hidden rounded-2xl ring-1 ring-white/15 shadow-xl">
-            <img src={imgs.hero} alt="Nos élèves — sortie pédagogique" className="h-72 w-full object-cover sm:h-80" loading="lazy" />
-            <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent px-4 py-3 text-sm text-white">Engagement, entraide et excellence académique</figcaption>
-          </motion.figure>
+          <figure className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <img
+              src={imgs.hero}
+              alt="Nos élèves — activité pédagogique"
+              className="h-72 w-full object-cover sm:h-80"
+              loading="lazy"
+            />
+            <figcaption className="px-4 py-3 text-sm text-slate-600">
+              Apprentissage structuré et accompagnement pédagogique
+            </figcaption>
+          </figure>
         </div>
       </div>
     </Container>
@@ -146,14 +178,33 @@ const Hero = () => (
 const Programmes = () => (
   <Section id="programmes">
     <Container>
-      <Heading kicker="Programmes" title="Ce que nous enseignons" subtitle="Des bases solides et des méthodes efficaces pour performer au collège et au lycée." />
-      <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 ">
-        <ProgCard title="Mathématiques" points={["Algèbre • Analyse • Probabilités", "Méthodes et astuces d'examen"]} />
-        <ProgCard title="Sciences" points={["Physique • Chimie", "Sience de vie et terre, raisonnement et résolution"]} />
-        <ProgCard title="Langues" points={["Français • Anglais •Arabe ","Expression, compréhension & étude"]} />
-        <ProgCard title="Informatique" points={["Algorithmique • Python", "Web & culture numérique"]} />
-        <ProgCard title="Sciences humaines" points={["Education Islamique  ", "Histoire Geographie"]} />
+      <Heading
+        kicker="Programmes"
+        title="Ce que nous enseignons"
+        subtitle="Des bases solides et des méthodes efficaces pour performer au collège et au lycée."
+      />
 
+      <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+        <ProgCard
+          title="Mathématiques"
+          points={["Algèbre • Analyse • Probabilités", "Méthodes et entraînement à l'examen"]}
+        />
+        <ProgCard
+          title="Sciences"
+          points={["Physique • Chimie", "SVT • raisonnement et résolution"]}
+        />
+        <ProgCard
+          title="Langues"
+          points={["Français • Anglais • Arabe", "Expression, compréhension & étude"]}
+        />
+        <ProgCard
+          title="Informatique"
+          points={["Algorithmique • Python", "Web & culture numérique"]}
+        />
+        <ProgCard
+          title="Sciences humaines"
+          points={["Éducation islamique", "Histoire • Géographie"]}
+        />
       </div>
     </Container>
   </Section>
@@ -161,9 +212,11 @@ const Programmes = () => (
 
 const ProgCard = ({ title, points }) => (
   <Card>
-    <div className="text-lg font-semibold">{title}</div>
-    <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-5">
-      {points.map((p, i) => (<li key={i}>{p}</li>))}
+    <div className="text-lg font-semibold text-slate-900">{title}</div>
+    <ul className="mt-3 space-y-2 text-sm text-slate-600 list-disc pl-5">
+      {points.map((p, i) => (
+        <li key={i}>{p}</li>
+      ))}
     </ul>
   </Card>
 );
@@ -174,13 +227,18 @@ const ProgCard = ({ title, points }) => (
 const Plateforme = () => (
   <Section id="plateforme">
     <Container>
-      <Heading kicker="Plateforme" title="Un outil moderne pour toute la communauté" subtitle="Une expérience cohérente et sécurisée pour l'admin, les professeurs, les élèves et les parents." />
+      <Heading
+        kicker="Plateforme"
+        title="Un outil pour toute la communauté"
+        subtitle="Une expérience cohérente et sécurisée pour l’administration, les professeurs, les élèves et les parents."
+      />
+
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <Feature icon={CalendarDays} title="Emploi du temps" desc="Vision claire par niveau et par classe." />
-        <Feature icon={QrCode} title="Présence (QR)" desc="Pointage rapide et fiable à l'entrée." />
-        <Feature icon={MessageSquare} title="Messagerie" desc="Annonces ciblées, messages directs." />
-        <Feature icon={FileText} title="Évaluations" desc="QCM/Devoirs avec résultats en ligne." />
-        <Feature icon={BellRing} title="Événements" desc="Réunions, sorties, examens — rappelés." />
+        <Feature icon={QrCode} title="Présence (QR)" desc="Pointage rapide et fiable." />
+        <Feature icon={MessageSquare} title="Messagerie" desc="Annonces ciblées et messages directs." />
+        <Feature icon={FileText} title="Évaluations" desc="QCM / devoirs avec résultats en ligne." />
+        <Feature icon={BellRing} title="Événements" desc="Réunions, examens, sorties — avec rappels." />
         <Feature icon={Shield} title="Sécurité" desc="Accès par rôles et confidentialité." />
       </div>
     </Container>
@@ -190,47 +248,62 @@ const Plateforme = () => (
 const Feature = ({ icon: Icon, title, desc }) => (
   <Card className="h-full">
     <div className="flex items-start gap-4">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/15 to-sky-500/15">
-        <Icon className="h-6 w-6 text-indigo-500" />
+      <div className="flex h-11 w-11 items-center justify-center rounded-md bg-slate-100 border border-slate-200">
+        <Icon className="h-5 w-5 text-slate-700" />
       </div>
       <div>
-        <h3 className="text-base font-semibold">{title}</h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{desc}</p>
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+        <p className="mt-1 text-sm text-slate-600">{desc}</p>
       </div>
     </div>
   </Card>
 );
 
 /***********************************
- * 4) Événements: Forum d'orientation & Coaching
+ * 4) Événements: Forums & Coaching
  ***********************************/
 const Forums = () => (
   <Section id="forums">
     <Container>
-      <Heading kicker="Événements" title="Forums & Coaching" subtitle="Orientation, coaching émotionnel & rationnel — des rendez‑vous pour guider et motiver nos élèves." />
+      <Heading
+        kicker="Événements"
+        title="Forums & coaching"
+        subtitle="Orientation et accompagnement — des rendez-vous pour guider et motiver nos élèves."
+      />
+
       <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <MediaCard img={imgs.forumOrientation} title="Forum d'orientation" desc="Témoignages d'étudiants, parcours post‑bac, choix d'orientation.">
-          <ButtonLink href="#" className="mt-4">Voir les prochaines dates <ChevronRight className="h-4 w-4" /></ButtonLink>
-        </MediaCard>
-        <MediaCard img={imgs.forumCoach} title="Forum coaching" desc="Ateliers 1–2 fois/an pour renforcer les compétences émotionnelles et rationnelles.">
-          <ButtonLink href="/connexion" className="mt-4">Découvrir le programme <ChevronRight className="h-4 w-4" /></ButtonLink>
-        </MediaCard>
+        <MediaCard
+          img={imgs.forumOrientation}
+          title="Forum d'orientation"
+          desc="Témoignages, parcours post-bac, informations pratiques et échanges."
+          ctaHref="#"
+          ctaText="Voir les prochaines dates"
+        />
+        <MediaCard
+          img={imgs.forumCoach}
+          title="Forum coaching"
+          desc="Ateliers 1–2 fois/an pour renforcer les compétences émotionnelles et rationnelles."
+          ctaHref="/connexion"
+          ctaText="Découvrir le programme"
+        />
       </div>
     </Container>
   </Section>
 );
 
-const MediaCard = ({ img, title, desc, children }) => (
-  <Card className="overflow-hidden p-0">
-    <figure className="relative">
-      <img src={img} alt={title} className="h-64 w-full object-cover" loading="lazy" />
-      <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent px-4 py-3 text-sm text-white">{title}</figcaption>
-    </figure>
+const MediaCard = ({ img, title, desc, ctaHref, ctaText }) => (
+  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <img src={img} alt={title} className="h-64 w-full object-cover" loading="lazy" />
     <div className="p-6">
-      <p className="text-sm text-slate-600 dark:text-slate-300">{desc}</p>
-      {children}
+      <div className="text-lg font-semibold text-slate-900">{title}</div>
+      <p className="mt-2 text-sm text-slate-600">{desc}</p>
+      <div className="mt-4">
+        <ButtonLink href={ctaHref} variant="secondary" className="w-full sm:w-auto">
+          {ctaText} <ChevronRight className="h-4 w-4" />
+        </ButtonLink>
+      </div>
     </div>
-  </Card>
+  </div>
 );
 
 /***********************************
@@ -239,11 +312,16 @@ const MediaCard = ({ img, title, desc, children }) => (
 const Parcours = () => (
   <Section id="selection">
     <Container>
-      <Heading kicker="Parcours" title="De la candidature à l'excellence" subtitle="Gratuit, mais exigeant — l'effort et l'assiduité priment." />
+      <Heading
+        kicker="Parcours"
+        title="De la candidature à l’excellence"
+        subtitle="Gratuit, mais exigeant — l’effort et l’assiduité priment."
+      />
+
       <div className="mt-10 grid gap-6 md:grid-cols-3">
-        <Step no="01" title="Candidature" desc="Dossier + test d'entrée. Sélection selon potentiel et motivation." />
-        <Step no="02" title="Engagement" desc="Assiduité minimale et respect des seuils. Suivi personnalisé." />
-        <Step no="03" title="Excellence" desc="Préparation Bac. Coaching et méthodes pour viser haut." />
+        <Step no="01" title="Candidature" desc="Dossier + test d’entrée. Sélection selon potentiel et motivation." />
+        <Step no="02" title="Engagement" desc="Assiduité minimale et suivi. Progression mesurable." />
+        <Step no="03" title="Excellence" desc="Préparation bac. Méthodes, accompagnement et orientation." />
       </div>
     </Container>
   </Section>
@@ -251,9 +329,9 @@ const Parcours = () => (
 
 const Step = ({ no, title, desc }) => (
   <Card>
-    <div className="text-xs font-mono text-slate-500">ÉTAPE {no}</div>
-    <div className="mt-1 text-lg font-semibold">{title}</div>
-    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{desc}</p>
+    <Kicker>Étape {no}</Kicker>
+    <div className="mt-2 text-lg font-semibold text-slate-900">{title}</div>
+    <p className="mt-2 text-sm text-slate-600">{desc}</p>
   </Card>
 );
 
@@ -263,21 +341,41 @@ const Step = ({ no, title, desc }) => (
 const GratuitBourse = () => (
   <Section id="bourse">
     <Container>
-      <Heading kicker="Engagement social" title="100% gratuit — bourse pour les meilleurs" subtitle="Nous investissons dans le potentiel des jeunes, pas dans les frais." />
+      <Heading
+        kicker="Engagement social"
+        title="Gratuité & bourse d’excellence"
+        subtitle="Nous investissons dans le potentiel et la progression."
+      />
+
       <div className="mt-10 grid gap-6 md:grid-cols-5 items-stretch">
-        <div className="md:col-span-3 order-2 md:order-1">
-          <Card>
-            <div className="text-lg font-semibold">Gratuité</div>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Aucun frais d'inscription ni de scolarité. En contrepartie : présence, rigueur et progression mesurable.</p>
-            <div className="mt-6 text-lg font-semibold">Bourse Top 3</div>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Après le baccalauréat , les 3 meilleurs obtiennent une <strong>bourse d'excellence</strong> pour leurs études universitaires.</p>
+        <div className="md:col-span-3">
+          <Card className="h-full">
+            <div className="text-lg font-semibold text-slate-900">Gratuité</div>
+            <p className="mt-2 text-sm text-slate-600">
+              Aucun frais d’inscription ni de scolarité. En contrepartie : présence, rigueur et progression.
+            </p>
+
+            <Divider />
+
+            <div className="text-lg font-semibold text-slate-900">Bourse Top 3</div>
+            <p className="mt-2 text-sm text-slate-600">
+              Après le baccalauréat, les 3 meilleurs peuvent obtenir une <strong>bourse d’excellence</strong> pour l’université.
+            </p>
           </Card>
         </div>
-        <div className="md:col-span-2 order-1 md:order-2">
-          <motion.figure initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="relative overflow-hidden rounded-2xl ring-1 ring-white/15 shadow-xl h-full">
-            <img src={imgs.bourse} alt="Remise de bourses d'excellence" className="h-full w-full object-cover" loading="lazy" />
-            <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent px-4 py-3 text-sm text-white">Bourse d'excellence — Top 3</figcaption>
-          </motion.figure>
+
+        <div className="md:col-span-2">
+          <figure className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm h-full">
+            <img
+              src={imgs.bourse}
+              alt="Remise de bourses d'excellence"
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+            <figcaption className="px-4 py-3 text-sm text-slate-600">
+              Bourse d’excellence — Top 3
+            </figcaption>
+          </figure>
         </div>
       </div>
     </Container>
@@ -285,37 +383,60 @@ const GratuitBourse = () => (
 );
 
 /***********************************
- * 7) Informatique — en images (2 photos)
+ * 7) Informatique — en images
  ***********************************/
 const InformatiqueImages = () => (
   <Section id="informatique-photos">
     <Container>
-      <Heading kicker="Informatique" title="Apprendre par la pratique" subtitle="Algorithmique, Python, web — encadré par l'enseignant responsable de la plateforme." />
+      <Heading
+        kicker="Informatique"
+        title="Apprendre par la pratique"
+        subtitle="Algorithmique, Python, web — encadré par l’enseignant responsable de la plateforme."
+      />
+
       <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <Photo img={imgs.info1} caption="Atelier Python — logiques & algorithmes" />
+        <Photo img={imgs.info1} caption="Atelier Python — logique & algorithmes" />
         <Photo img={imgs.info2} caption="Initiation web — HTML/CSS/JS" />
       </div>
     </Container>
   </Section>
 );
 
-const Photo = ({ img, caption }) => (
-  <figure className="relative overflow-hidden rounded-2xl ring-1 ring-white/15 shadow-xl">
-    <img src={img} alt={caption} className="h-72 w-full object-cover" loading="lazy" />
-    <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent px-4 py-3 text-sm text-white">{caption}</figcaption>
-  </figure>
+/***********************************
+ * 8) Équipe & étudiants
+ ***********************************/
+const Team = () => (
+  <Section id="equipe">
+    <Container>
+      <Heading
+        kicker="Communauté"
+        title="Équipe pédagogique & étudiants"
+        subtitle="Une communauté où l’on progresse ensemble."
+      />
+
+      <div className="mt-10 grid gap-6 lg:grid-cols-2">
+        <Photo img={imgs.enseignants2} caption="Enseignants & étudiants — pendant les sessions" />
+        <Photo img={imgs.enseignants} caption="Journée d’échanges et d’accompagnement" />
+      </div>
+    </Container>
+  </Section>
 );
 
 /***********************************
- * 8) Portails par rôle (inchangé)
+ * 9) Portails par rôle
  ***********************************/
 const Roles = () => (
   <Section id="roles">
     <Container>
-      <Heading kicker="Accès" title="Un espace dédié pour chaque rôle" subtitle="Même langage visuel, objectifs différents — efficacité maximale." />
+      <Heading
+        kicker="Accès"
+        title="Un espace dédié pour chaque rôle"
+        subtitle="Même logique, objectifs différents — efficacité et clarté."
+      />
+
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <RoleCard icon={Shield} title="Admin" bullets={["Gestion globale", "Utilisateurs & rôles", "Paramètres"]} href="/connexion" />
-        <RoleCard icon={Building2} title="Professeur" bullets={["Classes & notes", "Présence", "Devoirs"]} href="/connexion" />
+        <RoleCard icon={Building2} title="Professeur" bullets={["Classes & notes", "Présence", "Évaluations"]} href="/connexion" />
         <RoleCard icon={GraduationCap} title="Élève" bullets={["Emploi du temps", "Messages", "Évaluations"]} href="/connexion" />
         <RoleCard icon={Users} title="Parent" bullets={["Vue enfant", "Événements", "Contact"]} href="/connexion" />
       </div>
@@ -326,31 +447,24 @@ const Roles = () => (
 const RoleCard = ({ icon: Icon, title, bullets, href }) => (
   <Card>
     <div className="flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/15 to-sky-500/15">
-        <Icon className="h-5 w-5 text-indigo-500" />
+      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 border border-slate-200">
+        <Icon className="h-5 w-5 text-slate-700" />
       </div>
-      <h3 className="text-base font-semibold">{title}</h3>
+      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
     </div>
-    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-5">
-      {bullets.map((b, i) => (<li key={i}>{b}</li>))}
-    </ul>
-    <div className="mt-5"><a href={href} className="inline-flex w-full justify-center px-4 py-2 text-sm font-medium text-white rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-sky-500 hover:brightness-110">Entrer</a></div>
-  </Card>
-);
 
-/***********************************
- * 9) Équipe & étudiants (photo enseignants / mixte)
- ***********************************/
-const Team = () => (
-  <Section id="equipe">
-    <Container>
-      <Photo img={imgs.enseignants2} caption="Enseignants & étudiants — pendant les sessions" />
-      <Heading kicker="Communauté" title="Équipe pédagogique & étudiants" subtitle="Une communauté soudée où l'on progresse ensemble." />
-      <div className="mt-10">
-        <Photo img={imgs.enseignants} caption="Enseignants & étudiants — journée d'échanges" />
-      </div>
-    </Container>
-  </Section>
+    <ul className="mt-4 space-y-2 text-sm text-slate-600 list-disc pl-5">
+      {bullets.map((b, i) => (
+        <li key={i}>{b}</li>
+      ))}
+    </ul>
+
+    <div className="mt-5">
+      <ButtonLink href={href} variant="primary" className="w-full">
+        Entrer
+      </ButtonLink>
+    </div>
+  </Card>
 );
 
 /***********************************
@@ -359,12 +473,12 @@ const Team = () => (
 const FAQ = () => (
   <Section id="faq">
     <Container>
-      <Heading kicker="FAQ" title="Questions fréquentes" />
+      <Heading kicker="FAQ" title="Questions fréquentes" subtitle="Réponses rapides pour les élèves et parents." />
       <div className="mt-8 grid gap-6 md:grid-cols-2">
-        <FaqItem q="Est‑ce mobile ?" a="Oui. L'interface est responsive et s'adapte au téléphone, à la tablette et au bureau." />
-        <FaqItem q="Qui peut s'inscrire ?" a="Collégiens et lycéens motivés. La sélection se fait sur dossier et test d'entrée." />
-        <FaqItem q="Les cours sont‑ils vraiment gratuits ?" a="Oui, à condition de respecter l'assiduité et les objectifs de progression." />
-        <FaqItem q="Comment fonctionne la bourse ?" a="Après le Bac, les 3 meilleurs obtiennent une bourse d'excellence pour l'université." />
+        <FaqItem q="Est-ce mobile ?" a="Oui. L’interface est responsive (téléphone, tablette, bureau)." />
+        <FaqItem q="Qui peut s’inscrire ?" a="Collégiens et lycéens motivés. Sélection sur dossier et test d’entrée." />
+        <FaqItem q="Les cours sont-ils vraiment gratuits ?" a="Oui, à condition de respecter l’assiduité et les objectifs." />
+        <FaqItem q="Comment fonctionne la bourse ?" a="Après le bac, les 3 meilleurs peuvent obtenir une bourse d’excellence." />
       </div>
     </Container>
   </Section>
@@ -372,18 +486,27 @@ const FAQ = () => (
 
 const FaqItem = ({ q, a }) => (
   <Card>
-    <div className="text-sm font-semibold">{q}</div>
-    <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{a}</div>
+    <div className="text-sm font-semibold text-slate-900">{q}</div>
+    <div className="mt-2 text-sm text-slate-600">{a}</div>
   </Card>
 );
 
 /***********************************
- * Footer minimal
+ * Footer minimal (MODEL 3)
  ***********************************/
 const Footer = () => (
-  <footer className="border-t border-white/10 py-10">
+  <footer className="border-t border-slate-200 bg-white py-10">
     <Container>
-      <div className="text-center text-xs text-slate-500">© {new Date().getFullYear()} Takwa Établissement — Tous droits réservés.</div>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="text-xs text-slate-500">
+          © {new Date().getFullYear()} Takwa Établissement — Tous droits réservés.
+        </div>
+        <div className="flex gap-4 text-xs">
+          <a href="/#programmes" className="text-slate-600 hover:text-slate-900">Programmes</a>
+          <a href="/#plateforme" className="text-slate-600 hover:text-slate-900">Plateforme</a>
+          <a href="/connexion" className="text-slate-600 hover:text-slate-900">Connexion</a>
+        </div>
+      </div>
     </Container>
   </footer>
 );
@@ -393,29 +516,28 @@ const Footer = () => (
  ***********************************/
 export default function HomePageFR() {
   return (
-    <div className="relative min-h-screen bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(99,102,241,.12),transparent)]">
+    <PageShell>
       <main>
-        <Hero />            {/* 1 */}
-        <Programmes />      {/* 2 */}
-        <Plateforme />      {/* 3 */}
-        <Forums />          {/* 4 — nouveau */}
-        <Parcours />        {/* 5 */}
-        <GratuitBourse />   {/* 6 — avec image */}
-        <InformatiqueImages /> {/* 7 — 2 photos */}
-        <Team />            {/* 8 — photo groupe enseignants/élèves */}
-        <Roles />           {/* 9 */}
-        <FAQ />             {/* 10 */}
+        <Hero />
+        <Programmes />
+        <Plateforme />
+        <Forums />
+        <Parcours />
+        <GratuitBourse />
+        <InformatiqueImages />
+        <Team />
+        <Roles />
+        <FAQ />
       </main>
       <Footer />
-    </div>
+    </PageShell>
   );
 }
 
 /***********************************
- * Guide de style (réutilisable Login/Dashboard)
- * — Cartes: `rounded-2xl ring-1 ring-white/10 bg-white/60 dark:bg-white/5 backdrop-blur p-6`
- * — Boutons: gradient + rounded-full + shadow doux
- * — Grilles: `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` (mobile-first)
- * — Titres: utiliser <GradientText/> pour l'effet premium
- * — Animations: framer-motion entrée 0.6s, sobre
+ * Notes MODEL 3 (réutilisable Login/Dashboard)
+ * - Cartes: rounded-lg + border-slate-200 + bg-white + shadow-sm
+ * - Boutons: primary slate-800 / secondary blanc bordé
+ * - Typo: sans effets, hiérarchie claire
+ * - Animations: optionnel (ici supprimées pour institutionnel)
  ***********************************/
