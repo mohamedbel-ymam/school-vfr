@@ -72,9 +72,10 @@ function EmptyState({ text, action }) {
 // Component
 // ------------------------------------------------------------
 export default function TeacherDashboard() {
-  console.log("AUTH USER", user);
 
   const { user } = useAuth();
+    console.log("AUTH USER", user);
+
 
   const teacherFullName =
     `${user?.firstname ?? ""} ${user?.lastname ?? ""}`.trim();
