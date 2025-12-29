@@ -1,21 +1,23 @@
-// src/router/guards.jsx
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { startPathForUser, LOGIN_ROUTE } from "./index.jsx";
+import { LOGIN_ROUTE, startPathForUser } from "./pahts.js";
+
+/* ---------------- Helpers ---------------- */
 
 function hasRole(user, needed) {
   if (!user) return false;
   const userRoles = Array.isArray(user.roles)
     ? user.roles
-    : [user.role].filter(Boolean);
+    : user.role
+    ? [user.role]
+    : [];
 
   const neededArr = Array.isArray(needed) ? needed : [needed];
   return neededArr.some((r) => userRoles.includes(r));
 }
 
-/* -------------------------------------------------------------------------- */
-/* Require authentication                                                      */
-/* -------------------------------------------------------------------------- */
+/* ---------------- Guards ---------------- */
+
 export function RequireAuth() {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -23,18 +25,12 @@ export function RequireAuth() {
   if (loading) return null;
 
   if (!user) {
-    if (loc.pathname.startsWith(LOGIN_ROUTE)) {
-      return <Outlet />;
-    }
     return <Navigate to={LOGIN_ROUTE} replace state={{ from: loc }} />;
   }
 
   return <Outlet />;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Require role                                                                */
-/* -------------------------------------------------------------------------- */
 export function RequireRole({ roles }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -42,22 +38,15 @@ export function RequireRole({ roles }) {
   if (loading) return null;
 
   if (!user) {
-    if (loc.pathname.startsWith(LOGIN_ROUTE)) {
-      return <Outlet />;
-    }
     return <Navigate to={LOGIN_ROUTE} replace state={{ from: loc }} />;
   }
 
-  if (!hasRole(user, roles)) {
-    return <Navigate to="/non-autorisé" replace />;
-  }
-
-  return <Outlet />;
+  return hasRole(user, roles)
+    ? <Outlet />
+    : <Navigate to="/unauthorized" replace />;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Guest only (login/register pages)                                           */
-/* -------------------------------------------------------------------------- */
+/** Public-only guard */
 export function GuestOnly() {
   const { user, loading } = useAuth();
   const loc = useLocation();

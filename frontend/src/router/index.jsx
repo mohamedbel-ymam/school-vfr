@@ -1,4 +1,3 @@
-// src/router/index.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { RequireAuth, RequireRole, GuestOnly } from "./guards";
 
@@ -79,8 +78,7 @@ import AdminTestDetails from "@/components/admin/pages/AdminTestsDetails.jsx";
 /* ===================== BOURSIER ===================== */
 import BoursierDashboard from "@/components/boursier/BoursierDashboard.jsx";
 
-/* ===================== ROUTES ===================== */
-
+/* ===================== CONSTANT ===================== */
 export const LOGIN_ROUTE = "/connexion";
 
 /* ===================== ROUTER ===================== */
@@ -128,9 +126,7 @@ export const router = createBrowserRouter([
               { path: "documents", element: <StudentDocuments /> },
               { path: "devoirs", element: <StudentDevoirs /> },
               { path: "paramètres", element: <AccountSettings /> },
-              { path: "notifications", element: <NotYet /> },
 
-              /* Tests */
               {
                 path: "tests",
                 children: [
@@ -166,7 +162,6 @@ export const router = createBrowserRouter([
               { path: "devoirs", element: <TeacherDevoirs /> },
               { path: "paramètres", element: <AccountSettings /> },
 
-              /* Tests */
               { path: "tests", element: <TeacherTestsList /> },
               { path: "tests/create", element: <CreateTestForm /> },
               { path: "tests/:id/questions", element: <AddQuestions /> },
@@ -200,15 +195,13 @@ export const router = createBrowserRouter([
               { path: "manage-timetables", element: <ManageTimetables /> },
               { path: "manage-événements", element: <ManageEvents /> },
               { path: "groupes", element: <ManageGroups /> },
-              { path: "plans", element: <ManageMonthlyPlans /> },                 
+              { path: "plans", element: <ManageMonthlyPlans /> },
               { path: "waiting-list", element: <ManageWaitingList /> },
               { path: "documents", element: <AdminDocuments /> },
               { path: "devoirs", element: <AdminDevoirs /> },
               { path: "presences", element: <ManagePresence /> },
               { path: "notifications", element: <SendNotification /> },
               { path: "paramètres", element: <AccountSettings /> },
-
-              /* Tests */
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
             ],
@@ -251,8 +244,9 @@ export const router = createBrowserRouter([
           {
             path: "/boursier",
             element: <BoursierDashboard />,
-            path: "paramètres",
-            element:<AccountSettings/>
+            children: [
+              { path: "paramètres", element: <AccountSettings /> },
+            ],
           },
         ],
       },
