@@ -15,7 +15,7 @@ import { Button } from "../ui/button";
 import { Loader, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { startPathForUser } from "../../router";
+import { startPathForUser } from "../../router/pahts";
 
 /* -------------------------------------------------------------------------- */
 /* Schema                                                                     */
