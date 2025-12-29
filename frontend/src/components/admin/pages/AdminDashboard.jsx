@@ -104,11 +104,38 @@ function EmptyState({ text, action }) {
     </div>
   );
 }
+/* ---------------- Chart helpers ---------------- */
+function rangeDays(n = 14) {
+  const out = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+function buildDailySeries(items, createdKey = "created_at", label = "Valeur") {
+  const days = rangeDays(14);
+  const map = Object.fromEntries(days.map((k) => [k, 0]));
+
+  for (const it of items || []) {
+    const t = it?.[createdKey] || it?.createdAt || it?.date;
+    if (!t) continue;
+    const k = new Date(t).toISOString().slice(0, 10);
+    if (k in map) map[k] += 1;
+  }
+
+  return days.map((k) => ({ date: k, [label]: map[k] }));
+}
+
 
 /* -------------------------------------------------------------------------- */
 /* Component                                                                  */
 /* -------------------------------------------------------------------------- */
 export default function AdminDashboard() {
+
   const { user } = useAuth();
   const adminFullName = `${user?.firstname ?? ""} ${user?.lastname ?? ""}`.trim();
 
@@ -232,6 +259,81 @@ export default function AdminDashboard() {
     })();
     return () => (alive = false);
   }, [degFilter, attPeriod, degrees]);
+  const kpis = [
+  {
+    title: "Documents",
+    value: numberFmt(docs.length),
+    icon: <FileText className="h-4 w-4" />,
+    to: "/admin/documents",
+  },
+  {
+    title: "Devoirs",
+    value: numberFmt(hws.length),
+    icon: <ClipboardList className="h-4 w-4" />,
+    to: "/admin/devoirs",
+  },
+  {
+    title: "Notifications",
+    value: "—",
+    icon: <Bell className="h-4 w-4" />,
+    to: "/admin/notifications",
+  },
+  {
+    title: "Sécurité",
+    value: "OK",
+    icon: <ShieldCheck className="h-4 w-4" />,
+    to: "/admin/parametres",
+  },
+];
+
+/* ---------------- Attendance KPI cards ---------------- */
+const attCards = [
+  {
+    title: "Absences non justifiées",
+    value: numberFmt(att.totals.absences),
+    icon: <AlertTriangle className="h-4 w-4" />,
+  },
+  {
+    title: "Absences justifiées",
+    value: numberFmt(att.totals.justified_absences),
+    icon: <Calendar className="h-4 w-4" />,
+  },
+  {
+    title: "Présences",
+    value: numberFmt(att.totals.presences),
+    icon: <Activity className="h-4 w-4" />,
+  },
+  {
+    title: "Taux de présence",
+    value: `${numberFmt(att.totals.attendance_rate)}%`,
+    icon: <LineChartIcon className="h-4 w-4" />,
+  },
+];
+
+/* ---------------- Charts data ---------------- */
+const seriesDocs = useMemo(
+  () => buildDailySeries(docs, "created_at", "Documents"),
+  [docs]
+);
+
+const seriesHws = useMemo(
+  () => buildDailySeries(hws, "created_at", "Devoirs"),
+  [hws]
+);
+
+const seriesMerge = useMemo(() => {
+  const map = new Map();
+
+  for (const r of seriesDocs) {
+    map.set(r.date, { date: r.date, Documents: r.Documents, Devoirs: 0 });
+  }
+  for (const r of seriesHws) {
+    const prev = map.get(r.date) || { date: r.date, Documents: 0 };
+    map.set(r.date, { ...prev, Devoirs: r.Devoirs });
+  }
+
+  return Array.from(map.values());
+}, [seriesDocs, seriesHws]);
 
   /* -------------------------------------------------------------------------- */
   /* UI                                                                        */
