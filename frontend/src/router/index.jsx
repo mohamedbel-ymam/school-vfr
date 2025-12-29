@@ -1,384 +1,263 @@
 // src/router/index.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext.jsx";
+import { RequireAuth, RequireRole, GuestOnly } from "./guards";
 
-/* Pages */
-import Home         from "@/pages/Home.jsx";
-import Notfound     from "@/pages/Notfound.jsx";            // file is Notfound.jsx (lowercase 'f')
-import Login        from "@/pages/Login.jsx";
+/* ===================== PAGES ===================== */
+import Home from "@/pages/Home.jsx";
+import Notfound from "@/pages/Notfound.jsx";
+import Login from "@/pages/Login.jsx";
 import Unauthorized from "@/pages/Unauthorized.jsx";
-import PublicWaitingList from "../pages/PublicWaitingList";
+import PublicWaitingList from "@/pages/PublicWaitingList.jsx";
+import NotYet from "@/pages/NotYet.jsx";
 
-/* Layouts */
-import Layout                  from "@/layouts/Layout.jsx";
-import GuestLayout             from "@/layouts/GeustLayout.jsx";          // keep existing filename
-import StudentDashboardLayout  from "@/layouts/StudentDashboardLayout.jsx";
-import AdminDashboardLayout    from "@/layouts/AdminDashboardLayout.jsx";
-import TeacherDashboardLayout  from "@/layouts/TeacherDashboardLayout.jsx";
-import ParentDashboardLayout   from "@/layouts/ParentDashboardLayout.jsx";
+/* ===================== LAYOUTS ===================== */
+import Layout from "@/layouts/Layout.jsx";
+import GuestLayout from "@/layouts/GeustLayout.jsx";
+import StudentDashboardLayout from "@/layouts/StudentDashboardLayout.jsx";
+import AdminDashboardLayout from "@/layouts/AdminDashboardLayout.jsx";
+import TeacherDashboardLayout from "@/layouts/TeacherDashboardLayout.jsx";
+import ParentDashboardLayout from "@/layouts/ParentDashboardLayout.jsx";
 
-/* Parent */
-import ParentDashboard from "@/components/parent/ParentDashboard.jsx";     // folder 'Parent' has capital P
-import ParentOverview  from "@/components/parent/ParentOveriew.jsx";  
-import ParentTimetable from "../components/parent/ParentTimeTable";
-// filename is 'ParentOveriew.jsx'
-
-/* Student */
-import StudentDashboard from "@/components/student/StudentDashboard.jsx";
-import StudentTimetable from "@/components/student/StudentTimeTable.jsx";
-
-/* Teacher */
-import TeacherDashboard from "@/components/teacher/TeacherDashboard.jsx";
-import TeacherTimetable from "@/components/teacher/TeacherTimeTable.jsx";
-
-/* Admin */
-import AdminDashboard    from "@/components/admin/pages/AdminDashboard.jsx";
-import ManageParents     from "@/components/admin/pages/ManageParents.jsx";
-import ManageStudents    from "@/components/admin/pages/ManageStudents.jsx";
-import ManageTeachers    from "@/components/admin/pages/ManageTeachers.jsx";
-import ManageTimetables  from "@/components/admin/pages/ManageTimeTables.jsx"; // file is ManageTimeTables.jsx
-import ManageEvents      from "@/components/admin/pages/ManageEvents.jsx";
-import AdminsPage        from "@/components/admin/pages/AdminsPage.jsx";
-import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans.jsx";
-import ManageGroups from "@/components/admin/pages/ManageGroups.jsx";
-import ManageBoursier from "../components/admin/pages/ManageBoursiers";
-import ManageWaitingList from "../components/admin/pages/ManageWaitingList";
-
-
-/* Settings */
+/* ===================== SETTINGS ===================== */
 import AccountSettings from "@/components/settings/Account.jsx";
 
-/* Events (non-admin) */
+/* ===================== STUDENT ===================== */
+import StudentDashboard from "@/components/student/StudentDashboard.jsx";
+import StudentTimetable from "@/components/student/StudentTimeTable.jsx";
 import StudentEvents from "@/components/student/StudentEvents.jsx";
-import TeacherEvents from "@/components/teacher/TeacherEvents.jsx";
-import ParentEvents  from "@/components/parent/ParentEvents.jsx";
-
-/* Notifications */
-import SendNotification  from "@/components/admin/pages/SendNotification.jsx";
-import NotificationsPage from "@/components/notifications/NotificationsPage.jsx";
-
-/* Documents */
 import StudentDocuments from "@/components/student/StudentDocuments.jsx";
-import TeacherDocuments from "@/components/teacher/TeacherDocuments.jsx";
-import AdminDocuments   from "@/components/admin/pages/AdminDocuments.jsx";
-
-/* Homework */
 import StudentDevoirs from "@/components/student/StudentDevoirs.jsx";
+
+/* Student tests */
+import StudentTestsList from "@/components/student/tests/StudentTestsList.jsx";
+import StartTest from "@/components/student/tests/StartTest.jsx";
+import TestScreen from "@/components/student/tests/TestScreen.jsx";
+import TestResult from "@/components/student/tests/TestResult.jsx";
+
+/* ===================== TEACHER ===================== */
+import TeacherDashboard from "@/components/teacher/TeacherDashboard.jsx";
+import TeacherTimetable from "@/components/teacher/TeacherTimeTable.jsx";
+import TeacherEvents from "@/components/teacher/TeacherEvents.jsx";
+import TeacherDocuments from "@/components/teacher/TeacherDocuments.jsx";
 import TeacherDevoirs from "@/components/teacher/TeacherDevoirs.jsx";
-import AdminDevoirs   from "@/components/admin/pages/AdminDevoirs.jsx";
 
-/* Placeholder */
-import NotYet from "@/pages/NotYet.jsx"; // file is NotYet.jsx (capital Y)
-import ManagePresence from "@/components/admin/pages/ManagePresence";
-import BoursierDashboard from "../components/boursier/BoursierDashboard";
-/*Teacher test  */
-import TeacherTestsList from "../components/teacher/tests/TeacherTestsList.jsx";
-import CreateTestForm from "../components/teacher/tests/CreateTestForm.jsx";
-import AddQuestions from "../components/teacher/tests/AddQuestions.jsx";
-import AssignStudents from "../components/teacher/tests/AssignStudents.jsx";
-import ReviewAndActivate from "../components/teacher/tests/ReviewAndActivate.jsx";
-import TestResults from "../components/teacher/tests/TestResults.jsx";
-/*Student test */
-import StudentTestsList from "../components/student/tests/StudentTestsList.jsx";
-import StartTest from "../components/student/tests/StartTest.jsx";
-import TestResult from "../components/student/tests/TestResult.jsx";
-import TestScreen from "../components/student/tests/TestScreen.jsx";
-/*Admin test */
-import AdminTestsList from "../components/admin/pages/AdminTestsList.jsx";
-import AdminTestDetails from "../components/admin/pages/AdminTestsDetails.jsx";
+/* Teacher tests */
+import TeacherTestsList from "@/components/teacher/tests/TeacherTestsList.jsx";
+import CreateTestForm from "@/components/teacher/tests/CreateTestForm.jsx";
+import AddQuestions from "@/components/teacher/tests/AddQuestions.jsx";
+import AssignStudents from "@/components/teacher/tests/AssignStudents.jsx";
+import ReviewAndActivate from "@/components/teacher/tests/ReviewAndActivate.jsx";
+import TestResults from "@/components/teacher/tests/TestResults.jsx";
 
-/* ---------------- Route Constants ---------------- */
+/* ===================== PARENT ===================== */
+import ParentDashboard from "@/components/parent/ParentDashboard.jsx";
+import ParentOverview from "@/components/parent/ParentOveriew.jsx";
+import ParentEvents from "@/components/parent/ParentEvents.jsx";
+import ParentTimetable from "@/components/parent/ParentTimeTable.jsx";
 
-export const LOGIN_ROUTE                   = "/connexion";
+/* ===================== ADMIN ===================== */
+import AdminDashboard from "@/components/admin/pages/AdminDashboard.jsx";
+import ManageParents from "@/components/admin/pages/ManageParents.jsx";
+import ManageStudents from "@/components/admin/pages/ManageStudents.jsx";
+import ManageTeachers from "@/components/admin/pages/ManageTeachers.jsx";
+import ManageBoursier from "@/components/admin/pages/ManageBoursiers.jsx";
+import ManageTimetables from "@/components/admin/pages/ManageTimeTables.jsx";
+import ManageEvents from "@/components/admin/pages/ManageEvents.jsx";
+import ManageGroups from "@/components/admin/pages/ManageGroups.jsx";
+import ManageWaitingList from "@/components/admin/pages/ManageWaitingList.jsx";
+import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans.jsx";
+import ManagePresence from "@/components/admin/pages/ManagePresence.jsx";
+import AdminDocuments from "@/components/admin/pages/AdminDocuments.jsx";
+import AdminDevoirs from "@/components/admin/pages/AdminDevoirs.jsx";
+import SendNotification from "@/components/admin/pages/SendNotification.jsx";
+import AdminsPage from "@/components/admin/pages/AdminsPage.jsx";
 
-// Student
-export const STUDENT_DASHBOARD_ROUTE       = "/élève/tableau de bord";
-export const STUDENT_DASHBOARD_PARAM_ROUTE = "/élève/tableau de bord/:degree";
-export const STUDENT_SCHEDULE_ROUTE        = "/élève/emploi du temps";
+/* Admin tests */
+import AdminTestsList from "@/components/admin/pages/AdminTestsList.jsx";
+import AdminTestDetails from "@/components/admin/pages/AdminTestsDetails.jsx";
 
-// Teacher
-export const TEACHER_DASHBOARD_ROUTE       = "/enseignant/tableau de bord";
-export const TEACHER_SCHEDULE_ROUTE        = "/enseignant/emploi du temps";
+/* ===================== BOURSIER ===================== */
+import BoursierDashboard from "@/components/boursier/BoursierDashboard.jsx";
 
-// Parent
-export const PARENT_DASHBOARD_ROUTE        = "/parent/tableau de bord";
-//Boursiers
-export const BOURSIER_DASHBOARD_ROUTE      ="/boursier/tableau de bord"
+/* ===================== ROUTES ===================== */
 
-// Admin
-export const ADMIN_DASHBOARD_ROUTE         = "/admin/tableau de bord";
-export const ADMIN_MANAGE_PARENTS_ROUTE    = "/admin/manage-parents";
-export const ADMIN_MANAGE_STUDENTS_ROUTE   = "/admin/manage-élèves";
-export const ADMIN_MANAGE_TEACHERS_ROUTE   = "/admin/manage-enseignants";
-export const ADMIN_MANAGE_BOURSIERS_ROUTE = "/admin/manage-boursiers";
-export const ADMIN_MANAGE_TIMETABLES_ROUTE = "/admin/manage-timetables";
-export const ADMIN_MANAGE_EVENTS_ROUTE     = "/admin/manage-événements";
-export const ADMIN_MANAGE_GROUPS_ROUTE = "/admin/groupes";
+export const LOGIN_ROUTE = "/connexion";
 
-
-// Non-admin events
-export const STUDENT_EVENTS_ROUTE = "/élève/événements";
-export const TEACHER_EVENTS_ROUTE = "/enseignant/événements";
-export const PARENT_EVENTS_ROUTE  = "/parent/événements";
-
-// Documents
-export const STUDENT_DOCS_ROUTE = "/élève/documents";
-export const TEACHER_DOCS_ROUTE = "/enseignant/documents";
-export const ADMIN_DOCS_ROUTE   = "/admin/documents";
-
-// Homework
-export const STUDENT_HW_ROUTE  = "/élève/devoirs";
-export const TEACHER_HW_ROUTE  = "/enseignant/devoirs";
-export const ADMIN_HW_ROUTE    = "/admin/devoirs";
-
-// Admin extras
-export const ADMIN_DEGREES_ROUTE  = "/admin/degrees";
-export const ADMIN_SUBJECTS_ROUTE = "/admin/subjects";
-export const ADMIN_COURSES_ROUTE  = "/admin/courses";
-export const ADMIN_EXAMS_ROUTE    = "/admin/exams";
-export const ADMIN_MESSAGES_ROUTE = "/admin/messages";
-export const ADMIN_PRESENCE_ROUTE    = "/admin/presences";
-
-// Teacher extras
-export const TEACHER_COURSES_ROUTE = "/enseignant/courses";
-export const TEACHER_EXAMS_ROUTE   = "/enseignant/exams";
-export const TEACHER_GRADES_ROUTE  = "/enseignant/grades";
-export const TEACHER_MSGS_ROUTE    = "/enseignant/messages";
-
-// Student extras
-export const STUDENT_COURSES_ROUTE = "/élève/courses";
-export const STUDENT_GRADES_ROUTE  = "/élève/grades";
-export const STUDENT_MSGS_ROUTE    = "/élève/messages";
-export const STUDENT_EXAMS_ROUTE   = "/élève/exams";
-// Teacher Test const
-export const TEACHER_TESTS_ROUTE = "/enseignant/tests";
-export const TEACHER_TEST_CREATE_ROUTE = "/enseignant/tests/create";
-export const TEACHER_TEST_QUESTIONS_ROUTE = "/enseignant/tests/:id/questions";
-export const TEACHER_TEST_ASSIGN_ROUTE = "/enseignant/tests/:id/assign";
-export const TEACHER_TEST_REVIEW_ROUTE = "/enseignant/tests/:id/review";
-export const TEACHER_TEST_RESULTS_ROUTE = "/enseignant/tests/:id/results";
-
-/* ---------------- Helpers ---------------- */
-
-export const redirectToDashboard = (roleType) => {
-  switch (roleType) {
-    case "admin":   return ADMIN_DASHBOARD_ROUTE;
-    case "teacher": return TEACHER_DASHBOARD_ROUTE;
-    case "student": return STUDENT_DASHBOARD_ROUTE;
-    case "parent":  return PARENT_DASHBOARD_ROUTE;
-    case "boursier": return BOURSIER_DASHBOARD_ROUTE;
-    default:        return LOGIN_ROUTE;
-  }
-};
-
-export const ROLE_PRIORITY = ["admin", "teacher", "student", "parent","boursier"];
-
-export function startPathForUser(u) {
-  const roles = Array.isArray(u?.roles) ? u.roles : (u?.role ? [u.role] : []);
-  const top = ROLE_PRIORITY.find((r) => roles.includes(r));
-
-  if (top === "admin")   return ADMIN_DASHBOARD_ROUTE;
-  if (top === "teacher") return TEACHER_DASHBOARD_ROUTE;
-  if (top === "student") return STUDENT_DASHBOARD_ROUTE;
-  if (top === "parent")  return PARENT_DASHBOARD_ROUTE;
-  if (top === "boursier")  return BOURSIER_DASHBOARD_ROUTE;
-  
-
-  return LOGIN_ROUTE;
-}
-
-/* ---------------- Guards ---------------- */
-
-function Guard({ roles, children }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div>Chargement…</div>;
-  if (!user) return <Navigate to={LOGIN_ROUTE} replace />;
-
-  if (roles?.length) {
-    const userRoles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
-    const ok = roles.some((r) => userRoles.includes(r));
-    if (!ok) return <Navigate to="/unauthorized" replace />;
-  }
-  return children;
-}
-
-function GuestOnly({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div>Chargement…</div>;
-  if (user) return <Navigate to={startPathForUser(user)} replace />;
-  return children;
-}
-
-/* ---------------- Router Definition ---------------- */
+/* ===================== ROUTER ===================== */
 
 export const router = createBrowserRouter([
-  // Public shell
+  /* ---------- PUBLIC ---------- */
   {
     element: <Layout />,
     children: [
       { path: "/", element: <Home /> },
-      { path: "/unauthorized", element: <Unauthorized /> }, // public
+      { path: "/unauthorized", element: <Unauthorized /> },
       { path: "*", element: <Notfound /> },
     ],
   },
 
-  // Guest (Login)
+  /* ---------- GUEST ONLY ---------- */
   {
     element: (
       <GuestOnly>
         <GuestLayout />
       </GuestOnly>
     ),
-    children: [{ path: LOGIN_ROUTE, element: <Login />   
-    },
-  {
-  path: "/waiting-list",
-  element: <PublicWaitingList />
-}],
-  },
-
-  // Student (Protected)
-  {
-  path: "/élève",
-  element: (
-    <Guard roles={["student"]}>
-      <StudentDashboardLayout />
-    </Guard>
-  ),
-  children: [
-    /* Page d’accueil - redirection */
-    { index: true, element: <Navigate to="tableau de bord" replace /> },
-
-    /* Tableau de bord */
-    { path: "tableau de bord", element: <StudentDashboard /> },
-    { path: "tableau de bord/:degree", element: <StudentDashboard /> },
-
-    /* Pages principales */
-    { path: "emploi du temps", element: <StudentTimetable /> },
-    { path: "événements", element: <StudentEvents /> },
-    { path: "paramètres", element: <AccountSettings /> },
-    { path: "notifications", element: <NotificationsPage /> },
-    { path: "documents", element: <StudentDocuments /> },
-    { path: "devoirs", element: <StudentDevoirs /> },
-
-    /* Tests (Nouvel Examen en ligne) */
-    {
-      path: "tests",
-      children: [
-        { index: true, element: <StudentTestsList /> },
-        { path: ":id/start", element: <StartTest /> },
-        { path: "attempt/:id", element: <TestScreen /> },
-        { path: "resultat/:id", element: <TestResult /> },
-      ],
-    },
-
-    /* Sections non encore développées */
-    { path: "courses", element: <NotYet /> },
-    { path: "grades", element: <NotYet /> },
-    { path: "messages", element: <NotYet /> },
-    { path: "exams", element: <NotYet /> },
-  ],
-},
-
-  // Admin (Protected)
-  {
-    path: "/admin",
-    element: (
-      <Guard roles={["admin"]}>
-        <AdminDashboardLayout />
-      </Guard>
-    ),
     children: [
-      { path: "tableau de bord",    element: <AdminDashboard /> },
-      { path: "admins",             element: <AdminsPage /> },
-      { path: "manage-parents",     element: <ManageParents /> },
-      { path: "manage-élèves",      element: <ManageStudents /> },
-      { path: "manage-enseignants", element: <ManageTeachers /> },
-      { path: "manage-boursiers", element: <ManageBoursier /> },
-
-      { path: "manage-timetables",  element: <ManageTimetables /> },
-      { path: "plans",              element: <ManageMonthlyPlans /> },
-       // correct filename
-      { path: "manage-événements",  element: <ManageEvents /> },
-      { path: "notifications",      element: <SendNotification /> },
-      { path: "documents",          element: <AdminDocuments /> },
-      { path: "devoirs",            element: <AdminDevoirs /> },
-      { path: "paramètres",         element: <AccountSettings /> },
-      // placeholders
-      { path: "degrees",            element: <NotYet /> },
-      { path: "subjects",           element: <NotYet /> },
-      { path: "courses",            element: <NotYet /> },
-      { path: "exams",              element: <NotYet /> },
-      { path: "messages",           element: <NotYet /> },
-      { path: "presences",          element: <ManagePresence /> },
-      { path: "groupes",            element: <ManageGroups />},
-      {path: "waiting-list", element: <ManageWaitingList />},
-      { path: "tests",         element: <AdminTestsList /> },
-    { path: "tests/:id",     element: <AdminTestDetails /> },
+      { path: LOGIN_ROUTE, element: <Login /> },
+      { path: "/waiting-list", element: <PublicWaitingList /> },
     ],
   },
 
-  // Teacher (Protected)
+  /* ---------- STUDENT ---------- */
   {
-    path: "/enseignant",
-    element: (
-      <Guard roles={["teacher", "admin"]}>
-        <TeacherDashboardLayout />
-      </Guard>
-    ),
+    element: <RequireAuth />,
     children: [
-      { index: true, element: <Navigate to="tableau de bord" replace /> },
-      { path: "tableau de bord", element: <TeacherDashboard /> },
-      { path: "emploi du temps", element: <TeacherTimetable /> },
-      { path: "événements",      element: <TeacherEvents /> },
-      { path: "paramètres",      element: <AccountSettings /> },
-      { path: "notifications",   element: <NotificationsPage /> },
-      { path: "documents",       element: <TeacherDocuments /> },
-      { path: "devoirs",         element: <TeacherDevoirs /> },
-      // placeholders
-      { path: "courses",         element: <NotYet /> },
-      { path: "exams",           element: <NotYet /> },
-      { path: "grades",          element: <NotYet /> },
-      { path: "messages",        element: <NotYet /> },
-       /* ------------------ TEACHER TEST MODULE ------------------ */
-      { path: "tests", element: <TeacherTestsList /> },
-      { path: "tests/create", element: <CreateTestForm /> },
-      { path: "tests/:id/questions", element: <AddQuestions /> },
-      { path: "tests/:id/assign", element: <AssignStudents /> },
-      { path: "tests/:id/review", element: <ReviewAndActivate /> },
-      { path: "tests/:id/results", element: <TestResults /> },
+      {
+        element: <RequireRole roles={["student"]} />,
+        children: [
+          {
+            path: "/élève",
+            element: <StudentDashboardLayout />,
+            children: [
+              { index: true, element: <Navigate to="tableau de bord" replace /> },
+              { path: "tableau de bord", element: <StudentDashboard /> },
+              { path: "tableau de bord/:degree", element: <StudentDashboard /> },
+              { path: "emploi du temps", element: <StudentTimetable /> },
+              { path: "événements", element: <StudentEvents /> },
+              { path: "documents", element: <StudentDocuments /> },
+              { path: "devoirs", element: <StudentDevoirs /> },
+              { path: "paramètres", element: <AccountSettings /> },
+              { path: "notifications", element: <NotYet /> },
+
+              /* Tests */
+              {
+                path: "tests",
+                children: [
+                  { index: true, element: <StudentTestsList /> },
+                  { path: ":id/start", element: <StartTest /> },
+                  { path: "attempt/:id", element: <TestScreen /> },
+                  { path: "resultat/:id", element: <TestResult /> },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
 
-  // Parent (Protected)
+  /* ---------- TEACHER ---------- */
   {
-    path: "/parent",
-    element: (
-      <Guard roles={["parent"]}>
-        <ParentDashboardLayout />
-      </Guard>
-    ),
+    element: <RequireAuth />,
     children: [
-      { index: true,             element: <ParentOverview /> },
-      { path: "tableau de bord", element: <ParentDashboard /> },
-      { path: "événements",      element: <ParentEvents /> },
-      { path: "paramètres",      element: <AccountSettings /> },
-      {path: "emploi du temps",  element:<ParentTimetable/>}
+      {
+        element: <RequireRole roles={["teacher", "admin"]} />,
+        children: [
+          {
+            path: "/enseignant",
+            element: <TeacherDashboardLayout />,
+            children: [
+              { index: true, element: <Navigate to="tableau de bord" replace /> },
+              { path: "tableau de bord", element: <TeacherDashboard /> },
+              { path: "emploi du temps", element: <TeacherTimetable /> },
+              { path: "événements", element: <TeacherEvents /> },
+              { path: "documents", element: <TeacherDocuments /> },
+              { path: "devoirs", element: <TeacherDevoirs /> },
+              { path: "paramètres", element: <AccountSettings /> },
+
+              /* Tests */
+              { path: "tests", element: <TeacherTestsList /> },
+              { path: "tests/create", element: <CreateTestForm /> },
+              { path: "tests/:id/questions", element: <AddQuestions /> },
+              { path: "tests/:id/assign", element: <AssignStudents /> },
+              { path: "tests/:id/review", element: <ReviewAndActivate /> },
+              { path: "tests/:id/results", element: <TestResults /> },
+            ],
+          },
+        ],
+      },
     ],
   },
+
+  /* ---------- ADMIN ---------- */
   {
-  path: "/boursier",
-    element: (
-      <Guard roles={["boursier"]}>
-        <BoursierDashboard />
-      </Guard>
-    ),
+    element: <RequireAuth />,
     children: [
-      { path: "tableau de bord", element: <NotYet /> },
-      { path: "paramètres",              element: <AccountSettings /> },
-      
+      {
+        element: <RequireRole roles={["admin"]} />,
+        children: [
+          {
+            path: "/admin",
+            element: <AdminDashboardLayout />,
+            children: [
+              { path: "tableau de bord", element: <AdminDashboard /> },
+              { path: "admins", element: <AdminsPage /> },
+              { path: "manage-parents", element: <ManageParents /> },
+              { path: "manage-élèves", element: <ManageStudents /> },
+              { path: "manage-enseignants", element: <ManageTeachers /> },
+              { path: "manage-boursiers", element: <ManageBoursier /> },
+              { path: "manage-timetables", element: <ManageTimetables /> },
+              { path: "manage-événements", element: <ManageEvents /> },
+              { path: "groupes", element: <ManageGroups /> },
+              { path: "plans", element: <ManageMonthlyPlans /> },
+              { path: "waiting-list", element: <ManageWaitingList /> },
+              { path: "documents", element: <AdminDocuments /> },
+              { path: "devoirs", element: <AdminDevoirs /> },
+              { path: "presences", element: <ManagePresence /> },
+              { path: "notifications", element: <SendNotification /> },
+              { path: "paramètres", element: <AccountSettings /> },
+
+              /* Tests */
+              { path: "tests", element: <AdminTestsList /> },
+              { path: "tests/:id", element: <AdminTestDetails /> },
+            ],
+          },
+        ],
+      },
     ],
-},
+  },
+
+  /* ---------- PARENT ---------- */
+  {
+    element: <RequireAuth />,
+    children: [
+      {
+        element: <RequireRole roles={["parent"]} />,
+        children: [
+          {
+            path: "/parent",
+            element: <ParentDashboardLayout />,
+            children: [
+              { index: true, element: <ParentOverview /> },
+              { path: "tableau de bord", element: <ParentDashboard /> },
+              { path: "événements", element: <ParentEvents /> },
+              { path: "emploi du temps", element: <ParentTimetable /> },
+              { path: "paramètres", element: <AccountSettings /> },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+
+  /* ---------- BOURSIER ---------- */
+  {
+    element: <RequireAuth />,
+    children: [
+      {
+        element: <RequireRole roles={["boursier"]} />,
+        children: [
+          {
+            path: "/boursier",
+            element: <BoursierDashboard />,
+            path: "parametre",
+            element:<AccountSettings/>
+          },
+        ],
+      },
+    ],
+  },
 ]);
 
 export default router;
