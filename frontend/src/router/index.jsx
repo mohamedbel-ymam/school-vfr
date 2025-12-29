@@ -200,7 +200,7 @@ export const router = createBrowserRouter([
               { path: "manage-timetables", element: <ManageTimetables /> },
               { path: "manage-événements", element: <ManageEvents /> },
               { path: "groupes", element: <ManageGroups /> },
-              { path: "plans", element: <ManageMonthlyPlans /> },
+              { path: "plans", element: <ManageMonthlyPlans /> },                 
               { path: "waiting-list", element: <ManageWaitingList /> },
               { path: "documents", element: <AdminDocuments /> },
               { path: "devoirs", element: <AdminDevoirs /> },
