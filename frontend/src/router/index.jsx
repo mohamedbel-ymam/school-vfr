@@ -251,7 +251,7 @@ export const router = createBrowserRouter([
           {
             path: "/boursier",
             element: <BoursierDashboard />,
-            path: "parametre",
+            path: "paramètres",
             element:<AccountSettings/>
           },
         ],
