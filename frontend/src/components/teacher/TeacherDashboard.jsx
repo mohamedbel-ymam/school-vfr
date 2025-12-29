@@ -74,7 +74,9 @@ function EmptyState({ text, action }) {
 export default function TeacherDashboard() {
 
   const { user } = useAuth();
-    console.log("AUTH USER", user);
+    console.log("TEACHER DASHBOARD USER", user);
+console.log("SUBJECT OBJECT", user?.subject);
+console.log("SUBJECT ID", user?.subject_id);
 
 
   const teacherFullName =
