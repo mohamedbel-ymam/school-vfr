@@ -96,11 +96,8 @@ export const router = createBrowserRouter([
 
   /* ---------- GUEST ONLY ---------- */
   {
-    element: (
-      <GuestOnly>
-        <GuestLayout />
-      </GuestOnly>
-    ),
+    element:<GuestLayout />,
+      
     children: [
       { path: LOGIN_ROUTE, element: <Login /> },
       { path: "/waiting-list", element: <PublicWaitingList /> },
