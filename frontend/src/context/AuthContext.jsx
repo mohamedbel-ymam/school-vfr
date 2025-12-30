@@ -90,7 +90,7 @@ export function AuthProvider({ children }) {
 
   const refreshUser = async () => {
     const res = await axiosClient.get("/me");
-    const normalized = normalizeUser(res.data);
+    const normalized = normalizeUser(res.data.data);
     setUser(normalized);
     return normalized;
   };
