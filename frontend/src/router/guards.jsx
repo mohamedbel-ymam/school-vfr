@@ -1,7 +1,7 @@
 // src/router/guards.jsx
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { LOGIN_ROUTE } from "./paths.js";
+import { LOGIN_ROUTE } from "./pahts.js";
 
 /* ---------------- Helpers ---------------- */
 
