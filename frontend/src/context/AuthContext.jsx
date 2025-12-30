@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import React, {
   createContext,
   useContext,
@@ -11,7 +12,6 @@ import { axiosBase, axiosClient, ensureCsrf } from "../api/axios";
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** Normalize API user payload to always expose { role, roles[] } */
 function normalizeUser(u) {
   if (!u) return null;
 
@@ -21,12 +21,13 @@ function normalizeUser(u) {
     ? [u.role]
     : [];
 
-  const role = u.role ?? roles[0] ?? null;
-
-  return { ...u, roles, role };
+  return {
+    ...u,
+    roles,
+    role: u.role ?? roles[0] ?? null,
+  };
 }
 
-/** Tiny cookie reader (for explicit CSRF header when needed) */
 function getCookie(name) {
   const m = document.cookie.match(
     new RegExp(
@@ -42,17 +43,7 @@ function getCookie(name) {
 /* Context                                                                     */
 /* -------------------------------------------------------------------------- */
 
-const AuthContext = createContext({
-  user: null,
-  roles: [],
-  loading: true,
-  login: async () => {},
-  logout: async () => {},
-  refreshUser: async () => {},
-  hasRole: () => false,
-  anyRole: () => false,
-  setUser: () => {},
-});
+const AuthContext = createContext(null);
 
 /* -------------------------------------------------------------------------- */
 /* Provider                                                                    */
@@ -64,34 +55,16 @@ export function AuthProvider({ children }) {
   const [bootstrapped, setBootstrapped] = useState(false);
 
   /* ------------------------------------------------------------------------ */
-  /* Axios interceptors                                                        */
+  /* Axios response interceptor (NO CSRF HERE)                                 */
   /* ------------------------------------------------------------------------ */
   useEffect(() => {
-    let retrying = false;
-
     const id = axiosClient.interceptors.response.use(
       (r) => r,
-      async (error) => {
-        const status = error?.response?.status;
-        const cfg = error?.config || {};
-
-        // Retry once on CSRF expiration
-        if (status === 419 && !retrying) {
-          retrying = true;
-          try {
-            await ensureCsrf();
-            return await axiosClient.request(cfg);
-          } finally {
-            retrying = false;
-          }
-        }
-
-        // ❗ Only logout AFTER bootstrap
-        if (status === 401 && bootstrapped) {
+      (error) => {
+        if (error?.response?.status === 401 && bootstrapped) {
           setUser(null);
           window.dispatchEvent(new Event("auth:unauthorized"));
         }
-
         throw error;
       }
     );
@@ -100,18 +73,18 @@ export function AuthProvider({ children }) {
   }, [bootstrapped]);
 
   /* ------------------------------------------------------------------------ */
-  /* API helpers                                                               */
+  /* Fetch current user                                                        */
   /* ------------------------------------------------------------------------ */
 
   const refreshUser = async () => {
-    const res = await axiosClient.get("/me"); // must return FULL user
+    const res = await axiosClient.get("/me");
     const normalized = normalizeUser(res.data);
     setUser(normalized);
     return normalized;
   };
 
   /* ------------------------------------------------------------------------ */
-  /* Bootstrap auth                                                            */
+  /* Initial bootstrap                                                         */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -119,14 +92,14 @@ export function AuthProvider({ children }) {
 
     (async () => {
       try {
+        // ONLY once on load
         await ensureCsrf();
 
         const res = await axiosClient.get("/me");
-        const normalized = normalizeUser(res.data);
+        if (!alive) return;
 
-        if (alive) setUser(normalized);
+        setUser(normalizeUser(res.data));
       } catch (err) {
-        // Ignore unauthenticated user on first load
         if (err?.response?.status !== 401) {
           console.error("Auth bootstrap error:", err);
         }
@@ -145,7 +118,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   /* ------------------------------------------------------------------------ */
-  /* Auth actions                                                              */
+  /* Login                                                                     */
   /* ------------------------------------------------------------------------ */
 
   const login = async ({ email, password }) => {
@@ -157,45 +130,23 @@ export function AuthProvider({ children }) {
       "/connexion",
       { email, password },
       token
-        ? {
-            headers: {
-              "X-XSRF-TOKEN": token,
-              Accept: "application/json",
-            },
-            withCredentials: true,
-          }
-        : {
-            headers: { Accept: "application/json" },
-            withCredentials: true,
-          }
+        ? { headers: { "X-XSRF-TOKEN": token } }
+        : undefined
     );
 
-    return await refreshUser(); // subject INCLUDED
+    return refreshUser();
   };
+
+  /* ------------------------------------------------------------------------ */
+  /* Logout                                                                    */
+  /* ------------------------------------------------------------------------ */
 
   const logout = async () => {
     try {
       await ensureCsrf();
-      const token = getCookie("XSRF-TOKEN");
-
-      await axiosBase.post(
-        "/deconnexion",
-        {},
-        token
-          ? {
-              headers: {
-                "X-XSRF-TOKEN": token,
-                Accept: "application/json",
-              },
-              withCredentials: true,
-            }
-          : {
-              headers: { Accept: "application/json" },
-              withCredentials: true,
-            }
-      );
-    } catch (err) {
-      console.error("Logout error:", err);
+      await axiosBase.post("/deconnexion");
+    } catch (e) {
+      console.error("Logout error:", e);
     } finally {
       setUser(null);
     }
@@ -222,15 +173,13 @@ export function AuthProvider({ children }) {
     [user, roles, loading]
   );
 
-  /* ------------------------------------------------------------------------ */
-  /* Render                                                                    */
-  /* ------------------------------------------------------------------------ */
+  if (loading) return <div>Chargement…</div>;
 
-  if (loading) {
-    return <div>Chargement…</div>;
-  }
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
