@@ -11,7 +11,9 @@ function base() {
     import.meta.env.VITE_BACKEND_URL ||
     "";
 
-  if (raw) return raw.replace(/\/+$/, "");
+  if (raw) {
+  return raw.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+}
 
   const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
   return isLocal
@@ -24,6 +26,7 @@ const API_BASE = base();
 /* -------------------------------------------------------------------------- */
 /* Axios instances                                                            */
 /* -------------------------------------------------------------------------- */
+
 
 /**
  * axiosBase
@@ -39,6 +42,7 @@ export const axiosBase = axios.create({
     Accept: "application/json",
   },
 });
+console.log("API_BASE =", API_BASE);
 
 /**
  * axiosClient
