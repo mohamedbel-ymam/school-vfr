@@ -12,8 +12,8 @@ function base() {
     "";
 
   if (raw) {
-  return raw.replace(/\/api\/?$/, "").replace(/\/+$/, "");
-}
+    return raw.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+  }
 
   const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
   return isLocal
@@ -27,34 +27,39 @@ const API_BASE = base();
 /* Axios instances                                                            */
 /* -------------------------------------------------------------------------- */
 
-
 /**
  * axiosBase
  * - Used ONLY for:
  *   - /sanctum/csrf-cookie
- *   - public endpoints NOT under /api
+ *   - public endpoints (no auth)
  */
 export const axiosBase = axios.create({
   baseURL: API_BASE,
   withCredentials: true,
-  xsrfCookieName: "XSRF-TOKEN",      // ✅ REQUIRED
-  xsrfHeaderName: "X-XSRF-TOKEN",    // ✅ REQUIRED
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN",
   headers: {
     "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
   },
 });
 
+/**
+ * axiosClient
+ * - Used for ALL authenticated SPA routes
+ * - ⚠️ NO /api PREFIX
+ */
 export const axiosClient = axios.create({
-  baseURL: `${API_BASE}/api`,
+  baseURL: API_BASE, // ✅ FIX: removed /api
   withCredentials: true,
-  xsrfCookieName: "XSRF-TOKEN",      // ✅ REQUIRED
-  xsrfHeaderName: "X-XSRF-TOKEN",    // ✅ REQUIRED
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN",
   headers: {
     "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
   },
 });
+
 /* -------------------------------------------------------------------------- */
 /* CSRF                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -90,12 +95,12 @@ axiosClient.interceptors.response.use(
 );
 
 /* -------------------------------------------------------------------------- */
-/* Auth helpers (API ROUTES ONLY)                                              */
+/* Auth helpers (SPA ROUTES)                                                   */
 /* -------------------------------------------------------------------------- */
 
 /**
  * LOGIN
- * POST /api/connexion
+ * POST /connexion
  */
 export async function login({ email, password }) {
   await ensureCsrf();
@@ -104,7 +109,7 @@ export async function login({ email, password }) {
 
 /**
  * LOGOUT
- * POST /api/deconnexion
+ * POST /deconnexion
  */
 export async function logout() {
   return axiosClient.post("/deconnexion");
@@ -112,7 +117,7 @@ export async function logout() {
 
 /**
  * CURRENT USER
- * GET /api/me
+ * GET /me
  */
 export function me() {
   return axiosClient.get("/me");
