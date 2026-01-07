@@ -37,26 +37,24 @@ const API_BASE = base();
 export const axiosBase = axios.create({
   baseURL: API_BASE,
   withCredentials: true,
+  xsrfCookieName: "XSRF-TOKEN",      // ✅ REQUIRED
+  xsrfHeaderName: "X-XSRF-TOKEN",    // ✅ REQUIRED
   headers: {
     "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
   },
 });
-console.log("API_BASE =", API_BASE);
 
-/**
- * axiosClient
- * - Used for ALL /api/* endpoints (auth + protected)
- */
 export const axiosClient = axios.create({
   baseURL: `${API_BASE}/api`,
   withCredentials: true,
+  xsrfCookieName: "XSRF-TOKEN",      // ✅ REQUIRED
+  xsrfHeaderName: "X-XSRF-TOKEN",    // ✅ REQUIRED
   headers: {
     "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
   },
 });
-
 /* -------------------------------------------------------------------------- */
 /* CSRF                                                                       */
 /* -------------------------------------------------------------------------- */
