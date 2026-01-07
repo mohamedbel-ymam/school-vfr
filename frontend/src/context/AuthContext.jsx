@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { axiosClient, ensureCsrf } from "../api/axios";
@@ -42,8 +43,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Prevent race between bootstrap and login
+  const didLoginRef = useRef(false);
+
   /* ------------------------------------------------------------------------ */
-  /* Bootstrap auth (ONCE)                                                     */
+  /* Bootstrap auth (ONCE on app load)                                         */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -52,8 +56,14 @@ export function AuthProvider({ children }) {
     (async () => {
       try {
         await ensureCsrf();
+
+        // If user already logged in via login()
+        if (didLoginRef.current) return;
+
         const res = await axiosClient.get("/me");
-        if (alive) setUser(normalizeUser(res.data));
+        if (alive) {
+          setUser(normalizeUser(res.data.data));
+        }
       } catch {
         if (alive) setUser(null);
       } finally {
@@ -71,12 +81,17 @@ export function AuthProvider({ children }) {
   /* ------------------------------------------------------------------------ */
 
   const login = async ({ email, password }) => {
+    didLoginRef.current = true;
+
     await ensureCsrf();
     await axiosClient.post("/connexion", { email, password });
 
     const res = await axiosClient.get("/me");
-    const normalized = normalizeUser(res.data);
+    const normalized = normalizeUser(res.data.data);
+
     setUser(normalized);
+    setLoading(false);
+
     return normalized;
   };
 
@@ -84,6 +99,7 @@ export function AuthProvider({ children }) {
     try {
       await axiosClient.post("/deconnexion");
     } finally {
+      didLoginRef.current = false;
       setUser(null);
     }
   };
@@ -116,13 +132,25 @@ export function AuthProvider({ children }) {
     [user, roles, loading]
   );
 
-  if (loading) return <div>Chargement…</div>;
+  /* ------------------------------------------------------------------------ */
+  /* Render                                                                    */
+  /* ------------------------------------------------------------------------ */
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {loading ? <div>Chargement…</div> : children}
+    </AuthContext.Provider>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /* Hook                                                                        */
 /* -------------------------------------------------------------------------- */
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+  return ctx;
+};
