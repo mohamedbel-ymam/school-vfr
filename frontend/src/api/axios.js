@@ -34,7 +34,7 @@ const API_BASE = base();
  *   - public endpoints (no auth)
  */
 export const axiosBase = axios.create({
-  baseURL: `${API_BASE}/api`,
+  baseURL: API_BASE,
   withCredentials: true,
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
@@ -65,9 +65,10 @@ export const axiosClient = axios.create({
 /* -------------------------------------------------------------------------- */
 
 export async function ensureCsrf() {
-  // Sanctum SPA requirement
-  await axiosBase.get("/sanctum/csrf-cookie");
+  // 🔒 MUST use axiosBase (NO /api prefix)
+  return axiosBase.get("/sanctum/csrf-cookie");
 }
+
 
 /* -------------------------------------------------------------------------- */
 /* Response interceptor                                                       */
