@@ -34,7 +34,7 @@ const API_BASE = base();
  *   - public endpoints (no auth)
  */
 export const axiosBase = axios.create({
-  baseURL: API_BASE,
+  baseURL: `${API_BASE}/api`,
   withCredentials: true,
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
