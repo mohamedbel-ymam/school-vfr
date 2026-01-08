@@ -34,7 +34,7 @@ const API_BASE = base();
  *   - public endpoints (no auth)
  */
 export const axiosBase = axios.create({
-  baseURL: `${API_BASE}/api`,
+  baseURL: API_BASE,
   withCredentials: true,
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
@@ -50,7 +50,7 @@ export const axiosBase = axios.create({
  * - ⚠️ NO /api PREFIX
  */
 export const axiosClient = axios.create({
-  baseURL: API_BASE, // ✅ FIX: removed /api
+  baseURL: `${API_BASE}/api`, 
   withCredentials: true,
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
