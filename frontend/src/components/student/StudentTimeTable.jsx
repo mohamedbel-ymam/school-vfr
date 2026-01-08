@@ -226,7 +226,6 @@ const buildIcs = (events) => {
 /* ───────────────────────────── API helpers ───────────────────────────── */
 const STUDENT_ENDPOINT = "/eleve/emploi-du-temps";
 const PLANS_ENDPOINT = "/eleve/monthly-plans";
-const STUDENT_ME_ENDPOINTS = ["/eleve/me", "/me", "/profile", "/student/me", "/auth/me"];
 
 const fetchStudentWeek = async ({ week_start }) => {
   if (TimeTableApi?.student) return TimeTableApi.student({ week_start });
@@ -320,53 +319,48 @@ function planDegree(p) {
   return { id: null, name: null };
 }
 
-async function fetchStudentAllowedDegrees() {
-  // returns { ids: Set<string>, names: Set<string> }
+async function fetchStudentAllowedDegrees(authUser) {
   const ids = new Set();
   const names = new Set();
-  for (const url of STUDENT_ME_ENDPOINTS) {
-    try {
-      const res = await axiosClient.get(url);
-      const payload = res?.data?.data ?? res?.data ?? {};
-      const user =
-        payload?.user ??
-        payload?.student ??
-        payload;
-      // common shapes
-      const one =
-        asDegreeObj(user?.degree, user?.degree_id) ||
-        asDegreeObj(user?.classe?.degree, user?.classe?.degree_id) ||
-        asDegreeObj(user?.class?.degree, user?.class?.degree_id) ||
-        asDegreeObj(user?.current_degree, user?.current_degree_id);
 
-      if (one) {
-        if (one.id != null) ids.add(String(one.id));
-        if (one.name) names.add(_strip(one.name));
-      }
+  if (!authUser) {
+    return { ids, names };
+  }
 
-      // arrays (rare, but handle)
-      const arr =
-        user?.degrees ??
-        user?.allowed_degrees ??
-        user?.classrooms ??
-        user?.classes ??
-        [];
-      if (Array.isArray(arr)) {
-        for (const it of arr) {
-          const d = asDegreeObj(it?.degree ?? it, it?.degree_id ?? it?.id);
-          if (!d) continue;
-          if (d.id != null) ids.add(String(d.id));
-          if (d.name) names.add(_strip(d.name));
-        }
-      }
+  const user =
+    authUser.user ??
+    authUser.student ??
+    authUser;
 
-      if (ids.size || names.size) break; // good enough
-    } catch {
-      /* try next */
+  const one =
+    asDegreeObj(user?.degree, user?.degree_id) ||
+    asDegreeObj(user?.classe?.degree, user?.classe?.degree_id) ||
+    asDegreeObj(user?.class?.degree, user?.class?.degree_id) ||
+    asDegreeObj(user?.current_degree, user?.current_degree_id);
+
+  if (one) {
+    if (one.id != null) ids.add(String(one.id));
+    if (one.name) names.add(_strip(one.name));
+  }
+
+  const arr =
+    user?.degrees ??
+    user?.allowed_degrees ??
+    user?.classes ??
+    [];
+
+  if (Array.isArray(arr)) {
+    for (const it of arr) {
+      const d = asDegreeObj(it?.degree ?? it, it?.degree_id ?? it?.id);
+      if (!d) continue;
+      if (d.id != null) ids.add(String(d.id));
+      if (d.name) names.add(_strip(d.name));
     }
   }
+
   return { ids, names };
 }
+
 
 function keepByAllowed(lessonOrPlan, allowed) {
   const { ids, names } = allowed;
@@ -451,12 +445,13 @@ export default function StudentTimeTable() {
       setLoading(true);
       try {
         // Fetch: student degree(s), weekly lessons, subject catalog, monthly plans
+        const { user } = useAuth();
+
         const [allowedP, weekRes, catalogRes] = await Promise.all([
-          fetchStudentAllowedDegrees(),
+          fetchStudentAllowedDegrees(user),
           fetchStudentWeek({ week_start: mondayIso }),
           fetchSubjectCatalog(),
         ]);
-
         const catalog = catalogRes || {};
         if (mounted) setSubjectCatalog(catalog);
 

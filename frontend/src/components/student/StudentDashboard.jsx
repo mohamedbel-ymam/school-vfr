@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { axiosClient } from "../../api/axios";
 import { STUDENT_DASHBOARD_ROUTE } from "../../router/pahts.js";
 
 // Degree dashboards
@@ -183,35 +182,26 @@ export default function StudentDashboard() {
   const allowedSlug = useMemo(() => resolveDegreeSlug(user, profile) ?? null, [user, profile]);
 
   // If we don't have a slug yet, try to fetch profile ONCE
-  useEffect(() => {
-    let cancelled = false;
-    if (allowedSlug) return;
+ useEffect(() => {
+  let cancelled = false;
 
-    (async () => {
-      setPLoading(true);
-      try {
-        const tryEndpoints = ["/user", "/me", "/student/me"];
-        for (const ep of tryEndpoints) {
-          try {
-            const r = await axiosClient.get(ep);
-            const data = r?.data?.data ?? r?.data ?? null;
-            if (data) {
-              if (!cancelled) setProfile(data);
-              break;
-            }
-          } catch {
-            // keep trying
-          }
-        }
-      } finally {
-        if (!cancelled) setPLoading(false);
-      }
-    })();
+  if (allowedSlug) {
+    setPLoading(false);
+    return;
+  }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [allowedSlug]);
+  // Derive profile ONLY from already-authenticated user
+  // (AuthContext is the single source of truth)
+  if (!cancelled) {
+    setProfile((prev) => prev ?? user ?? null);
+    setPLoading(false);
+  }
+
+  return () => {
+    cancelled = true;
+  };
+}, [allowedSlug, user]);
+
 
   // Still nothing? Inform the student
   if (!allowedSlug) {
