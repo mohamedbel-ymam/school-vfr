@@ -55,7 +55,7 @@ export function AuthProvider({ children }) {
 
     (async () => {
       try {
-        await ensureCsrf();
+        
 
         // If user already logged in via login()
         if (didLoginRef.current) return;
@@ -96,13 +96,14 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    try {
-      await axiosClient.post("/deconnexion");
-    } finally {
-      didLoginRef.current = false;
-      setUser(null);
-    }
-  };
+  try {
+    await axiosClient.post("/deconnexion");
+  } finally {
+    didLoginRef.current = false;
+    setUser(null);
+    setLoading(false); // optional
+  }
+};
 
   const refreshUser = async () => {
     const res = await axiosClient.get("/me");
