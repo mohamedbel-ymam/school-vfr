@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { axiosClient } from "../api/axios";
+import { axiosClient, login as loginApi } from "../api/axios";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
@@ -79,7 +79,8 @@ export function AuthProvider({ children }) {
   const login = async ({ email, password }) => {
     didLoginRef.current = true;
 
-    await axiosClient.post("/connexion", { email, password });
+    // 🔥 MUST use axios login helper (CSRF handled there)
+    await loginApi({ email, password });
 
     const res = await axiosClient.get("/me");
     const normalized = normalizeUser(res.data.data);

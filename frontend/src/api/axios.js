@@ -25,17 +25,29 @@ function resolveBaseURL() {
 const API_BASE = resolveBaseURL();
 
 /* -------------------------------------------------------------------------- */
-/* Axios instance (Sanctum SPA – NO CSRF)                                     */
+/* Axios instance (Sanctum SPA – CSRF REQUIRED)                               */
 /* -------------------------------------------------------------------------- */
 
 export const axiosClient = axios.create({
   baseURL: `${API_BASE}/api`,
-  withCredentials: true, // 🔑 REQUIRED for Sanctum cookies
+  withCredentials: true, // 🔑 cookies for Sanctum
+  xsrfCookieName: "XSRF-TOKEN",     // 🔥 REQUIRED
+  xsrfHeaderName: "X-XSRF-TOKEN",   // 🔥 REQUIRED
   headers: {
     "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* CSRF cookie (Sanctum requirement)                                          */
+/* -------------------------------------------------------------------------- */
+
+export function getCsrfCookie() {
+  return axios.get(`${API_BASE}/sanctum/csrf-cookie`, {
+    withCredentials: true,
+  });
+}
 
 /* -------------------------------------------------------------------------- */
 /* Auth helpers                                                               */
@@ -45,7 +57,9 @@ export const axiosClient = axios.create({
  * LOGIN
  * POST /api/connexion
  */
-export function login({ email, password }) {
+export async function login({ email, password }) {
+  // 🔥 MUST be called once before login
+  await getCsrfCookie();
   return axiosClient.post("/connexion", { email, password });
 }
 
