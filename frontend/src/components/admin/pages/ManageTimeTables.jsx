@@ -1,7 +1,7 @@
 // src/components/admin/pages/ManageTimeTables.jsx
 import { useEffect, useMemo, useState } from "react";
 import TimeTableApi from "../../../services/api/admin/TimeTableApi";
-import { axiosClient, ensureCsrf } from "../../../api/axios";
+import { axiosClient } from "../../../api/axios";
 import subjectColors from "../../../config/subjectColors";
 
 /* ────────────────────────── Constants ────────────────────────── */
@@ -403,7 +403,7 @@ export default function ManageTimeTables() {
     try {
       setSaving(true);
       const payload = normalizePayload(form);
-      await ensureCsrf(); // 🔒 guarantee CSRF for POST/PUT
+       // 🔒 guarantee CSRF for POST/PUT
 
       if (editingId) {
         await TimeTableApi.update(editingId, payload);
@@ -464,7 +464,7 @@ export default function ManageTimeTables() {
     if (!l?.id) return;
     if (!confirm("Supprimer cette séance ?")) return;
     try {
-      await ensureCsrf(); // 🔒 guarantee CSRF for DELETE
+       // 🔒 guarantee CSRF for DELETE
       await TimeTableApi.remove(l.id);
       setLessons((prev) => prev.filter((x) => x.id !== l.id));
     } catch (e) {
@@ -506,7 +506,6 @@ export default function ManageTimeTables() {
       const payloads = sourceLessons
         .map((l) => buildPayloadFromLesson(l, targetWeekIso))
         .filter(Boolean);
-      await ensureCsrf();
       for (const p of payloads) {
         // utilise déjà ton endpoint existant
         await TimeTableApi.create(p);
