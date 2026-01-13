@@ -2,7 +2,7 @@
 import axios from "axios";
 
 /* -------------------------------------------------------------------------- */
-/* Base URL                                                                   */
+/* Base URL                                                                    */
 /* -------------------------------------------------------------------------- */
 
 function resolveBaseURL() {
@@ -25,23 +25,12 @@ function resolveBaseURL() {
 const API_BASE = resolveBaseURL();
 
 /* -------------------------------------------------------------------------- */
-/* Axios defaults (🔥 CRITICAL)                                                */
-/* -------------------------------------------------------------------------- */
-
-// 🔥 Force XSRF on cross-subdomain
-axios.defaults.withCredentials = true;
-axios.defaults.xsrfCookieName = "XSRF-TOKEN";
-axios.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
-
-/* -------------------------------------------------------------------------- */
-/* Axios client                                                               */
+/* Axios client (Sanctum SPA – NO CSRF)                                        */
 /* -------------------------------------------------------------------------- */
 
 export const axiosClient = axios.create({
   baseURL: `${API_BASE}/api`,
-  withCredentials: true,
-  xsrfCookieName: "XSRF-TOKEN",
-  xsrfHeaderName: "X-XSRF-TOKEN",
+  withCredentials: true, // 🔑 REQUIRED for Sanctum session cookies
   headers: {
     "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
@@ -49,31 +38,47 @@ export const axiosClient = axios.create({
 });
 
 /* -------------------------------------------------------------------------- */
-/* CSRF cookie (REQUIRED ONCE PER SESSION)                                    */
+/* Optional response interceptor                                               */
 /* -------------------------------------------------------------------------- */
 
-export async function getCsrfCookie() {
-  return axios.get(`${API_BASE}/sanctum/csrf-cookie`, {
-    withCredentials: true,
-  });
-}
+axiosClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Optional: global auth handling
+    if (error?.response?.status === 401) {
+      // not authenticated
+    }
+    if (error?.response?.status === 403) {
+      // forbidden
+    }
+    return Promise.reject(error);
+  }
+);
 
 /* -------------------------------------------------------------------------- */
 /* Auth helpers                                                               */
 /* -------------------------------------------------------------------------- */
 
-export async function login({ email, password }) {
-  // 🔥 MUST be first
-  await getCsrfCookie();
-
-  // 🔥 X-XSRF-TOKEN will now be attached
+/**
+ * LOGIN
+ * POST /api/connexion
+ */
+export function login({ email, password }) {
   return axiosClient.post("/connexion", { email, password });
 }
 
+/**
+ * LOGOUT
+ * POST /api/deconnexion
+ */
 export function logout() {
   return axiosClient.post("/deconnexion");
 }
 
+/**
+ * CURRENT USER
+ * GET /api/me
+ */
 export function me() {
   return axiosClient.get("/me");
 }
