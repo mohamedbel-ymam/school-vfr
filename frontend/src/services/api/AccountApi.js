@@ -1,8 +1,8 @@
-import { axiosClient, ensureCsrf } from "../../api/axios";
+// src/services/api/AccountApi.js
+import { axiosClient } from "../../api/axios";
 
 const AccountApi = {
   changePassword: async (data) => {
-    await ensureCsrf();
     return axiosClient.put("/me/password", data);
   },
 };
