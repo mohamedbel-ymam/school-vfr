@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { axiosClient, ensureCsrf } from "../api/axios";
+import { axiosClient } from "../api/axios";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
@@ -43,7 +43,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Prevent race between bootstrap and login
   const didLoginRef = useRef(false);
 
   /* ------------------------------------------------------------------------ */
@@ -55,9 +54,6 @@ export function AuthProvider({ children }) {
 
     (async () => {
       try {
-        
-
-        // If user already logged in via login()
         if (didLoginRef.current) return;
 
         const res = await axiosClient.get("/me");
@@ -83,7 +79,6 @@ export function AuthProvider({ children }) {
   const login = async ({ email, password }) => {
     didLoginRef.current = true;
 
-    await ensureCsrf();
     await axiosClient.post("/connexion", { email, password });
 
     const res = await axiosClient.get("/me");
@@ -96,14 +91,14 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-  try {
-    await axiosClient.post("/deconnexion");
-  } finally {
-    didLoginRef.current = false;
-    setUser(null);
-    setLoading(false); // optional
-  }
-};
+    try {
+      await axiosClient.post("/deconnexion");
+    } finally {
+      didLoginRef.current = false;
+      setUser(null);
+      setLoading(false);
+    }
+  };
 
   const refreshUser = async () => {
     const res = await axiosClient.get("/me");
