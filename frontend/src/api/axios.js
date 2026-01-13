@@ -25,14 +25,23 @@ function resolveBaseURL() {
 const API_BASE = resolveBaseURL();
 
 /* -------------------------------------------------------------------------- */
-/* Axios instance (Sanctum SPA – CSRF REQUIRED)                               */
+/* Axios defaults (🔥 CRITICAL)                                                */
+/* -------------------------------------------------------------------------- */
+
+// 🔥 Force XSRF on cross-subdomain
+axios.defaults.withCredentials = true;
+axios.defaults.xsrfCookieName = "XSRF-TOKEN";
+axios.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
+
+/* -------------------------------------------------------------------------- */
+/* Axios client                                                               */
 /* -------------------------------------------------------------------------- */
 
 export const axiosClient = axios.create({
   baseURL: `${API_BASE}/api`,
-  withCredentials: true, // 🔑 cookies for Sanctum
-  xsrfCookieName: "XSRF-TOKEN",     // 🔥 REQUIRED
-  xsrfHeaderName: "X-XSRF-TOKEN",   // 🔥 REQUIRED
+  withCredentials: true,
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN",
   headers: {
     "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
@@ -40,10 +49,10 @@ export const axiosClient = axios.create({
 });
 
 /* -------------------------------------------------------------------------- */
-/* CSRF cookie (Sanctum requirement)                                          */
+/* CSRF cookie (REQUIRED ONCE PER SESSION)                                    */
 /* -------------------------------------------------------------------------- */
 
-export function getCsrfCookie() {
+export async function getCsrfCookie() {
   return axios.get(`${API_BASE}/sanctum/csrf-cookie`, {
     withCredentials: true,
   });
@@ -53,28 +62,18 @@ export function getCsrfCookie() {
 /* Auth helpers                                                               */
 /* -------------------------------------------------------------------------- */
 
-/**
- * LOGIN
- * POST /api/connexion
- */
 export async function login({ email, password }) {
-  // 🔥 MUST be called once before login
+  // 🔥 MUST be first
   await getCsrfCookie();
+
+  // 🔥 X-XSRF-TOKEN will now be attached
   return axiosClient.post("/connexion", { email, password });
 }
 
-/**
- * LOGOUT
- * POST /api/deconnexion
- */
 export function logout() {
   return axiosClient.post("/deconnexion");
 }
 
-/**
- * CURRENT USER
- * GET /api/me
- */
 export function me() {
   return axiosClient.get("/me");
 }
