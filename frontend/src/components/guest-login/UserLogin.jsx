@@ -19,19 +19,26 @@ import { useAuth } from "../../context/AuthContext";
 import { startPathForUser } from "../../router/pahts";
 
 /* -------------------------------------------------------------------------- */
-/* Schema                                                                     */
+/* Schema: email OR phone                                                     */
 /* -------------------------------------------------------------------------- */
 const schema = z.object({
-  email: z.string().email("Email invalide"),
+  login: z
+    .string()
+    .min(3, "Email ou numéro invalide")
+    .refine(
+      (val) =>
+        /^[0-9+ ]+$/.test(val) || // phone
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), // email
+      "Email ou numéro de téléphone invalide"
+    ),
   password: z.string().min(8, "Au moins 8 caractères"),
-  remember: z.boolean().optional(),
 });
 
 /* -------------------------------------------------------------------------- */
 /* Component                                                                  */
 /* -------------------------------------------------------------------------- */
 export default function UserLogin() {
-  const { login, loading } = useAuth();
+  const { login: loginAction, loading } = useAuth();
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
@@ -40,9 +47,8 @@ export default function UserLogin() {
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
-      email: "",
+      login: "",
       password: "",
-      remember: false,
     },
     mode: "onTouched",
   });
@@ -50,16 +56,13 @@ export default function UserLogin() {
   /* ------------------------------------------------------------------------ */
   /* Submit                                                                   */
   /* ------------------------------------------------------------------------ */
-  const onSubmit = async ({ email, password }) => {
+  const onSubmit = async ({ login, password }) => {
     try {
-      const user = await login({ email, password });
-
-      // ✅ SINGLE redirect — ONLY HERE
+      const user = await loginAction({ login, password });
       navigate(startPathForUser(user), { replace: true });
     } catch (err) {
       const apiMsg =
         err?.response?.data?.message ||
-        err?.response?.data?.error ||
         "Échec de connexion. Vérifiez vos identifiants.";
       form.setError("root", { type: "server", message: apiMsg });
     }
@@ -90,7 +93,7 @@ export default function UserLogin() {
         <header className="mb-6 text-center">
           <h1 className="text-2xl font-semibold text-slate-900">Connexion</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Accédez à votre espace personnel
+            Email ou numéro de téléphone
           </p>
         </header>
 
@@ -104,20 +107,20 @@ export default function UserLogin() {
 
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                {/* Email */}
+                {/* Login */}
                 <FormField
-                  name="email"
+                  name="login"
                   control={form.control}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>Email ou téléphone</FormLabel>
                       <FormControl>
                         <div className="relative">
                           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
                           <Input
                             {...field}
-                            type="email"
                             className="pl-9"
+                            placeholder="email@exemple.com ou 06xxxxxxxx"
                             disabled={isSubmitting}
                           />
                         </div>
