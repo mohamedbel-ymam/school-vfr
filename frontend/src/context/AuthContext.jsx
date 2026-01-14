@@ -76,11 +76,11 @@ export function AuthProvider({ children }) {
   /* Actions                                                                   */
   /* ------------------------------------------------------------------------ */
 
-  const login = async ({ email, password }) => {
+  const login = async ({ login, password }) => {
     didLoginRef.current = true;
 
     // 🔥 MUST use axios login helper (CSRF handled there)
-    await loginApi({ email, password });
+    await loginApi({ login, password });
 
     const res = await axiosClient.get("/me");
     const normalized = normalizeUser(res.data.data);

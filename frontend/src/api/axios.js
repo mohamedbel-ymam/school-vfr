@@ -63,8 +63,8 @@ axiosClient.interceptors.response.use(
  * LOGIN
  * POST /api/connexion
  */
-export function login({ email, password }) {
-  return axiosClient.post("/connexion", { email, password });
+export function login({ login, password }) {
+  return axiosClient.post("/connexion", { login, password });
 }
 
 /**
