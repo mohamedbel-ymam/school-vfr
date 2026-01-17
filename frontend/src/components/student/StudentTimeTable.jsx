@@ -1,5 +1,6 @@
 // src/components/student/StudentTimeTable.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../api/axios";
 import subjectColors from "../../config/subjectColors";
