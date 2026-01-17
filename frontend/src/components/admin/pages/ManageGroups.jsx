@@ -26,7 +26,7 @@ export default function ManageGroups() {
       const [degRes, grpRes, stuRes] = await Promise.all([
         DegreeApi.list(),
         GroupApi.list(),
-        StudentApi.list({ per_page: 999 }),
+        StudentApi.list({ degree_id: selectedDegreeId })
       ]);
       setDegrees(degRes.data.data ?? degRes.data);
       setGroups(grpRes.data.data ?? grpRes.data);
@@ -218,8 +218,9 @@ export default function ManageGroups() {
             <SelectTrigger className="w-64"><SelectValue placeholder="Choisir un groupe" /></SelectTrigger>
             <SelectContent>
               {groups.map((g) => (
-                <SelectItem key={g.id} value={String(g.id)}>
-                  {g.name} — {degrees.find((d) => d.id === g.degree_id)?.name}
+                <SelectItem key={s.id} value={String(s.id)}>
+                  {s.firstname} {s.lastname}
+                  {s.groups?.length ? ` ( ${s.groups[0].name} )` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
