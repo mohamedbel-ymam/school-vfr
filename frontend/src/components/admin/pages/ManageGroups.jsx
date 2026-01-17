@@ -13,6 +13,7 @@ import StudentApi from "../../../services/api/admin/StudentApi";
 
 export default function ManageGroups() {
   const [degrees, setDegrees] = useState([]);
+  const [selectedDegreeId, setSelectedDegreeId] = useState([]);
   const [groups, setGroups] = useState([]);
   const [students, setStudents] = useState([]);
   const [open, setOpen] = useState(false);
