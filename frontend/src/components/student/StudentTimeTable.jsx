@@ -594,6 +594,11 @@ const plansFiltered = plans.filter((p) => {
       return okSubject && okPlan;
     });
   }, [lessons, subjectFilter, planFilter]);
+  console.table(plans.map(p => ({
+  id: p.id,
+  degree_id: p.degree_id,
+  degree_name: p.degree_name
+})));
 
   /* ───────────── Rendering ───────────── */
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
@@ -1064,8 +1069,3 @@ const roomAbbr = (r) => {
   if (/^S-\w+/i.test(s)) return s;
   return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
 }
-console.table(plans.map(p => ({
-  id: p.id,
-  degree_id: p.degree_id,
-  degree_name: p.degree_name
-})));
