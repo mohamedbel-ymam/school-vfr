@@ -549,25 +549,13 @@ export default function StudentTimeTable() {
 
 
       if (!mounted) return;
-      const studentDegree =
-  dominantDegreeFromLessons(weekly) ??
-  dominantDegreeFromLessons(plans);
+      const studentDegree = dominantDegreeFromLessons(weekly);
+
 
 // 5️⃣ Filter plans to student's degree
 const plansFiltered = plans.filter((p) => {
-  if (!studentDegree) return false;
-
-  // strict ID match
-  if (studentDegree.id && p.degree_id) {
-    return String(p.degree_id) === String(studentDegree.id);
-  }
-
-  // fallback name match
-  if (studentDegree.name && p.degree_name) {
-    return _strip(p.degree_name) === _strip(studentDegree.name);
-  }
-
-  return false;
+  if (!studentDegree?.id) return false;
+  return String(p.degree_id) === String(studentDegree.id);
 });
       // 6️⃣ Final merge (weekly + degree-filtered plans)
       setLessons([...weekly, ...plansFiltered]);
