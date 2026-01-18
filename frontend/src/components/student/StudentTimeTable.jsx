@@ -471,18 +471,13 @@ useEffect(() => {
   return Array.from(map.values());
 }, [lessons]);
 
-  // const shownLessons = useMemo(() => {
-  //   return lessons.filter((l) => {
-  //     const okSubject = !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
-  //     const okPlan = planFilter === "all" || String(l?.timetable_id) === String(planFilter);
-  //     return okSubject && okPlan;
-  //   });
-  // }, [lessons, subjectFilter, planFilter]);
-//   console.table(plans.map(p => ({
-//   id: p.id,
-//   degree_id: p.degree_id,
-//   degree_name: p.degree_name
-// })));
+const shownLessons = useMemo(() => {
+  return lessons.filter((l) => {
+    const okSubject =
+      !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
+    return okSubject;
+  });
+}, [lessons, subjectFilter]);
 
   /* ───────────── Rendering ───────────── */
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
@@ -528,7 +523,7 @@ useEffect(() => {
             options={[{ value: "", label: "Toutes les matières" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]}
           />
           <ViewToggle value={view} onChange={setView} />
-          <IcsButton lessons={shownLessons} weekOffset={weekOffset} />
+          {/* <IcsButton lessons={shownLessons} weekOffset={weekOffset} /> */}
           <button onClick={() => window.print()} className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60">
             Imprimer
           </button>
