@@ -380,21 +380,39 @@ function keepByAllowed(lessonOrPlan, allowed) {
   return true;
 }
 
-function dominantDegreeFrom(lessons) {
-  const count = new Map();
-  for (const l of lessons ?? []) {
-    const { id, name } = lessonDegree(l);
+function dominantDegreeFromLessons(lessons) {
+  const map = new Map();
+
+  for (const l of lessons) {
+    const id = l?.degree_id ?? l?.degree?.id;
+    const name =
+      l?.degree?.name ??
+      l?.degree_name ??
+      null;
+
     const key = id ?? (name ? `name:${_strip(name)}` : null);
     if (!key) continue;
-    count.set(key, (count.get(key) ?? 0) + 1);
+
+    map.set(key, (map.get(key) ?? 0) + 1);
   }
-  let bestKey = null, bestCount = 0;
-  for (const [k, c] of count) {
-    if (c > bestCount) { bestKey = k; bestCount = c; }
+
+  let best = null;
+  let max = 0;
+
+  for (const [k, v] of map.entries()) {
+    if (v > max) {
+      max = v;
+      best = k;
+    }
   }
-  if (!bestKey) return { ids: new Set(), names: new Set() };
-  if (bestKey.startsWith("name:")) return { ids: new Set(), names: new Set([bestKey.slice(5)]) };
-  return { ids: new Set([bestKey]), names: new Set() };
+
+  if (!best) return null;
+
+  if (best.startsWith("name:")) {
+    return { id: null, name: best.slice(5) };
+  }
+
+  return { id: best, name: null };
 }
 
 /* ────────────────────────────── Component ────────────────────────────── */
@@ -535,10 +553,27 @@ export default function StudentTimeTable() {
       });
 
       if (!mounted) return;
+      const studentDegree = dominantDegreeFromLessons(weekly);
 
+// 5️⃣ Filter plans to student's degree
+const plansFiltered = plans.filter((p) => {
+  if (!studentDegree) return false;
+
+  // ID-based match (preferred)
+  if (studentDegree.id && p.degree_id) {
+    return String(p.degree_id) === String(studentDegree.id);
+  }
+
+  // Name-based fallback
+  if (studentDegree.name && p.degree_name) {
+    return _strip(p.degree_name) === _strip(studentDegree.name);
+  }
+
+  return false;
+});
       // 4️⃣ Final merge (NO filtering here)
-      setLessons([...weekly, ...plans]);
-      setPlans(plans);
+      setLessons([...weekly, ...plansFiltered]);
+  setPlans(plansFiltered);
       setErr("");
     } catch (e) {
       console.error(e);
