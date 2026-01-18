@@ -1,6 +1,5 @@
 // src/components/student/StudentTimeTable.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "../../context/AuthContext";
 import TimeTableApi from "../../services/api/admin/TimeTableApi";
 import { axiosClient } from "../../api/axios";
 import subjectColors from "../../config/subjectColors";
@@ -401,6 +400,7 @@ function dominantDegreeFrom(lessons) {
 /* ────────────────────────────── Component ────────────────────────────── */
 export default function StudentTimeTable() {
   const [lessons, setLessons] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -538,6 +538,7 @@ export default function StudentTimeTable() {
 
       // 4️⃣ Final merge (NO filtering here)
       setLessons([...weekly, ...plans]);
+      setPlans(plans);
       setErr("");
     } catch (e) {
       console.error(e);
