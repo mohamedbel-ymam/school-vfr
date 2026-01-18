@@ -1064,3 +1064,8 @@ const roomAbbr = (r) => {
   if (/^S-\w+/i.test(s)) return s;
   return s.length > 8 ? `S-${s.replace(/\s+/g, "").slice(0, 6)}` : s;
 }
+console.table(plans.map(p => ({
+  id: p.id,
+  degree_id: p.degree_id,
+  degree_name: p.degree_name
+})));
