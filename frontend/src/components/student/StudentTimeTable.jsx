@@ -575,6 +575,15 @@ export default function StudentTimeTable() {
         <BackToThisWeekFab show={weekOffset !== 0} onClick={() => setWeekOffset(0)} />
       </div>
     );
+    const subjects = useMemo(() => {
+  const map = new Map();
+  for (const l of lessons) {
+    if (l?.subject?.id) {
+      map.set(String(l.subject.id), l.subject);
+    }
+  }
+  return Array.from(map.values());
+}, [lessons]);
 
   return (
     <div className="p-4 space-y-4">
