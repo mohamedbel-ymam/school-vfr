@@ -523,37 +523,44 @@ export default function StudentTimeTable() {
       });
 
       const plans = plansInWeek.map((p) => {
-        const subjId = p?.subject?.id ?? p?.subject_id ?? null;
-        const subjName =
-          p?.subject?.name ??
-          (subjId != null ? catalog[String(subjId)]?.name : null);
+  const subjId = p?.subject?.id ?? p?.subject_id ?? null;
+  const subjName =
+    p?.subject?.name ??
+    (subjId != null ? catalog[String(subjId)]?.name : null);
 
-        return {
-          id: p.id,
-          is_plan: true,
-          plan_date: p.plan_date,
-          subject: subjName
-            ? { id: subjId, name: subjName, key: subjId ?? slugify(subjName) }
-            : null,
+  return {
+    id: p.id,
+    is_plan: true,
+    plan_date: p.plan_date,
 
-          subject_id: subjId ?? undefined,
-          room: null,
+    degree_id: p.degree_id ?? p?.degree?.id ?? null,
+    degree_name: p?.degree?.name ?? p?.degree_name ?? null,
 
-          start_time: p.start_time ?? null,
-          end_time: p.end_time ?? null,
-          start_minutes: numOrNull(p?.start_minutes) ?? undefined,
-          end_minutes: numOrNull(p?.end_minutes) ?? undefined,
+    subject: subjName
+      ? { id: subjId, name: subjName, key: subjId ?? slugify(subjName) }
+      : null,
 
-          day_of_week: null,
-          week_start: null,
+    subject_id: subjId ?? undefined,
+    room: null,
 
-          timetable_id: p.id,
-          timetable: p.title ? { id: p.id, title: p.title } : null,
-        };
-      });
+    start_time: p.start_time ?? null,
+    end_time: p.end_time ?? null,
+    start_minutes: numOrNull(p?.start_minutes) ?? undefined,
+    end_minutes: numOrNull(p?.end_minutes) ?? undefined,
+
+    day_of_week: null,
+    week_start: null,
+
+    timetable_id: p.id,
+    timetable: p.title ? { id: p.id, title: p.title } : null,
+  };
+});
+
 
       if (!mounted) return;
-      const studentDegree = dominantDegreeFromLessons(weekly);
+      const studentDegree =
+  dominantDegreeFromLessons(weekly) ??
+  dominantDegreeFromLessons(plans);
 
 // 5️⃣ Filter plans to student's degree
 const plansFiltered = plans.filter((p) => {
@@ -571,9 +578,9 @@ const plansFiltered = plans.filter((p) => {
 
   return false;
 });
-      // 4️⃣ Final merge (NO filtering here)
+      // 6️⃣ Final merge (weekly + degree-filtered plans)
       setLessons([...weekly, ...plansFiltered]);
-  setPlans(plansFiltered);
+      setPlans(plansFiltered);
       setErr("");
     } catch (e) {
       console.error(e);
@@ -590,7 +597,7 @@ const plansFiltered = plans.filter((p) => {
   return () => {
     mounted = false;
   };
-}, [weekOffset, monthsForWeek, mondayIso, monday]);
+}, [weekOffset, mondayIso, monthsForWeek]);
     const subjects = useMemo(() => {
   const map = new Map();
   for (const l of lessons) {
