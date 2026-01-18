@@ -440,124 +440,121 @@ export default function StudentTimeTable() {
     return m1 === m2 ? [m1] : [m1, m2];
   }, [monday, sunday]);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        // Fetch: student degree(s), weekly lessons, subject catalog, monthly plans
-        const { user } = useAuth();
+ useEffect(() => {
+  let mounted = true;
 
-        const [allowedP, weekRes, catalogRes] = await Promise.all([
-          fetchStudentAllowedDegrees(user),
-          fetchStudentWeek({ week_start: mondayIso }),
-          fetchSubjectCatalog(),
-        ]);
-        const catalog = catalogRes || {};
-        if (mounted) setSubjectCatalog(catalog);
+  (async () => {
+    setLoading(true);
+    try {
+      // 1️⃣ Fetch weekly lessons + subject catalog (student already scoped by backend)
+      const [weekRes, catalogRes] = await Promise.all([
+        fetchStudentWeek({ week_start: mondayIso }),
+        fetchSubjectCatalog(),
+      ]);
 
-        const rawWeekly = unwrapLessons(weekRes);
-        const weekly = (rawWeekly ?? []).map((l) => {
-          const normalizedSubject = decorateSubjectFromRaw(l, catalog);
-          return {
-            ...l,
-            day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
-            subject: normalizedSubject,
-            subject_id: l?.subject_id ?? normalizedSubject?.id ?? l?.subject?.id ?? undefined,
-            room: l?.room ?? (l?.room_id ? null : undefined),
+      const catalog = catalogRes || {};
+      if (!mounted) return;
 
-            start_time: getStartStr(l),
-            end_time: getEndStr(l),
-            start_minutes: numOrNull(l?.start_minutes) ?? undefined,
-            end_minutes: numOrNull(l?.end_minutes) ?? undefined,
+      setSubjectCatalog(catalog);
 
-            is_plan: false,
-            plan_date: null,
-            week_start: l?.week_start ?? l?.weekStart ?? mondayIso,
-          };
-        });
+      // 2️⃣ Normalize weekly lessons
+      const rawWeekly = unwrapLessons(weekRes);
 
-        // Pull monthly plans intersecting this week
-        const planPages = await Promise.all(
-          monthsForWeek.map((month) => axiosClient.get(PLANS_ENDPOINT, { params: { month } }).catch(() => null))
-        );
-        const rawPlans = planPages.filter(Boolean).flatMap((p) => unwrapPlans(p));
-        const plansInWeek = (rawPlans ?? []).filter((p) => {
-          const d = new Date(`${p?.plan_date}T00:00:00`);
-          return !Number.isNaN(d) && inWeek(d, monday);
-        });
-        const plans = plansInWeek.map((p) => {
-          const subjId = p?.subject?.id ?? p?.subject_id ?? null;
-          const subjName = p?.subject?.name ?? (subjId != null ? catalog[String(subjId)]?.name : null);
-          const normalizedSubject = subjName
+      const weekly = (rawWeekly ?? []).map((l) => {
+        const normalizedSubject = decorateSubjectFromRaw(l, catalog);
+
+        return {
+          ...l,
+          day_of_week: normalizeDow(l?.day_of_week ?? l?.dow ?? l?.day),
+          subject: normalizedSubject,
+          subject_id:
+            l?.subject_id ??
+            normalizedSubject?.id ??
+            l?.subject?.id ??
+            undefined,
+
+          room: l?.room ?? (l?.room_id ? null : undefined),
+
+          start_time: getStartStr(l),
+          end_time: getEndStr(l),
+          start_minutes: numOrNull(l?.start_minutes) ?? undefined,
+          end_minutes: numOrNull(l?.end_minutes) ?? undefined,
+
+          is_plan: false,
+          plan_date: null,
+          week_start: l?.week_start ?? l?.weekStart ?? mondayIso,
+        };
+      });
+
+      // 3️⃣ Fetch monthly plans intersecting this week
+      const planPages = await Promise.all(
+        monthsForWeek.map((month) =>
+          axiosClient
+            .get(PLANS_ENDPOINT, { params: { month } })
+            .catch(() => null)
+        )
+      );
+
+      const rawPlans = planPages
+        .filter(Boolean)
+        .flatMap((p) => unwrapPlans(p));
+
+      const plansInWeek = (rawPlans ?? []).filter((p) => {
+        const d = new Date(`${p?.plan_date}T00:00:00`);
+        return !Number.isNaN(d) && inWeek(d, monday);
+      });
+
+      const plans = plansInWeek.map((p) => {
+        const subjId = p?.subject?.id ?? p?.subject_id ?? null;
+        const subjName =
+          p?.subject?.name ??
+          (subjId != null ? catalog[String(subjId)]?.name : null);
+
+        return {
+          id: p.id,
+          is_plan: true,
+          plan_date: p.plan_date,
+          subject: subjName
             ? { id: subjId, name: subjName, key: subjId ?? slugify(subjName) }
-            : p?.subject
-            ? { id: p.subject.id ?? null, name: p.subject.name ?? "Matière", key: p.subject.key ?? p.subject.id }
-            : null;
-          return {
-            id: p.id,
-            is_plan: true,
-            plan_date: p.plan_date,
-            subject: normalizedSubject,
-            subject_id: subjId ?? undefined,
-            room: null,
-            start_time: p.start_time ?? null,
-            end_time: p.end_time ?? null,
-            start_minutes: numOrNull(p?.start_minutes) ?? undefined,
-            end_minutes: numOrNull(p?.end_minutes) ?? undefined,
-            day_of_week: null,
-            week_start: null,
-            timetable_id: p.id,
-            timetable: p.title ? { id: p.id, title: p.title } : null,
-            degree_id: p.degree_id ?? p?.degree?.id ?? null,
-            degree_name: p?.degree?.name ?? p?.degree_name ?? null,
-          };
-        });
+            : null,
 
-        // Degree guard
-        let allowed = allowedP;
-        if (!allowed.ids.size && !allowed.names.size) {
-          // Fallback: use dominant degree from weekly lessons
-          allowed = dominantDegreeFrom(weekly);
-        }
-        const weeklyFiltered = weekly.filter((l) => keepByAllowed(l, allowed));
-        const plansFiltered = plans.filter((p) => keepByAllowed(p, allowed));
+          subject_id: subjId ?? undefined,
+          room: null,
 
-        if (!mounted) return;
-        setLessons([...weeklyFiltered, ...plansFiltered]);
-        setErr("");
-      } catch (e) {
-        console.error(e);
-        if (!mounted) return;
-        setErr(e?.response?.data?.message || "Échec du chargement de l’emploi du temps");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [weekOffset, monthsForWeek, mondayIso, monday]);
+          start_time: p.start_time ?? null,
+          end_time: p.end_time ?? null,
+          start_minutes: numOrNull(p?.start_minutes) ?? undefined,
+          end_minutes: numOrNull(p?.end_minutes) ?? undefined,
 
-  /* ───────────── Filters (subject / plan) ───────────── */
-  const subjects = useMemo(() => {
-    const s = new Map();
-    for (const l of lessons) {
-      const key = subjectKey(l);
-      const name = l?.subject?.name ?? l?.subject_name ?? "Matière";
-      s.set(String(key), name);
+          day_of_week: null,
+          week_start: null,
+
+          timetable_id: p.id,
+          timetable: p.title ? { id: p.id, title: p.title } : null,
+        };
+      });
+
+      if (!mounted) return;
+
+      // 4️⃣ Final merge (NO filtering here)
+      setLessons([...weekly, ...plans]);
+      setErr("");
+    } catch (e) {
+      console.error(e);
+      if (!mounted) return;
+      setErr(
+        e?.response?.data?.message ||
+          "Échec du chargement de l’emploi du temps"
+      );
+    } finally {
+      if (mounted) setLoading(false);
     }
-    return [...s.entries()].map(([id, name]) => ({ id, name }));
-  }, [lessons]);
+  })();
 
-  const plans = useMemo(() => {
-    const p = new Map();
-    for (const l of lessons) {
-      const pid = l?.timetable_id;
-      if (pid != null) p.set(String(pid), l?.timetable?.title ?? `Plan #${pid}`);
-    }
-    return [...p.entries()].map(([id, name]) => ({ id, name }));
-  }, [lessons]);
+  return () => {
+    mounted = false;
+  };
+}, [weekOffset, monthsForWeek, mondayIso, monday]);
 
   const shownLessons = useMemo(() => {
     return lessons.filter((l) => {
