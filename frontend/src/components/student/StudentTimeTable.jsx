@@ -201,6 +201,48 @@ const resolveStartEndMins = (row) => {
   return null;
 };
 
+async function fetchStudentAllowedDegrees(authUser) {
+  const ids = new Set();
+  const names = new Set();
+
+  if (!authUser) {
+    return { ids, names };
+  }
+
+  const user =
+    authUser.user ??
+    authUser.student ??
+    authUser;
+
+  const one =
+    asDegreeObj(user?.degree, user?.degree_id) ||
+    asDegreeObj(user?.classe?.degree, user?.classe?.degree_id) ||
+    asDegreeObj(user?.class?.degree, user?.class?.degree_id) ||
+    asDegreeObj(user?.current_degree, user?.current_degree_id);
+
+  if (one) {
+    if (one.id != null) ids.add(String(one.id));
+    if (one.name) names.add(_strip(one.name));
+  }
+
+  const arr =
+    user?.degrees ??
+    user?.allowed_degrees ??
+    user?.classes ??
+    [];
+
+  if (Array.isArray(arr)) {
+    for (const it of arr) {
+      const d = asDegreeObj(it?.degree ?? it, it?.degree_id ?? it?.id);
+      if (!d) continue;
+      if (d.id != null) ids.add(String(d.id));
+      if (d.name) names.add(_strip(d.name));
+    }
+  }
+
+  return { ids, names };
+}
+
 /* ───────────────────────────── ICS helpers ───────────────────────────── */
 const toIcsDate = (d) =>
   `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}00Z`;
@@ -233,44 +275,25 @@ const fetchStudentWeek = async ({ week_start }) => {
 };
 
 /* Subject catalog (robust fallback when API returns only subject_id) */
-const SUBJECT_ENDPOINT_CANDIDATES = ["/admin/subjects", "/eleve/subjects", "/subjects"];
-async function fetchSubjectCatalog() {
-  for (const url of SUBJECT_ENDPOINT_CANDIDATES) {
-    try {
-      const res = await axiosClient.get(url, { params: { per_page: 1000 } });
-      const arr = res?.data?.data ?? res?.data ?? [];
-      if (Array.isArray(arr) && arr.length) {
-        const m = {};
-        for (const it of arr) {
-          const id = String(it?.id ?? it?.value ?? "");
-          const name = it?.name ?? it?.title ?? it?.label ?? (id ? `#${id}` : "Matière");
-          const key = it?.key ?? it?.code ?? undefined;
-          if (id) m[id] = { name, key };
-        }
-        return m;
-      }
-    } catch {
-      /* try next */
-    }
-  }
-  return {};
-}
 
-function decorateSubjectFromRaw(l, catalog) {
-  const subjId = l?.subject?.id ?? l?.subject_id ?? null;
-  const subjNameRaw = l?.subject?.name ?? l?.subject_name ?? null;
-  const subjKey = l?.subject?.key ?? l?.subject_key ?? null;
-  if (subjNameRaw) {
-    return { id: subjId ?? null, name: subjNameRaw, key: subjKey ?? subjId ?? slugify(subjNameRaw) };
-  }
-  if (subjId != null && catalog && catalog[String(subjId)]) {
-    const c = catalog[String(subjId)];
-    return { id: subjId, name: c.name, key: c.key ?? subjId };
-  }
-  if (subjId != null) return { id: subjId, name: `Matière #${subjId}`, key: subjId };
-  return { id: null, name: "Matière", key: slugify("Matière") };
-}
 
+function decorateSubjectFromRaw(l) {
+  const name =
+    l?.subject?.name ??
+    l?.subject_name ??
+    "Matière";
+
+  const id =
+    l?.subject?.id ??
+    l?.subject_id ??
+    slugify(name);
+
+  return {
+    id,
+    name,
+    key: id,
+  };
+}
 /* ───────────────────── Degree extraction & guard ───────────────────── */
 const firstTruthy = (...a) => a.find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
 
@@ -319,100 +342,73 @@ function planDegree(p) {
   return { id: null, name: null };
 }
 
-async function fetchStudentAllowedDegrees(authUser) {
-  const ids = new Set();
-  const names = new Set();
-
-  if (!authUser) {
-    return { ids, names };
-  }
-
-  const user =
-    authUser.user ??
-    authUser.student ??
-    authUser;
-
-  const one =
-    asDegreeObj(user?.degree, user?.degree_id) ||
-    asDegreeObj(user?.classe?.degree, user?.classe?.degree_id) ||
-    asDegreeObj(user?.class?.degree, user?.class?.degree_id) ||
-    asDegreeObj(user?.current_degree, user?.current_degree_id);
-
-  if (one) {
-    if (one.id != null) ids.add(String(one.id));
-    if (one.name) names.add(_strip(one.name));
-  }
-
-  const arr =
-    user?.degrees ??
-    user?.allowed_degrees ??
-    user?.classes ??
-    [];
-
-  if (Array.isArray(arr)) {
-    for (const it of arr) {
-      const d = asDegreeObj(it?.degree ?? it, it?.degree_id ?? it?.id);
-      if (!d) continue;
-      if (d.id != null) ids.add(String(d.id));
-      if (d.name) names.add(_strip(d.name));
-    }
-  }
-
-  return { ids, names };
-}
 
 
-function keepByAllowed(lessonOrPlan, allowed) {
-  const { ids, names } = allowed;
-  const { id, name } = ("plan_date" in lessonOrPlan) ? planDegree(lessonOrPlan) : lessonDegree(lessonOrPlan);
 
-  if (ids.size) {
-    if (id != null) return ids.has(String(id));
-    // if ids are known but lesson has no id, reject to be safe
-    return false;
-  }
-  if (names.size) {
-    if (name) return names.has(_strip(name));
-    // if names are known but lesson has no name, reject to be safe
-    return false;
-  }
-  // no allowed info known → don't filter (fallback)
-  return true;
-}
+// function keepByAllowed(lessonOrPlan, allowed) {
+//   const { ids, names } = allowed;
+//   const { id, name } = ("plan_date" in lessonOrPlan) ? planDegree(lessonOrPlan) : lessonDegree(lessonOrPlan);
+
+//   if (ids.size) {
+//     if (id != null) return ids.has(String(id));
+//     // if ids are known but lesson has no id, reject to be safe
+//     return false;
+//   }
+//   if (names.size) {
+//     if (name) return names.has(_strip(name));
+//     // if names are known but lesson has no name, reject to be safe
+//     return false;
+//   }
+//   // no allowed info known → don't filter (fallback)
+//   return true;
+// }
 
 function dominantDegreeFromLessons(lessons) {
   const map = new Map();
 
-  for (const l of lessons) {
-    const id = l?.degree_id ?? l?.degree?.id;
+  for (const l of lessons ?? []) {
+    const id =
+      l?.degree_id ??
+      l?.degree?.id ??
+      null;
+
     const name =
       l?.degree?.name ??
       l?.degree_name ??
       null;
 
-    const key = id ?? (name ? `name:${_strip(name)}` : null);
-    if (!key) continue;
+    const key =
+      id != null
+        ? `id:${String(id)}`
+        : name
+        ? `name:${_strip(String(name))}`
+        : null;
 
+    if (!key) continue;
     map.set(key, (map.get(key) ?? 0) + 1);
   }
 
-  let best = null;
+  let bestKey = null;
   let max = 0;
 
   for (const [k, v] of map.entries()) {
     if (v > max) {
       max = v;
-      best = k;
+      bestKey = k;
     }
   }
 
-  if (!best) return null;
+  if (!bestKey) return null;
 
-  if (best.startsWith("name:")) {
-    return { id: null, name: best.slice(5) };
+  if (bestKey.startsWith("id:")) {
+    return { id: bestKey.slice(3), name: null };
   }
 
-  return { id: best, name: null };
+  if (bestKey.startsWith("name:")) {
+    return { id: null, name: bestKey.slice(5) };
+  }
+
+  return null;
 }
 
 /* ────────────────────────────── Component ────────────────────────────── */
@@ -422,7 +418,7 @@ export default function StudentTimeTable() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const [subjectCatalog, setSubjectCatalog] = useState({});
+
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState(() =>
@@ -465,21 +461,15 @@ export default function StudentTimeTable() {
     setLoading(true);
     try {
       // 1️⃣ Fetch weekly lessons + subject catalog (student already scoped by backend)
-      const [weekRes, catalogRes] = await Promise.all([
-        fetchStudentWeek({ week_start: mondayIso }),
-        fetchSubjectCatalog(),
-      ]);
+      const weekRes = await fetchStudentWeek({ week_start: mondayIso });
 
-      const catalog = catalogRes || {};
-      if (!mounted) return;
-
-      setSubjectCatalog(catalog);
+      
 
       // 2️⃣ Normalize weekly lessons
       const rawWeekly = unwrapLessons(weekRes);
 
       const weekly = (rawWeekly ?? []).map((l) => {
-        const normalizedSubject = decorateSubjectFromRaw(l, catalog);
+        const normalizedSubject = decorateSubjectFromRaw(l);
 
         return {
           ...l,
@@ -525,8 +515,9 @@ export default function StudentTimeTable() {
       const plans = plansInWeek.map((p) => {
   const subjId = p?.subject?.id ?? p?.subject_id ?? null;
   const subjName =
-    p?.subject?.name ??
-    (subjId != null ? catalog[String(subjId)]?.name : null);
+  p?.subject?.name ??
+  p?.subject_name ??
+  null;
 
   return {
     id: p.id,
@@ -566,12 +557,12 @@ export default function StudentTimeTable() {
 const plansFiltered = plans.filter((p) => {
   if (!studentDegree) return false;
 
-  // ID-based match (preferred)
+  // strict ID match
   if (studentDegree.id && p.degree_id) {
     return String(p.degree_id) === String(studentDegree.id);
   }
 
-  // Name-based fallback
+  // fallback name match
   if (studentDegree.name && p.degree_name) {
     return _strip(p.degree_name) === _strip(studentDegree.name);
   }
