@@ -363,58 +363,12 @@ function planDegree(p) {
 //   return true;
 // }
 
-function dominantDegreeFromLessons(lessons) {
-  const map = new Map();
 
-  for (const l of lessons ?? []) {
-    const id =
-      l?.degree_id ??
-      l?.degree?.id ??
-      null;
-
-    const name =
-      l?.degree?.name ??
-      l?.degree_name ??
-      null;
-
-    const key =
-      id != null
-        ? `id:${String(id)}`
-        : name
-        ? `name:${_strip(String(name))}`
-        : null;
-
-    if (!key) continue;
-    map.set(key, (map.get(key) ?? 0) + 1);
-  }
-
-  let bestKey = null;
-  let max = 0;
-
-  for (const [k, v] of map.entries()) {
-    if (v > max) {
-      max = v;
-      bestKey = k;
-    }
-  }
-
-  if (!bestKey) return null;
-
-  if (bestKey.startsWith("id:")) {
-    return { id: bestKey.slice(3), name: null };
-  }
-
-  if (bestKey.startsWith("name:")) {
-    return { id: null, name: bestKey.slice(5) };
-  }
-
-  return null;
-}
 
 /* ────────────────────────────── Component ────────────────────────────── */
 export default function StudentTimeTable() {
   const [lessons, setLessons] = useState([]);
-  const [plans, setPlans] = useState([]);
+  // const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -425,7 +379,7 @@ export default function StudentTimeTable() {
     typeof window !== "undefined" && window.innerWidth < 640 ? "agenda" : "grid"
   );
   const [subjectFilter, setSubjectFilter] = useState("");
-  const [planFilter, setPlanFilter] = useState("all");
+  // const [planFilter, setPlanFilter] = useState("all");
 
   // responsive switch
   const resizeTimer = useRef();
@@ -441,31 +395,26 @@ export default function StudentTimeTable() {
   }, []);
 
   const monday = useMemo(() => startOfWeekMonday(addDays(new Date(), weekOffset * 7)), [weekOffset]);
-  const sunday = useMemo(() => addDays(monday, 6), [monday]);
+  // const sunday = useMemo(() => addDays(monday, 6), [monday]);
   const mondayIso = useMemo(() => {
     const y = monday.getFullYear();
     const m = pad2(monday.getMonth() + 1);
     const d = pad2(monday.getDate());
     return `${y}-${m}-${d}`;
   }, [monday]);
-  const monthsForWeek = useMemo(() => {
-    const m1 = `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}`;
-    const m2 = `${sunday.getFullYear()}-${pad2(sunday.getMonth() + 1)}`;
-    return m1 === m2 ? [m1] : [m1, m2];
-  }, [monday, sunday]);
+  // const monthsForWeek = useMemo(() => {
+  //   const m1 = `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}`;
+  //   const m2 = `${sunday.getFullYear()}-${pad2(sunday.getMonth() + 1)}`;
+  //   return m1 === m2 ? [m1] : [m1, m2];
+  // }, [monday, sunday]);
 
- useEffect(() => {
+useEffect(() => {
   let mounted = true;
 
   (async () => {
     setLoading(true);
     try {
-      // 1️⃣ Fetch weekly lessons + subject catalog (student already scoped by backend)
       const weekRes = await fetchStudentWeek({ week_start: mondayIso });
-
-      
-
-      // 2️⃣ Normalize weekly lessons
       const rawWeekly = unwrapLessons(weekRes);
 
       const weekly = (rawWeekly ?? []).map((l) => {
@@ -494,80 +443,14 @@ export default function StudentTimeTable() {
         };
       });
 
-      // 3️⃣ Fetch monthly plans intersecting this week
-      const planPages = await Promise.all(
-        monthsForWeek.map((month) =>
-          axiosClient
-            .get(PLANS_ENDPOINT, { params: { month } })
-            .catch(() => null)
-        )
-      );
-
-      const rawPlans = planPages
-        .filter(Boolean)
-        .flatMap((p) => unwrapPlans(p));
-
-      const plansInWeek = (rawPlans ?? []).filter((p) => {
-        const d = new Date(`${p?.plan_date}T00:00:00`);
-        return !Number.isNaN(d) && inWeek(d, monday);
-      });
-
-      const plans = plansInWeek.map((p) => {
-  const subjId = p?.subject?.id ?? p?.subject_id ?? null;
-  const subjName =
-  p?.subject?.name ??
-  p?.subject_name ??
-  null;
-
-  return {
-    id: p.id,
-    is_plan: true,
-    plan_date: p.plan_date,
-
-    degree_id: p.degree_id ?? p?.degree?.id ?? null,
-    degree_name: p?.degree?.name ?? p?.degree_name ?? null,
-
-    subject: subjName
-      ? { id: subjId, name: subjName, key: subjId ?? slugify(subjName) }
-      : null,
-
-    subject_id: subjId ?? undefined,
-    room: null,
-
-    start_time: p.start_time ?? null,
-    end_time: p.end_time ?? null,
-    start_minutes: numOrNull(p?.start_minutes) ?? undefined,
-    end_minutes: numOrNull(p?.end_minutes) ?? undefined,
-
-    day_of_week: null,
-    week_start: null,
-
-    timetable_id: p.id,
-    timetable: p.title ? { id: p.id, title: p.title } : null,
-  };
-});
-
-
       if (!mounted) return;
-      const studentDegree = dominantDegreeFromLessons(weekly);
 
-
-// 5️⃣ Filter plans to student's degree
-const plansFiltered = plans.filter((p) => {
-  if (!studentDegree?.id) return false;
-  return String(p.degree_id) === String(studentDegree.id);
-});
-      // 6️⃣ Final merge (weekly + degree-filtered plans)
-      setLessons([...weekly, ...plansFiltered]);
-      setPlans(plansFiltered);
+      setLessons(weekly);
       setErr("");
     } catch (e) {
       console.error(e);
       if (!mounted) return;
-      setErr(
-        e?.response?.data?.message ||
-          "Échec du chargement de l’emploi du temps"
-      );
+      setErr(e?.response?.data?.message || "Échec du chargement de l’emploi du temps");
     } finally {
       if (mounted) setLoading(false);
     }
@@ -576,7 +459,8 @@ const plansFiltered = plans.filter((p) => {
   return () => {
     mounted = false;
   };
-}, [weekOffset, mondayIso, monthsForWeek]);
+}, [mondayIso]);
+
     const subjects = useMemo(() => {
   const map = new Map();
   for (const l of lessons) {
@@ -587,13 +471,13 @@ const plansFiltered = plans.filter((p) => {
   return Array.from(map.values());
 }, [lessons]);
 
-  const shownLessons = useMemo(() => {
-    return lessons.filter((l) => {
-      const okSubject = !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
-      const okPlan = planFilter === "all" || String(l?.timetable_id) === String(planFilter);
-      return okSubject && okPlan;
-    });
-  }, [lessons, subjectFilter, planFilter]);
+  // const shownLessons = useMemo(() => {
+  //   return lessons.filter((l) => {
+  //     const okSubject = !subjectFilter || String(subjectKey(l)) === String(subjectFilter);
+  //     const okPlan = planFilter === "all" || String(l?.timetable_id) === String(planFilter);
+  //     return okSubject && okPlan;
+  //   });
+  // }, [lessons, subjectFilter, planFilter]);
   console.table(plans.map(p => ({
   id: p.id,
   degree_id: p.degree_id,
@@ -631,13 +515,13 @@ const plansFiltered = plans.filter((p) => {
               Cette semaine
             </button>
           )}
-          {plans.length > 0 && (
+          {/* {plans.length > 0 && (
             <Select
               value={planFilter}
               onChange={setPlanFilter}
               options={[{ value: "all", label: "Tous les plans" }, ...plans.map((p) => ({ value: p.id, label: p.name }))]}
             />
-          )}
+          )} */}
           <Select
             value={subjectFilter}
             onChange={setSubjectFilter}
