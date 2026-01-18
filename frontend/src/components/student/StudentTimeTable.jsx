@@ -79,7 +79,7 @@ const unwrapLessons = (r) =>
   r?.data?.lessons ??
   (Array.isArray(r?.data?.data) ? r.data.data : r?.data ?? []);
 
-const unwrapPlans = (r) => r?.data?.data ?? r?.data ?? [];
+// const unwrapPlans = (r) => r?.data?.data ?? r?.data ?? [];
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -478,11 +478,11 @@ useEffect(() => {
   //     return okSubject && okPlan;
   //   });
   // }, [lessons, subjectFilter, planFilter]);
-  console.table(plans.map(p => ({
-  id: p.id,
-  degree_id: p.degree_id,
-  degree_name: p.degree_name
-})));
+//   console.table(plans.map(p => ({
+//   id: p.id,
+//   degree_id: p.degree_id,
+//   degree_name: p.degree_name
+// })));
 
   /* ───────────── Rendering ───────────── */
   if (loading) return <div className="p-4 text-center">Chargement…</div>;
