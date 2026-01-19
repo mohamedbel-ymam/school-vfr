@@ -14,18 +14,15 @@ import { axiosClient, login as loginApi } from "../api/axios";
 function normalizeUser(u) {
   if (!u) return null;
 
-  const roles = Array.isArray(u.roles)
-    ? u.roles
-    : u.role
-    ? [u.role]
-    : [];
+  const roles = Array.isArray(u.roles) ? u.roles : [];
 
   return {
     ...u,
     roles,
-    role: u.role ?? roles[0] ?? null,
+    role: roles[0] ?? null, // ✅ ALWAYS from roles
   };
 }
+
 
 /* -------------------------------------------------------------------------- */
 /* Context                                                                     */
@@ -72,21 +69,19 @@ export function AuthProvider({ children }) {
   /* Actions                                                                   */
   /* ------------------------------------------------------------------------ */
 
-const login = async ({ login, password }) => {
-  console.log("LOGIN START");
+  const login = async ({ login, password }) => {
+    // 1️⃣ Authenticate (session cookie)
+    await loginApi({ login, password });
 
-  const resLogin = await loginApi({ login, password });
-  console.log("LOGIN RESPONSE", resLogin.status);
+    // 2️⃣ Fetch authenticated user
+    const res = await axiosClient.get("/me");
+    const normalized = normalizeUser(res.data.data);
 
-  const resMe = await axiosClient.get("/me");
-  console.log("ME RESPONSE RAW", resMe.data);
+    // 3️⃣ Store user
+    setUser(normalized);
 
-  const normalized = normalizeUser(resMe.data.data);
-  console.log("ME NORMALIZED", normalized);
-
-  setUser(normalized);
-  return normalized;
-};
+    return normalized;
+  };
 
   const logout = async () => {
     try {
