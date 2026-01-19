@@ -7,7 +7,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { axiosClient, login as loginApi } from "../api/axios";
+import { axiosClient, login as apiLogin, me as apiMe } from "../api/axios";
+
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
@@ -76,21 +77,22 @@ export function AuthProvider({ children }) {
   /* Actions                                                                   */
   /* ------------------------------------------------------------------------ */
 
-  const login = async ({ login, password }) => {
-    didLoginRef.current = true;
+const login = async ({ login, password }) => {
+  // 1️⃣ authenticate (session cookie)
+  await apiLogin({ login, password });
 
-    // 🔥 MUST use axios login helper (CSRF handled there)
-    await loginApi({ login, password });
+  // 2️⃣ bootstrap user (THIS WAS MISSING)
+  const res = await apiMe();
 
-    const res = await axiosClient.get("/me");
-    const normalized = normalizeUser(res.data.data);
+  const user = res.data.data ?? res.data;
 
-    setUser(normalized);
-    setLoading(false);
+  // 3️⃣ update auth state
+  setUser(user);
+  setAuthenticated(true);
 
-    return normalized;
-  };
-
+  // 4️⃣ return FULL user to caller
+  return user;
+};
   const logout = async () => {
     try {
       await axiosClient.post("/deconnexion");
