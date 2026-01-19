@@ -1,14 +1,11 @@
-// src/context/AuthContext.jsx
-import React, {
+import {
   createContext,
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import { axiosClient, login as apiLogin, me as apiMe } from "../api/axios";
-
+import { axiosClient, login as loginApi } from "../api/axios";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
@@ -44,29 +41,27 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const didLoginRef = useRef(false);
-
   /* ------------------------------------------------------------------------ */
-  /* Bootstrap auth (ONCE on app load)                                         */
+  /* Bootstrap auth (RUN ONCE ON APP LOAD)                                     */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
     let alive = true;
 
-    (async () => {
-      try {
-        if (didLoginRef.current) return;
-
-        const res = await axiosClient.get("/me");
-        if (alive) {
-          setUser(normalizeUser(res.data.data));
-        }
-      } catch {
-        if (alive) setUser(null);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+    axiosClient
+      .get("/me")
+      .then((res) => {
+        if (!alive) return;
+        setUser(normalizeUser(res.data.data));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setUser(null);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+      });
 
     return () => {
       alive = false;
@@ -77,29 +72,25 @@ export function AuthProvider({ children }) {
   /* Actions                                                                   */
   /* ------------------------------------------------------------------------ */
 
-const login = async ({ login, password }) => {
-  // 1️⃣ authenticate (session cookie)
-  await apiLogin({ login, password });
+  const login = async ({ login, password }) => {
+    // 1️⃣ Authenticate (session cookie)
+    await loginApi({ login, password });
 
-  // 2️⃣ bootstrap user (THIS WAS MISSING)
-  const res = await apiMe();
+    // 2️⃣ Fetch authenticated user
+    const res = await axiosClient.get("/me");
+    const normalized = normalizeUser(res.data.data);
 
-  const user = res.data.data ?? res.data;
+    // 3️⃣ Store user
+    setUser(normalized);
 
-  // 3️⃣ update auth state
-  setUser(user);
-  setAuthenticated(true);
+    return normalized;
+  };
 
-  // 4️⃣ return FULL user to caller
-  return user;
-};
   const logout = async () => {
     try {
       await axiosClient.post("/deconnexion");
     } finally {
-      didLoginRef.current = false;
       setUser(null);
-      setLoading(false);
     }
   };
 
@@ -124,7 +115,7 @@ const login = async ({ login, password }) => {
       login,
       logout,
       refreshUser,
-      hasRole: (r) => roles.includes(r),
+      hasRole: (role) => roles.includes(role),
       anyRole: (arr = []) => arr.some((r) => roles.includes(r)),
       setUser,
     }),

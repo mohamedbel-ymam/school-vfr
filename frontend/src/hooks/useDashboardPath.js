@@ -1,4 +1,4 @@
-import { useUserContext } from "./context/UserContext";
+import { useUserContext } from "../context/UserContext";
 
 export default function useDashboardPath() {
   const { user } = useUserContext();
