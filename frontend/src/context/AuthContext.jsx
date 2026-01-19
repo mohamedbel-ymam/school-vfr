@@ -72,19 +72,21 @@ export function AuthProvider({ children }) {
   /* Actions                                                                   */
   /* ------------------------------------------------------------------------ */
 
-  const login = async ({ login, password }) => {
-    // 1️⃣ Authenticate (session cookie)
-    await loginApi({ login, password });
+const login = async ({ login, password }) => {
+  console.log("LOGIN START");
 
-    // 2️⃣ Fetch authenticated user
-    const res = await axiosClient.get("/me");
-    const normalized = normalizeUser(res.data.data);
+  const resLogin = await loginApi({ login, password });
+  console.log("LOGIN RESPONSE", resLogin.status);
 
-    // 3️⃣ Store user
-    setUser(normalized);
+  const resMe = await axiosClient.get("/me");
+  console.log("ME RESPONSE RAW", resMe.data);
 
-    return normalized;
-  };
+  const normalized = normalizeUser(resMe.data.data);
+  console.log("ME NORMALIZED", normalized);
+
+  setUser(normalized);
+  return normalized;
+};
 
   const logout = async () => {
     try {
