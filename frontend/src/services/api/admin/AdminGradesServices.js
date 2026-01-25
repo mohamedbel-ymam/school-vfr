@@ -1,4 +1,4 @@
-import axiosClient from "../../../api/axios";
+import {axiosClient} from "../../../api/axios";
 
 export const adminDegreesApi = {
   list: () => axiosClient.get("/api/admin/degrees"),
