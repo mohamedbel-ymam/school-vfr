@@ -70,9 +70,9 @@ export default function Bac1SEDashboard() {
 
   // optional extra cards
   const stats = useMemo(() => ([
-    { title: "Séances du jour", value: 5 },
+    { title: "Séances du jour", value: 1},
     { title: "Présences (période)", value: att.p },
-    { title: "Nouveaux messages", value: 1 },
+    { title: "Nouveaux messages", value: 0 },
   ]), [att.p]);
 
   const shortcuts = [

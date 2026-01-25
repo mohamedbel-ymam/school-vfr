@@ -47,6 +47,7 @@ export default function College3emeDashboard() {
 
   // fetch full year (overall) once
   const fetchYear = async () => {
+    
     try {
       const res = await AttendanceApi.me({ period: "overall" });
       const a = clamp(res?.attendance?.absences ?? 0);
@@ -71,9 +72,9 @@ export default function College3emeDashboard() {
 
   const stats = useMemo(
     () => [
-      { title: "Séances du jour", value: 3 },
+      { title: "Séances du jour", value: 1 },
       { title: "Présences (période)", value: att.p },
-      { title: "Nouveaux messages", value: 1 },
+      { title: "Nouveaux messages", value: 0 },
     ],
     [att.p]
   );

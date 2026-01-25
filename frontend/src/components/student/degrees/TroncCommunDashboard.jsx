@@ -71,9 +71,9 @@ export default function TroncCommunDashboard() {
 
   // optional extra cards
   const stats = useMemo(() => ([
-    { title: "Séances du jour", value: 4 },
+    { title: "Séances du jour", value: 1 },
     { title: "Présences (période)", value: att.p },
-    { title: "Messages non lus", value: 2 },
+    { title: "Messages non lus", value: 0},
   ]), [att.p]);
 
   const shortcuts = [

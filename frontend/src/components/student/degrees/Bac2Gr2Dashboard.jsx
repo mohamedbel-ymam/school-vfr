@@ -70,9 +70,9 @@ export default function Bac2Gr2Dashboard() {
   }, []);
 
   const stats = useMemo(() => ([
-    { title: "Séances du jour", value: 6 },
+    { title: "Séances du jour", value: 2 },
     { title: "Présences (période)", value: att.p },
-    { title: "Messages non lus", value: 2 },
+    { title: "Messages non lus", value: 0 },
   ]), [att.p]);
 
   const shortcuts = [

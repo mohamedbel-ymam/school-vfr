@@ -40,6 +40,7 @@ const ADMIN_MANAGE_ADMINS_ROUTE = "/admin/admins";
 const ADMIN_DEGREES_ROUTE = "/admin/degrees";
 const ADMIN_SUBJECTS_ROUTE = "/admin/subjects";
 const ADMIN_COURSES_ROUTE = "/admin/courses";
+const ADMIN_GRADES_ROUTE = "/admin/grades";
 const ADMIN_TIMETABLES_ROUTE = "/admin/manage-timetables";
 const ADMIN_EXAMS_ROUTE = "/admin/tests";
 const ADMIN_MESSAGES_ROUTE = "/admin/messages";
@@ -81,10 +82,12 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
       items: [
         { label: "Niveaux", to: ADMIN_DEGREES_ROUTE, icon: GraduationCap },
         { label: "Groupes", to: ADMIN_MANAGE_GROUPS_ROUTE, icon: Users2 },
-        { label: "Devoirs", to: ADMIN_DOCUMENTS_HOMEWORK, icon: BookOpen },
+        { label: "Devoirs", to: ADMIN_DOCUMENTS_HOMEWORK, icon: BookOpen },       
         { label: "Cours", to: ADMIN_COURSES_ROUTE, icon: BookOpen },
         { label: "Emplois du temps", to: ADMIN_TIMETABLES_ROUTE, icon: CalendarDays },
         { label: "Examens", to: ADMIN_EXAMS_ROUTE, icon: ClipboardList },
+        { label: "Notes", to: ADMIN_GRADES_ROUTE, icon: BookOpen },
+
       ],
     },
     {
