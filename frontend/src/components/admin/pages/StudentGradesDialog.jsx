@@ -1,43 +1,83 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import axiosClient from "../../../api/axios";
 import { adminGradesApi } from "../../../services/api/admin/AdminGradesServices";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+import { Textarea } from "../../../components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
+
+function fullName(u) {
+  const f = u?.firstname ?? "";
+  const l = u?.lastname ?? "";
+  return `${f} ${l}`.trim() || `#${u?.id}`;
+}
 
 export default function StudentGradesDialog({ student, open, onOpenChange }) {
   const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // simple form state (you can swap to react-hook-form + zod later)
+  const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [loadingMeta, setLoadingMeta] = useState(false);
+
+  // Form
   const [form, setForm] = useState({
     subject_id: "",
     teacher_id: "",
-    term: "S1",
-    exam_type: "Exam",
-    title: "",
     score: "",
     max_score: 20,
     graded_at: "",
     comment: "",
+    // hidden defaults (you can expose later)
+    term: "S1",
+    exam_type: "Exam",
   });
 
- const load = async () => {
-  if (!student?.id) return;
-  setLoading(true);
-  try {
-    const res = await adminGradesApi.list({ student_id: student.id });
+  const canSave = useMemo(() => {
+    return !!student?.id && !!form.subject_id && !!form.teacher_id && form.score !== "" && form.graded_at;
+  }, [student?.id, form.subject_id, form.teacher_id, form.score, form.graded_at]);
 
-    // Laravel paginator => { data: { data: [...] , links..., meta... } }
-    const items = res.data?.data?.data ?? [];
+  const loadGrades = async () => {
+    if (!student?.id) return;
+    setLoading(true);
+    try {
+      const res = await adminGradesApi.list({ student_id: student.id });
+      const items = res.data?.data?.data ?? []; // paginator
+      setGrades(items);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    setGrades(items);
-  } finally {
-    setLoading(false);
-  }
-};
+  const loadMeta = async () => {
+    setLoadingMeta(true);
+    try {
+      // subjects
+      const sRes = await axiosClient.get("/admin/subjects");
+      setSubjects(sRes.data?.data ?? sRes.data ?? []);
+
+      // teachers
+      const tRes = await axiosClient.get("/admin/users", { params: { role: "teacher" } });
+      // depending on your controller, may be paginator:
+      const tItems = tRes.data?.data?.data ?? tRes.data?.data ?? tRes.data ?? [];
+      setTeachers(tItems);
+    } finally {
+      setLoadingMeta(false);
+    }
+  };
 
   useEffect(() => {
-    if (open) load();
+    if (!open) return;
+    loadMeta();
+    loadGrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, student?.id]);
 
@@ -45,22 +85,26 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
     const payload = {
       student_id: student.id,
       subject_id: Number(form.subject_id),
-      teacher_id: form.teacher_id ? Number(form.teacher_id) : null,
+      teacher_id: Number(form.teacher_id),
       term: form.term,
       exam_type: form.exam_type,
-      title: form.title || null,
       score: Number(form.score),
       max_score: Number(form.max_score),
-      graded_at: form.graded_at || null,
+      graded_at: form.graded_at, // YYYY-MM-DD
       comment: form.comment || null,
+      title: null, // ✅ no exam name
     };
+
     await adminGradesApi.create(payload);
-    await load();
+    await loadGrades();
+
+    // reset only score/comment/date (keep subject/teacher for faster entry)
+    setForm((p) => ({ ...p, score: "", graded_at: "", comment: "" }));
   };
 
   const onDelete = async (id) => {
     await adminGradesApi.remove(id);
-    await load();
+    await loadGrades();
   };
 
   return (
@@ -68,7 +112,7 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
       <DialogContent className="max-w-4xl rounded-2xl">
         <DialogHeader>
           <DialogTitle>
-            Manage grades — <span className="font-bold">{student?.name}</span>
+            Grades — <span className="font-bold">{student?.name}</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -77,66 +121,79 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">Add grade</div>
 
-            <Input
-              placeholder="Subject ID (temporary) e.g. 3"
-              value={form.subject_id}
-              onChange={(e) => setForm((p) => ({ ...p, subject_id: e.target.value }))}
-            />
-            <Input
-              placeholder="Teacher ID (optional)"
-              value={form.teacher_id}
-              onChange={(e) => setForm((p) => ({ ...p, teacher_id: e.target.value }))}
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <Input
-                placeholder="Term (S1/S2)"
-                value={form.term}
-                onChange={(e) => setForm((p) => ({ ...p, term: e.target.value }))}
-              />
-              <Input
-                placeholder="Exam type"
-                value={form.exam_type}
-                onChange={(e) => setForm((p) => ({ ...p, exam_type: e.target.value }))}
-              />
+            <div className="grid grid-cols-1 gap-2">
+              <Select
+                value={form.subject_id}
+                onValueChange={(v) => setForm((p) => ({ ...p, subject_id: v }))}
+                disabled={loadingMeta}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Select subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={form.teacher_id}
+                onValueChange={(v) => setForm((p) => ({ ...p, teacher_id: v }))}
+                disabled={loadingMeta}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Select teacher" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teachers.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {fullName(t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <Input
-              placeholder="Title (optional)"
-              value={form.title}
-              onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-            />
-
             <div className="grid grid-cols-2 gap-2">
               <Input
+                className="rounded-xl"
                 placeholder="Score"
+                type="number"
                 value={form.score}
                 onChange={(e) => setForm((p) => ({ ...p, score: e.target.value }))}
               />
               <Input
-                placeholder="Max score"
+                className="rounded-xl"
+                placeholder="Max"
+                type="number"
                 value={form.max_score}
                 onChange={(e) => setForm((p) => ({ ...p, max_score: e.target.value }))}
               />
             </div>
 
             <Input
-              placeholder="Graded at (YYYY-MM-DD)"
+              className="rounded-xl"
+              type="date"
               value={form.graded_at}
               onChange={(e) => setForm((p) => ({ ...p, graded_at: e.target.value }))}
             />
 
-            <Input
-              placeholder="Comment (optional)"
+            <Textarea
+              className="rounded-xl"
+              placeholder="Teacher comment (optional)"
               value={form.comment}
               onChange={(e) => setForm((p) => ({ ...p, comment: e.target.value }))}
             />
 
-            <Button onClick={onCreate} disabled={!form.subject_id || form.score === ""}>
+            <Button onClick={onCreate} disabled={!canSave}>
               Save grade
             </Button>
 
             <div className="text-xs text-muted-foreground">
-              (We’ll replace Subject ID / Teacher ID by real selects next.)
+              Requires: Subject + Teacher + Score + Date
             </div>
           </div>
 
@@ -151,16 +208,14 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-auto pr-2">
                 {grades.map((g) => (
-                  <div
-                    key={g.id}
-                    className="border rounded-xl p-3 flex items-start justify-between gap-3"
-                  >
+                  <div key={g.id} className="border rounded-xl p-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-semibold truncate">
                         {g.subject?.name ?? `Subject #${g.subject_id}`} — {g.score}/{g.max_score}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {g.term} • {g.exam_type} {g.title ? `• ${g.title}` : ""} {g.graded_at ? `• ${g.graded_at}` : ""}
+                        {g.graded_at ? `${g.graded_at} • ` : ""}
+                        {g.teacher ? `${g.teacher?.firstname ?? ""} ${g.teacher?.lastname ?? ""}`.trim() : ""}
                       </div>
                       {g.comment ? <div className="text-sm mt-1">{g.comment}</div> : null}
                     </div>
