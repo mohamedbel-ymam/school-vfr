@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import axiosClient from "../../../api/axios";
+import {axiosClient} from "../../../api/axios";
 import { adminGradesApi } from "../../../services/api/admin/AdminGradesServices";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
