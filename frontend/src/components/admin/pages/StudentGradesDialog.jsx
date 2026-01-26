@@ -75,27 +75,80 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
   };
 
   useEffect(() => {
+  let mounted = true;
+
+  (async () => {
     if (!open) return;
-    loadMeta();
-    loadGrades();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, student?.id]);
+
+    try {
+      setLoadingMeta(true);
+
+      const [subRes, teacherRes] = await Promise.all([
+        axiosClient.get("/admin/subjects"),
+        axiosClient.get("/admin/users", { params: { role: "teacher" } }),
+      ]);
+
+      if (!mounted) return;
+
+      const subOpts = (subRes?.data?.data ?? subRes?.data ?? []).map((s) => ({
+        id: String(s.id),
+        label: s.name,
+      }));
+
+      const teacherItems =
+        teacherRes?.data?.data?.data ??
+        teacherRes?.data?.data ??
+        teacherRes?.data ??
+        [];
+
+      const teacherOpts = teacherItems.map((t) => ({
+        id: String(t.id),
+        label: `${t.firstname ?? ""} ${t.lastname ?? ""}`.trim() || `#${t.id}`,
+      }));
+
+      setSubjects(subOpts);
+      setTeachers(teacherOpts);
+
+      // ✅ preselect defaults (only if empty)
+      setForm((prev) => ({
+        ...prev,
+        subject_id: prev.subject_id || (subOpts[0]?.id ?? ""),
+        teacher_id: prev.teacher_id || (teacherOpts[0]?.id ?? ""),
+        max_score: prev.max_score || 20,
+        term: prev.term || "S1",
+        exam_type: prev.exam_type || "Exam",
+      }));
+    } finally {
+      if (mounted) setLoadingMeta(false);
+    }
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [open]);
+
 
   const onCreate = async () => {
     const payload = {
-      student_id: student.id,
+      student_id: Number(student.id),
       subject_id: Number(form.subject_id),
-      teacher_id: Number(form.teacher_id),
-      term: form.term,
-      exam_type: form.exam_type,
+      teacher_id: form.teacher_id ? Number(form.teacher_id) : null,
+      term: form.term || "S1",
+      exam_type: form.exam_type || "Exam",
+      title: null,
       score: Number(form.score),
       max_score: Number(form.max_score),
-      graded_at: form.graded_at, // YYYY-MM-DD
+      graded_at: form.graded_at || null,
       comment: form.comment || null,
-      title: null, // ✅ no exam name
     };
 
-    await adminGradesApi.create(payload);
+      try {
+        await adminGradesApi.create(payload);
+      } catch (e) {
+        console.log("422 details:", e?.response?.data);
+        throw e;
+      }
     await loadGrades();
 
     // reset only score/comment/date (keep subject/teacher for faster entry)
@@ -106,6 +159,7 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
     await adminGradesApi.remove(id);
     await loadGrades();
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -122,36 +176,24 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
             <div className="text-sm text-muted-foreground">Add grade</div>
 
             <div className="grid grid-cols-1 gap-2">
-              <Select
-                value={form.subject_id}
-                onValueChange={(v) => setForm((p) => ({ ...p, subject_id: v }))}
-                disabled={loadingMeta}
-              >
+              <Select value={form.subject_id} onValueChange={(v) => setForm(p => ({ ...p, subject_id: v }))}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Select subject" />
                 </SelectTrigger>
                 <SelectContent>
                   {subjects.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.name}
-                    </SelectItem>
+                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              <Select
-                value={form.teacher_id}
-                onValueChange={(v) => setForm((p) => ({ ...p, teacher_id: v }))}
-                disabled={loadingMeta}
-              >
+              <Select value={form.teacher_id} onValueChange={(v) => setForm(p => ({ ...p, teacher_id: v }))}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Select teacher" />
                 </SelectTrigger>
                 <SelectContent>
                   {teachers.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      {fullName(t)}
-                    </SelectItem>
+                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
