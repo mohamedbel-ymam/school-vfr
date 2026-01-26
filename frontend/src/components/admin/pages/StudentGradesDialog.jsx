@@ -74,18 +74,20 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
     }
   };
 
-  useEffect(() => {
+useEffect(() => {
   let mounted = true;
 
   (async () => {
-    if (!open) return;
+    if (!open || !student?.id) return;
 
     try {
       setLoadingMeta(true);
+      setLoading(true);
 
-      const [subRes, teacherRes] = await Promise.all([
+      const [subRes, teacherRes, gradesRes] = await Promise.all([
         axiosClient.get("/admin/subjects"),
         axiosClient.get("/admin/users", { params: { role: "teacher" } }),
+        adminGradesApi.list({ student_id: student.id }),
       ]);
 
       if (!mounted) return;
@@ -109,7 +111,11 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
       setSubjects(subOpts);
       setTeachers(teacherOpts);
 
-      // ✅ preselect defaults (only if empty)
+      // ✅ grades paginator
+      const items = gradesRes?.data?.data ?? [];
+      setGrades(items);
+
+      // ✅ preselect defaults
       setForm((prev) => ({
         ...prev,
         subject_id: prev.subject_id || (subOpts[0]?.id ?? ""),
@@ -119,14 +125,18 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
         exam_type: prev.exam_type || "Exam",
       }));
     } finally {
-      if (mounted) setLoadingMeta(false);
+      if (mounted) {
+        setLoadingMeta(false);
+        setLoading(false);
+      }
     }
   })();
 
   return () => {
     mounted = false;
   };
-}, [open]);
+}, [open, student?.id]);
+
 
 
   const onCreate = async () => {
@@ -166,19 +176,19 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
       <DialogContent className="max-w-4xl rounded-2xl">
         <DialogHeader>
           <DialogTitle>
-            Grades — <span className="font-bold">{student?.name}</span>
+            Notes — <span className="font-bold">{student?.name}</span>
           </DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form */}
           <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">Add grade</div>
+            <div className="text-sm text-muted-foreground">Ajouter une Note</div>
 
             <div className="grid grid-cols-1 gap-2">
               <Select value={form.subject_id} onValueChange={(v) => setForm(p => ({ ...p, subject_id: v }))}>
                 <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Select subject" />
+                  <SelectValue placeholder="Selectionner une matière" />
                 </SelectTrigger>
                 <SelectContent>
                   {subjects.map((s) => (
@@ -189,7 +199,7 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
 
               <Select value={form.teacher_id} onValueChange={(v) => setForm(p => ({ ...p, teacher_id: v }))}>
                 <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Select teacher" />
+                  <SelectValue placeholder="Selectionner un enseignant" />
                 </SelectTrigger>
                 <SelectContent>
                   {teachers.map((t) => (
@@ -202,14 +212,14 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
             <div className="grid grid-cols-2 gap-2">
               <Input
                 className="rounded-xl"
-                placeholder="Score"
+                placeholder="Note"
                 type="number"
                 value={form.score}
                 onChange={(e) => setForm((p) => ({ ...p, score: e.target.value }))}
               />
               <Input
                 className="rounded-xl"
-                placeholder="Max"
+                placeholder="Barème"
                 type="number"
                 value={form.max_score}
                 onChange={(e) => setForm((p) => ({ ...p, max_score: e.target.value }))}
@@ -225,28 +235,28 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
 
             <Textarea
               className="rounded-xl"
-              placeholder="Teacher comment (optional)"
+              placeholder="Commentaire de l’enseignant (optionnel)"
               value={form.comment}
               onChange={(e) => setForm((p) => ({ ...p, comment: e.target.value }))}
             />
 
             <Button onClick={onCreate} disabled={!canSave}>
-              Save grade
+              Enregistrer
             </Button>
 
             <div className="text-xs text-muted-foreground">
-              Requires: Subject + Teacher + Score + Date
+              Requis: Matiére + Enseignant + Note + Date
             </div>
           </div>
 
           {/* List */}
           <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">Existing grades</div>
+            <div className="text-sm text-muted-foreground">Notes existantes</div>
 
             {loading ? (
-              <div className="text-sm">Loading...</div>
+              <div className="text-sm">Chargement...</div>
             ) : grades.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No grades yet.</div>
+              <div className="text-sm text-muted-foreground">Aucune note pour le moment.</div>
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-auto pr-2">
                 {grades.map((g) => (
@@ -263,7 +273,7 @@ export default function StudentGradesDialog({ student, open, onOpenChange }) {
                     </div>
 
                     <Button variant="destructive" onClick={() => onDelete(g.id)}>
-                      Delete
+                      Supprimer
                     </Button>
                   </div>
                 ))}
