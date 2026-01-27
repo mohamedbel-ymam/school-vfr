@@ -34,7 +34,7 @@ export default function TeacherGradesDialog({ student, open, onOpenChange }) {
     setLoading(true);
     try {
       const [subRes, gradeRes] = await Promise.all([
-        axiosClient.get("/admin/subjects"), // teacher needs subject list; if you have /teacher/subjects replace it
+        axiosClient.get("/enseignant/subjects"), // teacher needs subject list; if you have /teacher/subjects replace it
         teacherGradesApi.list({ student_id: student.id }),
       ]);
 
