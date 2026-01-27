@@ -1,17 +1,17 @@
 import {axiosClient} from "../../../api/axios";
 
 export const teacherDegreesApi = {
-  list: () => axiosClient.get("/admin/degrees"), 
-  // si tu as déjà /teacher/degrees mets-le ici. Sinon, admin/degrees marche seulement si autorisé.
+  // si teacher n'a pas /teacher/degrees, on utilise /admin/degrees (si autorisé)
+  list: () => axiosClient.get("/admin/degrees"),
 };
 
-export const teacherLeaderboardApi = {
+export const teacherGradesLeaderboardApi = {
   byDegree: (degreeId, params = {}) =>
     axiosClient.get(`/teacher/degrees/${degreeId}/grades-leaderboard`, { params }),
 };
 
 export const teacherGradesApi = {
-  list: (params = {}) => axiosClient.get("/teacher/grades", { params }),
+  list: (params = {}) => axiosClient.get("/teacher/grades", { params }), // paginator
   create: (payload) => axiosClient.post("/teacher/grades", payload),
   update: (id, payload) => axiosClient.put(`/teacher/grades/${id}`, payload),
 };

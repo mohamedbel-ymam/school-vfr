@@ -39,6 +39,8 @@ import TeacherTimetable from "@/components/teacher/TeacherTimeTable.jsx";
 import TeacherEvents from "@/components/teacher/TeacherEvents.jsx";
 import TeacherDocuments from "@/components/teacher/TeacherDocuments.jsx";
 import TeacherDevoirs from "@/components/teacher/TeacherDevoirs.jsx";
+import TeacherGradesDashboard from "@/components/teacher/TeacherGradesDashboard";
+import TeacherDisciplineDashboard from "@/components/teacher/TeacherDisciplineDashboard";
 
 /* Teacher tests */
 import TeacherTestsList from "@/components/teacher/tests/TeacherTestsList.jsx";
@@ -167,6 +169,8 @@ export const router = createBrowserRouter([
               { path: "tests/:id/assign", element: <AssignStudents /> },
               { path: "tests/:id/review", element: <ReviewAndActivate /> },
               { path: "tests/:id/results", element: <TestResults /> },
+              { path: "notes", element: <TeacherGradesDashboard /> },
+              { path: "discipline", element: <TeacherDisciplineDashboard /> },
             ],
           },
         ],
