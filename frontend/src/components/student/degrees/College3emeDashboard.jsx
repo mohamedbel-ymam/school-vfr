@@ -92,16 +92,15 @@ export default function College3emeDashboard() {
   const fetchGradesSummary = async () => {
     try {
       // change if your endpoint differs:
-      const res = await axiosClient.get("/eleve/grades", { params: { term, per_page: 300 } });
-      const rows = res?.data?.data?.data ?? res?.data?.data ?? [];
-      const s = computeGradesSummary(rows);
+    const res = await axiosClient.get("/eleve/grades", { params: { term } });
+    const summary = res?.data?.summary;
 
-      setGradesSummary({
-        ...s,
-        termLabel: term,
-        // optional
-        updated_at: new Date().toLocaleDateString(),
-      });
+    setGradesSummary({
+    avg_percent: summary?.avg_percent ?? null,
+    count: summary?.count ?? 0,
+    termLabel: term,
+    updated_at: new Date().toLocaleDateString(),
+  });
     } catch (e) {
       console.error(e);
       setGradesSummary(null);
