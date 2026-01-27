@@ -26,6 +26,9 @@ import StudentTimetable from "@/components/student/StudentTimeTable.jsx";
 import StudentEvents from "@/components/student/StudentEvents.jsx";
 import StudentDocuments from "@/components/student/StudentDocuments.jsx";
 import StudentDevoirs from "@/components/student/StudentDevoirs.jsx";
+/* Student rating & grades*/
+import StudentNotesPage from "@/components/student/StudentNotesPage";
+import StudentDisciplinePage from "@/components/student/StudentDisciplinePage"; 
 
 /* Student tests */
 import StudentTestsList from "@/components/student/tests/StudentTestsList.jsx";
@@ -127,6 +130,8 @@ export const router = createBrowserRouter([
               { path: "documents", element: <StudentDocuments /> },
               { path: "devoirs", element: <StudentDevoirs /> },
               { path: "paramètres", element: <AccountSettings /> },
+              { path: "notes", element: <StudentNotesPage /> },
+              { path: "discipline", element: <StudentDisciplinePage /> },
 
               {
                 path: "tests",
@@ -233,6 +238,8 @@ export const router = createBrowserRouter([
               { path: "événements", element: <ParentEvents /> },
               { path: "emploi du temps", element: <ParentTimetable /> },
               { path: "paramètres", element: <AccountSettings /> },
+              {path: "notes",element: <ParentGradesDashboard />},
+              { path: "discipline", element: <ParentDisciplineDashboard /> },
             ],
           },
         ],

@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../../context/AuthContext.jsx";
 import DashboardScaffold from "../DashboardScaffold.jsx";
 import AttendanceApi from "../../../services/api/AttendanceApi.js";
 import HomeworkApi from "../../../services/api/HomeworkApi.js";
 import { toast } from "sonner";
+import { axiosClient } from "../../../api/axios";
 
 // helpers
 const clamp = (n) => (Number.isFinite(+n) ? Math.max(0, +n) : 0);
@@ -14,16 +14,41 @@ const rateFrom = (a, j, p) => {
   return d ? Math.round((P / d) * 100) : 0;
 };
 
+// compute grade summary from grade rows (no need backend change)
+function computeGradesSummary(rows = []) {
+  let sumScore = 0;
+  let sumMax = 0;
+
+  for (const g of rows) {
+    const s = Number(g?.score);
+    const m = Number(g?.max_score);
+    if (!Number.isFinite(s) || !Number.isFinite(m) || m <= 0) continue;
+    sumScore += s;
+    sumMax += m;
+  }
+
+  const avg_percent = sumMax > 0 ? (sumScore / sumMax) * 100 : null;
+
+  return {
+    avg_percent,
+    count: Array.isArray(rows) ? rows.length : 0,
+  };
+}
+
 export default function College3emeDashboard() {
-  const { setSelectedDegree } = useAuth();
   const nav = useNavigate();
 
   const [period, setPeriod] = useState("month"); // 'overall' | 'month' | 'week'
   const [loading, setLoading] = useState(true);
   const [att, setAtt] = useState({ a: 0, j: 0, p: 0, rate: 0, range: null });
-  const [yearAtt, setYearAtt] = useState(null); // { a, j, p, rate }
+  const [yearAtt, setYearAtt] = useState(null);
 
-  // fetch current period
+  // ✅ new dashboard data
+  const [term] = useState("S1"); // keep simple for now
+  const [gradesSummary, setGradesSummary] = useState(null);
+  const [disciplineSummary, setDisciplineSummary] = useState(null);
+
+  // fetch current period attendance
   const fetchMe = async () => {
     setLoading(true);
     try {
@@ -32,9 +57,12 @@ export default function College3emeDashboard() {
       const j = clamp(res?.attendance?.justified_absences ?? 0);
       const p = clamp(res?.attendance?.presences ?? 0);
       setAtt({
-        a, j, p,
+        a,
+        j,
+        p,
         rate: rateFrom(a, j, p),
         range: res?.period?.range ?? null,
+        streak: res?.attendance?.streak ?? 0,
       });
     } catch (e) {
       console.error(e);
@@ -45,9 +73,8 @@ export default function College3emeDashboard() {
     }
   };
 
-  // fetch full year (overall) once
+  // fetch full year attendance once
   const fetchYear = async () => {
-    
     try {
       const res = await AttendanceApi.me({ period: "overall" });
       const a = clamp(res?.attendance?.absences ?? 0);
@@ -61,14 +88,73 @@ export default function College3emeDashboard() {
     }
   };
 
+  // ✅ fetch grade summary (student)
+  const fetchGradesSummary = async () => {
+    try {
+      // change if your endpoint differs:
+      const res = await axiosClient.get("/eleve/grades", { params: { term, per_page: 300 } });
+      const rows = res?.data?.data?.data ?? res?.data?.data ?? [];
+      const s = computeGradesSummary(rows);
+
+      setGradesSummary({
+        ...s,
+        termLabel: term,
+        // optional
+        updated_at: new Date().toLocaleDateString(),
+      });
+    } catch (e) {
+      console.error(e);
+      setGradesSummary(null);
+    }
+  };
+
+  // ✅ fetch discipline summary (aggregated)
+  const fetchDisciplineSummary = async () => {
+    try {
+      // change if your endpoint differs:
+      const res = await axiosClient.get("/eleve/ratings", { params: { term, per_page: 50 } });
+      const rows = res?.data?.data?.data ?? res?.data?.data ?? [];
+      // take latest row (backend should latest())
+      const latest = Array.isArray(rows) && rows.length ? rows[0] : null;
+
+      setDisciplineSummary(
+        latest
+          ? {
+              avg_stars: latest.avg_all_stars ?? latest.avg_stars ?? null,
+              teacher_count: latest.teacher_count ?? 0,
+              admin_count: latest.admin_count ?? 0,
+              termLabel: term,
+              periodLabel: latest.period ?? "Ce mois",
+            }
+          : {
+              avg_stars: null,
+              teacher_count: 0,
+              admin_count: 0,
+              termLabel: term,
+              periodLabel: "—",
+            }
+      );
+    } catch (e) {
+      console.error(e);
+      setDisciplineSummary(null);
+    }
+  };
+
   useEffect(() => {
-    fetchYear(); // once at mount
+    fetchYear();
   }, []);
 
   useEffect(() => {
-    fetchMe();   // whenever period changes
+    fetchMe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
+
+  // ✅ load summaries once for test
+  useEffect(() => {
+    fetchGradesSummary();
+    fetchDisciplineSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stats = useMemo(
     () => [
@@ -81,35 +167,39 @@ export default function College3emeDashboard() {
 
   const shortcuts = [
     { label: "Ressources (SM)", onClick: () => nav("/élève/documents") },
-    { label: "Examens",         onClick: () => nav("/élève/exams") },
+    { label: "Mes notes", onClick: () => nav("/élève/notes") },
+    { label: "Discipline ⭐", onClick: () => nav("/élève/discipline") },
     { label: "Emploi du temps", onClick: () => nav("/élève/emploi du temps") },
   ];
+
   const [homeworks, setHomeworks] = useState([]);
 
-// fetch once (or when degree changes)
-useEffect(() => {
-  (async () => {
-    try {
-      const res = await HomeworkApi.listStudent({ per_page: 12 });
-      const items = res?.data?.data?.data ?? res?.data?.data ?? [];
-      setHomeworks(items);
-    } catch {
-      setHomeworks([]);
-    }
-  })();
-}, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await HomeworkApi.listStudent({ per_page: 12 });
+        const items = res?.data?.data?.data ?? res?.data?.data ?? [];
+        setHomeworks(items);
+      } catch {
+        setHomeworks([]);
+      }
+    })();
+  }, []);
 
   return (
     <DashboardScaffold
-  title="3ème année collège — Tableau de bord"
-  stats={stats}
-  shortcuts={shortcuts}
-  attendance={att}            // att may include {streak}
-  attendanceYear={yearAtt}
-  attendanceLoading={loading}
-  period={period}
-  onPeriodChange={setPeriod}
-  homeworks={homeworks}       // optional: array of devoirs
-/>
+      title="3ème année collège — Tableau de bord"
+      stats={stats}
+      shortcuts={shortcuts}
+      attendance={att}
+      attendanceYear={yearAtt}
+      attendanceLoading={loading}
+      period={period}
+      onPeriodChange={setPeriod}
+      homeworks={homeworks}
+      // ✅ new props
+      gradesSummary={gradesSummary}
+      disciplineSummary={disciplineSummary}
+    />
   );
 }

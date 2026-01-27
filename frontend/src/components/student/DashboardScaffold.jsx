@@ -16,6 +16,8 @@ import {
 
 /* --------------------------- small helpers ---------------------------- */
 const nf = (n) => (Number.isFinite(+n) ? (+n).toLocaleString() : "—");
+const fmtPct = (v) => (Number.isFinite(+v) ? `${(+v).toFixed(1)}%` : "—");
+const fmtStar = (v) => (Number.isFinite(+v) ? (+v).toFixed(2) : "—");
 
 function statusFrom(a, j) {
   const A = Math.max(0, +a || 0);
@@ -92,7 +94,15 @@ function Ring({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
   return (
     <div className="relative inline-block" style={{ width: size, height: size }}>
       <svg width={size} height={size} role="img" aria-label={`${label}: ${pct}%`}>
-        <circle cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} fill="none" className="text-muted/30" stroke="currentColor" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          strokeWidth={stroke}
+          fill="none"
+          className="text-muted/30"
+          stroke="currentColor"
+        />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -139,12 +149,16 @@ function StreakFlame({ days = 0 }) {
   if (d <= 0) return null;
   return (
     <div className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 bg-white/60 dark:bg-slate-900/40 backdrop-blur">
-      <motion.div initial={{ scale: 0.92 }}
-                  animate={{ scale: [1, 1.08, 1] }}
-                  transition={{ repeat: Infinity, duration: 2.2 }}>
+      <motion.div
+        initial={{ scale: 0.92 }}
+        animate={{ scale: [1, 1.08, 1] }}
+        transition={{ repeat: Infinity, duration: 2.2 }}
+      >
         <Flame className={`h-4 w-4 ${d >= 5 ? "text-amber-500" : "text-orange-500"}`} />
       </motion.div>
-      <span className="text-sm"><span className="font-semibold">{d}</span> jours de suite</span>
+      <span className="text-sm">
+        <span className="font-semibold">{d}</span> jours de suite
+      </span>
     </div>
   );
 }
@@ -169,12 +183,17 @@ function HomeworkTicker({ items = [] }) {
           className="flex gap-6 px-3 py-2 whitespace-nowrap"
           animate={{ x: ["0%", "-50%"] }}
           transition={{ repeat: Infinity, duration: 24, ease: "linear" }}
-          onMouseEnter={(e) => e.currentTarget.getAnimations().forEach(a => a.pause())}
-          onMouseLeave={(e) => e.currentTarget.getAnimations().forEach(a => a.play())}
+          onMouseEnter={(e) => e.currentTarget.getAnimations().forEach((a) => a.pause())}
+          onMouseLeave={(e) => e.currentTarget.getAnimations().forEach((a) => a.play())}
         >
           {[...rows, ...rows].map((d, i) => (
-            <a key={`${d.id}-${i}`} href={d.url || "#"} target="_blank" rel="noreferrer"
-               className="text-sm hover:underline">
+            <a
+              key={`${d.id}-${i}`}
+              href={d.url || "#"}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm hover:underline"
+            >
               <span className="font-medium">{d.title}</span>
               <span className="opacity-60"> · échéance {d.due}</span>
             </a>
@@ -200,6 +219,10 @@ function HomeworkTicker({ items = [] }) {
  * - attendanceLoading?: boolean
  * - period?: 'overall'|'month'|'week'
  * - onPeriodChange?: (p) => void
+ *
+ * ✅ NEW (optional):
+ * - gradesSummary?: { avg_percent?:number, count?:number, termLabel?:string, updated_at?:string }
+ * - disciplineSummary?: { avg_stars?:number, teacher_count?:number, admin_count?:number, termLabel?:string, periodLabel?:string }
  */
 export default function DashboardScaffold({
   title,
@@ -215,6 +238,10 @@ export default function DashboardScaffold({
   attendanceLoading = false,
   period,
   onPeriodChange,
+
+  // ✅ NEW (safe, optional)
+  gradesSummary,
+  disciplineSummary,
 }) {
   const autoplay = useRef(Autoplay({ delay: 3800, stopOnInteraction: false }));
 
@@ -246,7 +273,7 @@ export default function DashboardScaffold({
             >
               <option value="overall">Global</option>
               <option value="week">Cette semaine</option>
-              <option value="month">Ce mois</option> 
+              <option value="month">Ce mois</option>
             </select>
           )}
         </div>
@@ -319,6 +346,78 @@ export default function DashboardScaffold({
           )}
         </div>
       </Card>
+
+      {/* ✅ Results block (Notes + Discipline) */}
+      {(gradesSummary || disciplineSummary) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Notes */}
+          <Card className="rounded-2xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold">Notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    {gradesSummary?.termLabel ?? "Moyenne"}
+                  </div>
+                  <div className="text-3xl font-semibold">
+                    {fmtPct(gradesSummary?.avg_percent)}
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Notes:{" "}
+                  <span className="font-medium text-foreground">
+                    {nf(gradesSummary?.count)}
+                  </span>
+                </div>
+              </div>
+
+              {gradesSummary?.updated_at ? (
+                <div className="text-xs text-muted-foreground">
+                  Mise à jour: {gradesSummary.updated_at}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Discipline */}
+          <Card className="rounded-2xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold">Discipline ⭐</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    {disciplineSummary?.periodLabel ?? "Moyenne"}
+                  </div>
+                  <div className="text-3xl font-semibold">
+                    {fmtStar(disciplineSummary?.avg_stars)}/5
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Ens:{" "}
+                  <span className="font-medium text-foreground">
+                    {nf(disciplineSummary?.teacher_count)}
+                  </span>
+                  {" • "}
+                  Admin:{" "}
+                  <span className="font-medium text-foreground">
+                    {nf(disciplineSummary?.admin_count)}
+                  </span>
+                </div>
+              </div>
+
+              {disciplineSummary?.termLabel ? (
+                <div className="text-xs text-muted-foreground">
+                  {disciplineSummary.termLabel}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Homework ticker (optional) */}
       {Array.isArray(homeworks) && homeworks.length > 0 && (

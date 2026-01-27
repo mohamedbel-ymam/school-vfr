@@ -17,6 +17,7 @@ import {
   FileText,
   Settings,
   LogOut,
+  StarIcon,
 } from "lucide-react";
 
 /**
@@ -35,7 +36,8 @@ export function StudentAdministrationSidebar({ className, collapsed = false }) {
     { label: "Cours",           to: "/élève/courses",         icon: BookOpen },
     { label: "Devoirs",         to: "/élève/devoirs",     icon: ClipboardList },
     { label: "Emploi du temps", to: "/élève/emploi du temps",  icon: CalendarDays },
-    { label: "Notes & relevés", to: "/élève/grades",           icon: BarChart2 },
+    { label: "Notes & relevés", to: "/élève/notes",           icon: BarChart2 },
+    { label: "Discipline",      to: "/élève/discipline",           icon: StarIcon },
     { label: "Messages",        to: "/élève/messages",         icon: MessageSquare },
     { label: "Examens",         to: "/élève/tests",            icon: ClipboardList },
     { label: "Événements",      to: "/élève/événements",       icon: CalendarDays },
