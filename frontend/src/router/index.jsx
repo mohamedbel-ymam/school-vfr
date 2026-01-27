@@ -39,8 +39,8 @@ import TeacherTimetable from "@/components/teacher/TeacherTimeTable.jsx";
 import TeacherEvents from "@/components/teacher/TeacherEvents.jsx";
 import TeacherDocuments from "@/components/teacher/TeacherDocuments.jsx";
 import TeacherDevoirs from "@/components/teacher/TeacherDevoirs.jsx";
-import TeacherGradesDashboard from "@/components/teacher/TeacherGradesDashboard";
-import TeacherDisciplineDashboard from "@/components/teacher/TeacherDisciplineDashboard";
+import TeacherGradesDashboard from "@/components/teacher/TeacherGradesDashboard.jsx";
+import TeacherDisciplineDashboard from "@/components/teacher/TeacherDisciplineDashboard.jsx";
 
 /* Teacher tests */
 import TeacherTestsList from "@/components/teacher/tests/TeacherTestsList.jsx";
