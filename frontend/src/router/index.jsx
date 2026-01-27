@@ -71,6 +71,8 @@ import AdminDevoirs from "@/components/admin/pages/AdminDevoirs.jsx";
 import SendNotification from "@/components/admin/pages/SendNotification.jsx";
 import AdminsPage from "@/components/admin/pages/AdminsPage.jsx";
 import AdminGradesDashboard from "@/components/admin/pages/AdminGradesDashboard.jsx"
+import AdminDisciplineDashboard from "@/components/admin/pages/AdminDisciplineDashboard";
+
 /* Admin tests */
 import AdminTestsList from "@/components/admin/pages/AdminTestsList.jsx";
 import AdminTestDetails from "@/components/admin/pages/AdminTestsDetails.jsx";
@@ -201,7 +203,9 @@ export const router = createBrowserRouter([
               { path: "paramètres", element: <AccountSettings /> },
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
-              {path: "grades",element: <AdminGradesDashboard />,}
+              {path: "grades",element: <AdminGradesDashboard />},
+              { path: "discipline", element: <AdminDisciplineDashboard /> }
+
             ],
           },
         ],

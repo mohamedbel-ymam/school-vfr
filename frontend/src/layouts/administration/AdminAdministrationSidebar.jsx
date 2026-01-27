@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
-  import { Users2 } from "lucide-react"; // new icon (people outline)
+  import { StarIcon, Users2 } from "lucide-react"; // new icon (people outline)
 
 
 // Route constants (adjust paths if your router exports differ)
@@ -50,6 +50,7 @@ const ADMIN_SETTINGS_ROUTE = "/admin/paramètres";
 const ADMIN_PRESENCE_ROUTE = "/admin/presences";
 const ADMIN_NOTIFICATIONS_ROUTE = "/admin/notifications";
 const ADMIN_MANAGE_WAITING_LIST="/admin/waiting-list"
+const ADMIN_DISCIPLINE_ROUTE="/admin/discipline" 
 
 
 /**
@@ -74,6 +75,8 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
         { label: "Parents", to: ADMIN_MANAGE_PARENTS_ROUTE, icon: Users },
         { label: "Boursiers", to: ADMIN_MANAGE_BOURSIERS_ROUTE, icon: Users },
         { label: "List d'attente", to: ADMIN_MANAGE_WAITING_LIST, icon: UserPlus2 },
+        { label: "Discipline", to: ADMIN_DISCIPLINE_ROUTE, icon: StarIcon },
+
         
       ],
     },
