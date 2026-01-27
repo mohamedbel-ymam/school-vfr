@@ -34,7 +34,7 @@ export function TeacherAdministrationSidebar({ className, collapsed = false }) {
     { label: "Mes cours",       to: "/enseignant/courses",         icon: BookOpen },
     { label: "Devoirs",         to: "/enseignant/devoirs",         icon: ClipboardList },
     { label: "Examens",         to: "/enseignant/tests",           icon: ClipboardList },
-    { label: "Notes",           to: "/enseignant/notes ",          icon: BarChart2 },
+    { label: "Notes",           to: "/enseignant/notes",          icon: BarChart2 },
     { label: "Discipline",      to: "/enseignant/discipline",      icon: StarIcon },
     { label: "Messages",        to: "/enseignant/messages",        icon: MessageSquare },
     { label: "Événements",      to: "/enseignant/événements",      icon: CalendarDays },
