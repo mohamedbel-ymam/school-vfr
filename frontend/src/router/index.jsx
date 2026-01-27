@@ -207,7 +207,7 @@ export const router = createBrowserRouter([
               { path: "paramètres", element: <AccountSettings /> },
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
-              {path: "grades",element: <AdminGradesDashboard />},
+              {path: "notes",element: <AdminGradesDashboard />},
               { path: "discipline", element: <AdminDisciplineDashboard /> }
 
             ],
