@@ -19,6 +19,8 @@ function toAvg20(totalScore, totalMax) {
 
 export default function AdminGradesAttributionDegree() {
   const { degreeId } = useParams();
+  const [degreeName, setDegreeName] = useState("");
+
 
   const [term, setTerm] = useState("S1");
   const [loading, setLoading] = useState(true);
@@ -27,28 +29,40 @@ export default function AdminGradesAttributionDegree() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
+useEffect(() => {
+  let mounted = true;
 
-    (async () => {
-      try {
-        setLoading(true);
+  (async () => {
+    try {
+      setLoading(true);
 
-        const res = await axiosClient.get(`/admin/degrees/${degreeId}/grades-leaderboard`, {
+      const [degRes, lbRes] = await Promise.all([
+        axiosClient.get(`/admin/degrees/${degreeId}`),
+        axiosClient.get(`/admin/degrees/${degreeId}/grades-leaderboard`, {
           params: { limit: 150, term },
-        });
+        }),
+      ]);
 
-        const rows = res?.data?.data ?? res?.data ?? [];
-        if (!mounted) return;
+      if (!mounted) return;
 
-        setStudents(rows);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
+      setDegreeName(
+        degRes?.data?.data?.name ??
+          degRes?.data?.name ??
+          `Degré #${degreeId}`
+      );
 
-    return () => (mounted = false);
-  }, [degreeId, term]);
+      const rows = lbRes?.data?.data ?? lbRes?.data ?? [];
+      setStudents(rows);
+    } finally {
+      if (mounted) setLoading(false);
+    }
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [degreeId, term]);
+
 
   const cards = useMemo(() => {
     return (students || []).map((s) => {
@@ -70,7 +84,9 @@ export default function AdminGradesAttributionDegree() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold">Attribution — Élèves du degré #{degreeId}</h1>
+          <h1 className="text-xl font-semibold">
+              Attribution — {degreeName || `Degré #${degreeId}`}
+          </h1>
           <p className="text-sm text-muted-foreground">
             Cliquez sur un élève pour gérer ses notes.
           </p>

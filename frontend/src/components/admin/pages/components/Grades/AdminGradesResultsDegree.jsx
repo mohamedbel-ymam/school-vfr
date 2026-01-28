@@ -15,33 +15,47 @@ function avg20(totalScore, totalMax) {
 
 export default function AdminGradesResultsDegree() {
   const { degreeId } = useParams();
+  const [degreeName, setDegreeName] = useState("");
+  
 
   const [term, setTerm] = useState("S1");
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
 
-  useEffect(() => {
-    let mounted = true;
+useEffect(() => {
+  let mounted = true;
 
-    (async () => {
-      try {
-        setLoading(true);
+  (async () => {
+    try {
+      setLoading(true);
 
-        const res = await axiosClient.get(`/admin/degrees/${degreeId}/grades-leaderboard`, {
-          params: { limit: 200, term },
-        });
+      const [degRes, lbRes] = await Promise.all([
+        axiosClient.get(`/admin/degrees/${degreeId}`),
+        axiosClient.get(`/admin/degrees/${degreeId}/grades-leaderboard`, {
+          params: { limit: 150, term },
+        }),
+      ]);
 
-        const data = res?.data?.data ?? res?.data ?? [];
-        if (!mounted) return;
+      if (!mounted) return;
 
-        setRows(data);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
+      setDegreeName(
+        degRes?.data?.data?.name ??
+          degRes?.data?.name ??
+          `Degré #${degreeId}`
+      );
 
-    return () => (mounted = false);
-  }, [degreeId, term]);
+      const rows = lbRes?.data?.data ?? lbRes?.data ?? [];
+      setStudents(rows);
+    } finally {
+      if (mounted) setLoading(false);
+    }
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [degreeId, term]);
+
 
   const tableRows = useMemo(() => {
     return (rows || []).map((r, idx) => {
@@ -62,7 +76,9 @@ export default function AdminGradesResultsDegree() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold">Résultats — Degré #{degreeId}</h1>
+          <h1 className="text-xl font-semibold">
+              Résultats — {degreeName || `Degré #${degreeId}`}
+          </h1>
           <p className="text-sm text-muted-foreground">Classement par moyenne générale sur 20.</p>
         </div>
 
