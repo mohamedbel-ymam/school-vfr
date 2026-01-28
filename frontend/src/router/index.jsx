@@ -75,7 +75,7 @@ import AdminDocuments from "@/components/admin/pages/AdminDocuments.jsx";
 import AdminDevoirs from "@/components/admin/pages/AdminDevoirs.jsx";
 import SendNotification from "@/components/admin/pages/SendNotification.jsx";
 import AdminsPage from "@/components/admin/pages/AdminsPage.jsx";
-import AdminDisciplineDashboard from "@/components/admin/pages/AdminDisciplineDashboard";
+import AdminDisciplineDashboard from "../components/admin/pages/components/Rating/AdminDisciplineDashboard";
 import AdminGradesHome from "../components/admin/pages/components/Grades/AdminGradesHome";
 import AdminGradesDegrees from "../components/admin/pages/components/Grades/AdminGradesDegree";
 import AdminGradesAttributionDegree from "../components/admin/pages/components/Grades/AdminGradesAttributionDegree";
