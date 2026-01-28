@@ -21,7 +21,6 @@ export default function AdminGradesResultsDegree() {
   const [term, setTerm] = useState("S1");
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
-
 useEffect(() => {
   let mounted = true;
 
@@ -32,7 +31,7 @@ useEffect(() => {
       const [degRes, lbRes] = await Promise.all([
         axiosClient.get(`/admin/degrees/${degreeId}`),
         axiosClient.get(`/admin/degrees/${degreeId}/grades-leaderboard`, {
-          params: { limit: 150, term },
+          params: { limit: 200, term },
         }),
       ]);
 
@@ -45,7 +44,7 @@ useEffect(() => {
       );
 
       const rows = lbRes?.data?.data ?? lbRes?.data ?? [];
-      setStudents(rows);
+      setRows(rows); // ✅ ici c’est setRows
     } finally {
       if (mounted) setLoading(false);
     }
@@ -55,6 +54,7 @@ useEffect(() => {
     mounted = false;
   };
 }, [degreeId, term]);
+
 
 
   const tableRows = useMemo(() => {
