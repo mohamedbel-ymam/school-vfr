@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Skeleton } from "../../../components/ui/skeleton";
 import TeacherGradesDialog from "./TeacherGradesDialog";
+import { useAuth } from "../../../context/AuthContext";
+
+const { user } = useAuth();
 
 function initials(name = "") {
   const parts = name.trim().split(/\s+/);
