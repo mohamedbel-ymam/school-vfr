@@ -68,6 +68,7 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
         student={openStudent}
         open={!!openStudent}
         onOpenChange={(v) => !v && setOpenStudent(null)}
+        user={user} 
       />
     </>
   );
