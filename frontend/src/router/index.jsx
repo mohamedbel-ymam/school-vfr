@@ -215,25 +215,26 @@ export const router = createBrowserRouter([
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
               // Notes / Admin
-{
-  path: "/notes",
-  element: <AdminGradesHome />,
-},
-{
-  path: "notes/attribution",
-  element: <AdminGradesDegrees />,
-},
-{
-  path: "notes/resultats",
-  element: <AdminGradesDegrees />,
-},
-{
-  path: "notes/attribution/:degreeId",
-  element: <AdminGradesAttributionDegree />,
-},
-{
-  path: "notes/resultats/:degreeId",
-  element: <AdminGradesResultsDegree />,},
+              {
+                path: "notes",
+                element: <AdminGradesHome />,
+              },
+              {
+                path: "notes/attribution",
+                element: <AdminGradesDegrees />,
+              },
+              {
+                path: "notes/resultats",
+                element: <AdminGradesDegrees />,
+              },
+              {
+                path: "notes/attribution/:degreeId",
+                element: <AdminGradesAttributionDegree />,
+              },
+              {
+                path: "notes/resultats/:degreeId",
+                element: <AdminGradesResultsDegree />,},
+                
               { path: "discipline", element: <AdminDisciplineDashboard /> }
 
             ],
