@@ -4,7 +4,6 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import TeacherGradesDialog from "./TeacherGradesDialog";
 import { useAuth } from "../../../context/AuthContext";
 
-const { user } = useAuth();
 
 function initials(name = "") {
   const parts = name.trim().split(/\s+/);
@@ -15,6 +14,8 @@ function initials(name = "") {
 
 export default function TeacherGradesStudentGrid({ students = [], loading }) {
   const [openStudent, setOpenStudent] = useState(null);
+  const { user } = useAuth();
+
 
   if (loading) {
     return (
