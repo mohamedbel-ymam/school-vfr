@@ -1,18 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {axiosClient} from "../../../api/axios";
-import { adminGradesApi } from "../../../services/api/admin/AdminGradesServices";
+import {axiosClient} from "../../../../../api/axios";
+import { adminGradesApi } from "../../../../../services/api/admin/AdminGradesServices";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Textarea } from "../../../components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../../../components/ui/dialog";
+import { Button } from "../../../../../components/ui/button";
+import { Input } from "../../../../../components/ui/input";
+import { Textarea } from "../../../../../components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../../components/ui/select";
+} from "../../../../../components/ui/select";
 
 function fullName(u) {
   const f = u?.firstname ?? "";

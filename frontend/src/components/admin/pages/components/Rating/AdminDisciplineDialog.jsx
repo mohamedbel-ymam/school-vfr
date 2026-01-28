@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../../components/ui/dialog";
-import { Button } from "../../../../components/ui/button";
-import { Textarea } from "../../../../components/ui/textarea";
-import { Input } from "../../../../components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../../../components/ui/dialog";
+import { Button } from "../../../../../components/ui/button";
+import { Textarea } from "../../../../../components/ui/textarea";
+import { Input } from "../../../../../components/ui/input";
 import { Star } from "lucide-react";
-import { adminRatingsApi } from "../../../../services/api/admin/AdminRatingsServices";
+import { adminRatingsApi } from "../../../../../services/api/admin/AdminRatingsServices";
 
 function StarPicker({ value, onChange }) {
   return (

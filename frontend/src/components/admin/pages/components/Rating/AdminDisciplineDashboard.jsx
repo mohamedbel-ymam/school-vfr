@@ -1,17 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { adminDegreesApi, adminLeaderboardApi } from "../../../services/api/admin/AdminGradesServices";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "../../../components/ui/button";
-import { Skeleton } from "../../../components/ui/skeleton";
-import StudentLeaderboard from "./StudentLeaderboard";
+import { adminDegreesApi, adminRatingsLeaderboardApi } from "../../../../../services/api/admin/AdminRatingsServices";
+import { Card, CardContent } from "../../../../ui/card";
+import { Button } from "../../../../ui/button";
+import { Skeleton } from "../../../../ui/skeleton";
+import AdminDisciplineStudentGrid from "./AdminDisciplineStudentGrid";
 
-export default function AdminGradesDashboard() {
+export default function AdminDisciplineDashboard() {
   const [degrees, setDegrees] = useState([]);
   const [loadingDegrees, setLoadingDegrees] = useState(true);
 
   const [selectedDegree, setSelectedDegree] = useState(null);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [loadingBoard, setLoadingBoard] = useState(false);
+  const [students, setStudents] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  // filters
+  const [term] = useState("S1");
+  const [period] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
 
   useEffect(() => {
     let mounted = true;
@@ -33,7 +37,7 @@ export default function AdminGradesDashboard() {
     const fillersCount = Math.max(0, 8 - real.length);
     const fillers = Array.from({ length: fillersCount }).map((_, i) => ({
       id: `soon-${i}`,
-      name: "Soon",
+      name: "Bientôt",
       disabled: true,
     }));
     return [...real, ...fillers];
@@ -41,12 +45,12 @@ export default function AdminGradesDashboard() {
 
   const openDegree = async (degree) => {
     setSelectedDegree(degree);
-    setLoadingBoard(true);
+    setLoadingStudents(true);
     try {
-      const res = await adminLeaderboardApi.byDegree(degree.id, { limit: 120 });
-      setLeaderboard(res.data?.data ?? []);
+      const res = await adminRatingsLeaderboardApi.byDegree(degree.id, { limit: 150, term, period });
+      setStudents(res.data?.data ?? []);
     } finally {
-      setLoadingBoard(false);
+      setLoadingStudents(false);
     }
   };
 
@@ -55,10 +59,8 @@ export default function AdminGradesDashboard() {
       {!selectedDegree ? (
         <>
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold">Grades</h1>
-            <div className="text-sm text-muted-foreground">
-              Choose a degree to view students ranking
-            </div>
+            <h1 className="text-xl font-semibold">Discipline ⭐</h1>
+            <div className="text-sm text-muted-foreground">Choisissez un niveau</div>
           </div>
 
           {loadingDegrees ? (
@@ -85,13 +87,11 @@ export default function AdminGradesDashboard() {
                   <CardContent className="p-6 space-y-3">
                     <div className="text-lg font-semibold">{d.name}</div>
                     <div className="text-sm text-muted-foreground">
-                      {d.disabled ? "Coming soon" : "Open leaderboard"}
+                      {d.disabled ? "Indisponible" : "Voir les élèves"}
                     </div>
-                    <div>
-                      <Button disabled={d.disabled} variant="secondary">
-                        Open
-                      </Button>
-                    </div>
+                    <Button disabled={d.disabled} variant="secondary">
+                      Ouvrir
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -102,7 +102,7 @@ export default function AdminGradesDashboard() {
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-sm text-muted-foreground">Degree</div>
+              <div className="text-sm text-muted-foreground">Niveau</div>
               <h2 className="text-xl font-semibold">{selectedDegree.name}</h2>
             </div>
 
@@ -110,14 +110,14 @@ export default function AdminGradesDashboard() {
               variant="outline"
               onClick={() => {
                 setSelectedDegree(null);
-                setLeaderboard([]);
+                setStudents([]);
               }}
             >
-              Back
+              Retour
             </Button>
           </div>
 
-          <StudentLeaderboard students={leaderboard} loading={loadingBoard} />
+          <AdminDisciplineStudentGrid students={students} loading={loadingStudents} term={term} period={period} />
         </div>
       )}
     </div>

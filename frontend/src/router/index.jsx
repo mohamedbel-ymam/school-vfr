@@ -75,9 +75,11 @@ import AdminDocuments from "@/components/admin/pages/AdminDocuments.jsx";
 import AdminDevoirs from "@/components/admin/pages/AdminDevoirs.jsx";
 import SendNotification from "@/components/admin/pages/SendNotification.jsx";
 import AdminsPage from "@/components/admin/pages/AdminsPage.jsx";
-import AdminGradesDashboard from "@/components/admin/pages/AdminGradesDashboard.jsx"
 import AdminDisciplineDashboard from "@/components/admin/pages/AdminDisciplineDashboard";
-
+import AdminGradesHome from "../components/admin/pages/components/Grades/AdminGradesHome";
+import AdminGradesDegrees from "../components/admin/pages/components/Grades/AdminGradesDegree";
+import AdminGradesAttributionDegree from "../components/admin/pages/components/Grades/AdminGradesAttributionDegree";
+import AdminGradesResultsDegree from "../components/admin/pages/components/Grades/AdminGradesResultsDegree";
 /* Admin tests */
 import AdminTestsList from "@/components/admin/pages/AdminTestsList.jsx";
 import AdminTestDetails from "@/components/admin/pages/AdminTestsDetails.jsx";
@@ -212,7 +214,26 @@ export const router = createBrowserRouter([
               { path: "paramètres", element: <AccountSettings /> },
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
-              {path: "notes",element: <AdminGradesDashboard />},
+              // Notes / Admin
+{
+  path: "/notes",
+  element: <AdminGradesHome />,
+},
+{
+  path: "notes/attribution",
+  element: <AdminGradesDegrees />,
+},
+{
+  path: "notes/resultats",
+  element: <AdminGradesDegrees />,
+},
+{
+  path: "notes/attribution/:degreeId",
+  element: <AdminGradesAttributionDegree />,
+},
+{
+  path: "notes/resultats/:degreeId",
+  element: <AdminGradesResultsDegree />,},
               { path: "discipline", element: <AdminDisciplineDashboard /> }
 
             ],
