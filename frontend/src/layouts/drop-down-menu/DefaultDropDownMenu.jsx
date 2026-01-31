@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -14,20 +14,43 @@ import { User, LogOut, ChevronDown } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useLocation, useNavigate } from "react-router-dom";
 
-/**
- * DefaultDropDownMenu
- * A sleek, evolutive account menu used across all roles (guest, student, teacher, parent, admin).
- * - “Mon profil” now routes to the role-nested `paramètres` page to avoid 404.
- * - Optional children still work as before.
- */
 const ROLE_ROOTS = [
-  "élève", "eleve",    // FR variants
+  "élève", "eleve",
   "enseignant",
   "admin",
   "parent",
-  "student", "teacher" // fallback English slugs if any
+  "student", "teacher",
 ];
 const PARAM_SEG = "paramètres";
+
+function AvatarBadge({ user }) {
+  const [broken, setBroken] = useState(false);
+
+  // ✅ Only approved avatar (recommended)
+  const src = user?.avatar_url || user?.avatar || user?.photo_url || null;
+  const initials = getInitials(user);
+
+  return (
+    <div className="relative h-8 w-8 shrink-0">
+      {src && !broken ? (
+        <img
+          src={src}
+          alt="Avatar"
+          className="h-8 w-8 rounded-full object-cover ring-2 ring-white/20"
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div className="h-8 w-8 grid place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 text-[11px] font-semibold text-white ring-2 ring-white/20">
+          {initials || <User className="h-4 w-4" />}
+        </div>
+      )}
+
+      {/* online dot */}
+      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-800" />
+    </div>
+  );
+}
 
 export default function DefaultDropDownMenu({ children, profileHref = "/account", dashboardHref }) {
   const navigate = useNavigate();
@@ -44,17 +67,14 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
   };
 
   const displayName = user?.firstname || user?.lastname || user?.email || "Compte";
-  const initials = getInitials(user);
   const roleFr = mapRoleFr(user?.role);
 
-  // Build a robust destination to /<role>/paramètres (or relative 'paramètres' as fallback)
   const goToParams = useCallback(() => {
     const segs = location.pathname.split("/").filter(Boolean);
-    const root = segs[0]; // first segment: role root if present
+    const root = segs[0];
     if (root && ROLE_ROOTS.includes(root)) {
       navigate(`/${root}/${PARAM_SEG}`);
     } else {
-      // If the dropdown is already rendered under a role layout, this also works:
       navigate(PARAM_SEG);
     }
   }, [location.pathname, navigate]);
@@ -68,13 +88,12 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
           variant="ghost"
           className="inline-flex items-center gap-2 rounded-full bg-white/10 px-2 py-1 text-white/90 ring-1 ring-white/15 hover:text-white hover:bg-white/15 active:scale-95"
         >
-          <div className="relative h-8 w-8 shrink-0 grid place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 text-[11px] font-semibold text-white ring-2 ring-white/20">
-            {initials || <User className="h-4 w-4" />}
-            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-800" />
-          </div>
+          <AvatarBadge user={user} />
+
           <span className="hidden sm:block max-w-[140px] truncate text-sm">
             {displayName}
           </span>
+
           <ChevronDown className="h-4 w-4 opacity-70" />
         </Button>
       </DropdownMenuTrigger>
@@ -90,7 +109,6 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-white/10" />
 
-        {/* Mon profil → always route to /<role>/paramètres (or relative fallback) */}
         <DropdownMenuItem
           onSelect={(e) => { e.preventDefault(); goToParams(); }}
           onClick={(e) => { e.preventDefault(); goToParams(); }}
@@ -101,19 +119,19 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
           <DropdownMenuShortcut>⌘P</DropdownMenuShortcut>
         </DropdownMenuItem>
 
-        {/* Optional built-ins: keep support if you still pass dashboardHref */}
         {dashboardHref && (
           <DropdownMenuItem
             onSelect={go(dashboardHref)}
             className="focus:bg-white/10 focus:text-white"
           >
-            <span className="mr-2 inline-flex h-4 w-4 items-center justify-center rounded-[4px] bg-white/15 text-[10px]">🏠</span>
+            <span className="mr-2 inline-flex h-4 w-4 items-center justify-center rounded-[4px] bg-white/15 text-[10px]">
+              🏠
+            </span>
             <span>Mon espace</span>
             <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
 
-        {/* Role-specific extra items */}
         {children && (
           <>
             <DropdownMenuSeparator className="bg-white/10" />
