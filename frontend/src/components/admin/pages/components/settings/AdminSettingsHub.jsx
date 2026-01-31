@@ -41,25 +41,25 @@ export default function AdminSettingsHub() {
           title="Élèves"
           desc="Validation des photos (avatars)"
           icon={<GraduationCap className="h-5 w-5" />}
-          to="/admin/parametres/eleves"
+          to="/admin/paramètres/eleves"
         />
         <Tile
           title="Enseignants"
           desc="(bientôt) paramètres enseignants"
           icon={<Users className="h-5 w-5" />}
-          to="/admin/parametres/enseignants"
+          to="/admin/paramètres/enseignants"
         />
         <Tile
           title="Parents"
           desc="(bientôt) paramètres parents"
           icon={<Users className="h-5 w-5" />}
-          to="/admin/parametres/parents"
+          to="/admin/paramètres/parents"
         />
         <Tile
           title="Admins"
           desc="Mot de passe & sécurité"
           icon={<Shield className="h-5 w-5" />}
-          to="/admin/parametres/admins"
+          to="/admin/paramètres/admins"
         />
       </div>
     </div>
