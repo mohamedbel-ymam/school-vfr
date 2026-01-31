@@ -4,6 +4,9 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Star } from "lucide-react";
 import TeacherDisciplineDialog from "./TeacherDisciplineDialog";
 
+/* ----- same helpers as grades ----- */
+const API_ORIGIN = "https://api.takwaetablissement.com";
+
 function initialsFromStudent(s) {
   const f = (s?.firstname ?? "").trim();
   const l = (s?.lastname ?? "").trim();
@@ -16,20 +19,36 @@ function initialsFromStudent(s) {
   return (first + last).toUpperCase();
 }
 
-function Avatar({ student }) {
+function normalizeAvatarUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) return `${API_ORIGIN}${url}`;
+  return `${API_ORIGIN}/${url}`;
+}
+
+function fullName(s) {
+  const f = (s?.firstname ?? "").trim();
+  const l = (s?.lastname ?? "").trim();
+  const n = `${f} ${l}`.trim();
+  return n || (s?.name ?? "").trim() || `#${s?.id ?? "?"}`;
+}
+
+function StudentAvatarSquare({ student }) {
   const [broken, setBroken] = useState(false);
 
-  const src =
+  const raw =
     student?.avatar_url ||
     student?.avatar ||
     student?.photo_url ||
+    student?.avatar?.url ||
     null;
 
+  const src = normalizeAvatarUrl(raw);
   const fallback = initialsFromStudent(student);
 
   if (!src || broken) {
     return (
-      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-semibold">
+      <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center font-semibold border">
         {fallback || "?"}
       </div>
     );
@@ -38,9 +57,10 @@ function Avatar({ student }) {
   return (
     <img
       src={src}
-      alt={student?.name ?? "Élève"}
-      className="h-10 w-10 rounded-full object-cover border"
+      alt={fullName(student)}
+      className="h-10 w-10 rounded-xl object-cover border"
       loading="lazy"
+      referrerPolicy="no-referrer"
       onError={() => setBroken(true)}
     />
   );
@@ -51,11 +71,7 @@ function StarMini({ v }) {
   return (
     <div className="flex items-center gap-1">
       {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          size={14}
-          className={i <= n ? "fill-current" : ""}
-        />
+        <Star key={i} size={14} className={i <= n ? "fill-current" : ""} />
       ))}
       <span className="text-xs text-muted-foreground ml-1">
         {v == null ? "—" : Number(v).toFixed(2)}
@@ -64,12 +80,7 @@ function StarMini({ v }) {
   );
 }
 
-export default function TeacherDisciplineStudentGrid({
-  students = [],
-  loading,
-  term,
-  period,
-}) {
+export default function TeacherDisciplineStudentGrid({ students = [], loading, term, period }) {
   const [openStudent, setOpenStudent] = useState(null);
 
   if (loading) {
@@ -78,7 +89,7 @@ export default function TeacherDisciplineStudentGrid({
         {Array.from({ length: 8 }).map((_, i) => (
           <Card key={i} className="rounded-2xl">
             <CardContent className="p-4 flex items-center gap-3">
-              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-10 w-10 rounded-xl" />
               <div className="flex-1">
                 <Skeleton className="h-4 w-40" />
                 <Skeleton className="h-3 w-24 mt-2" />
@@ -90,9 +101,7 @@ export default function TeacherDisciplineStudentGrid({
     );
   }
 
-  if (!students.length) {
-    return <div className="text-sm text-muted-foreground">Aucun élève.</div>;
-  }
+  if (!students.length) return <div className="text-sm text-muted-foreground">Aucun élève.</div>;
 
   return (
     <>
@@ -103,34 +112,22 @@ export default function TeacherDisciplineStudentGrid({
             className="rounded-2xl cursor-pointer hover:shadow-md transition"
             onClick={() => setOpenStudent(s)}
           >
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">#{idx + 1}</div>
-                <div className="text-xs text-muted-foreground">
-                  {term} • {period}
-                </div>
+                <div className="text-xs text-muted-foreground">{term} • {period}</div>
               </div>
 
-              {/* ✅ avatar + name */}
               <div className="flex items-center gap-3">
-                <Avatar student={s} />
+                <StudentAvatarSquare student={s} />
                 <div className="min-w-0">
-                  <div className="font-semibold truncate">
-                    {s.name ??
-                      `${s.firstname ?? ""} ${s.lastname ?? ""}`.trim() ??
-                      `#${s.id}`}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Discipline / comportement
-                  </div>
+                  <div className="font-semibold truncate">{fullName(s)}</div>
+                  <div className="text-xs text-muted-foreground">Élève</div>
                 </div>
               </div>
 
-              {/* rating */}
               <div className="text-sm">
-                <div className="text-xs text-muted-foreground">
-                  Votre évaluation
-                </div>
+                <div className="text-xs text-muted-foreground">Votre évaluation</div>
                 <StarMini v={s.my_stars} />
               </div>
             </CardContent>

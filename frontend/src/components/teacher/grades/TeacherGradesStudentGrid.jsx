@@ -4,13 +4,12 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import TeacherGradesDialog from "./TeacherGradesDialog";
 import { useAuth } from "../../../context/AuthContext";
 
+/* ---------- helpers ---------- */
 function initialsFromStudent(s) {
-  // Prefer firstname/lastname if present
   const f = (s?.firstname ?? "").trim();
   const l = (s?.lastname ?? "").trim();
   if (f || l) return `${f[0] ?? ""}${l[0] ?? ""}`.toUpperCase();
 
-  // Fallback to "name"
   const name = (s?.name ?? "").trim();
   const parts = name.split(/\s+/);
   const first = parts[0]?.[0] ?? "";
@@ -18,16 +17,54 @@ function initialsFromStudent(s) {
   return (first + last).toUpperCase();
 }
 
-function Avatar({ student }) {
+// If your backend returns relative "/storage/..." we convert it to absolute URL.
+// Change this if your API base differs.
+const API_ORIGIN = "https://api.takwaetablissement.com";
+
+function normalizeAvatarUrl(url) {
+  if (!url) return null;
+  if (typeof url !== "string") return null;
+
+  // already absolute
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+
+  // relative
+  if (url.startsWith("/")) return `${API_ORIGIN}${url}`;
+
+  // fallback
+  return `${API_ORIGIN}/${url}`;
+}
+
+function fullName(s) {
+  const f = (s?.firstname ?? "").trim();
+  const l = (s?.lastname ?? "").trim();
+  const n = `${f} ${l}`.trim();
+  return n || (s?.name ?? "").trim() || `#${s?.id ?? "?"}`;
+}
+
+/**
+ * Avatar not rounded (square)
+ * - tries multiple fields
+ * - handles relative /storage/... urls
+ * - fallback initials
+ */
+function StudentAvatarSquare({ student }) {
   const [broken, setBroken] = useState(false);
 
-  // approved avatar only
-  const src = student?.avatar_url || student?.avatar || student?.photo_url || null;
+  // Try the most common shapes you might return from backend
+  const raw =
+    student?.avatar_url ||
+    student?.avatar ||
+    student?.photo_url ||
+    student?.avatar?.url || // if you ever wrap it
+    null;
+
+  const src = normalizeAvatarUrl(raw);
   const fallback = initialsFromStudent(student);
 
   if (!src || broken) {
     return (
-      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-semibold">
+      <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center font-semibold border">
         {fallback || "?"}
       </div>
     );
@@ -36,9 +73,10 @@ function Avatar({ student }) {
   return (
     <img
       src={src}
-      alt={student?.name ?? "Élève"}
-      className="h-10 w-10 rounded-full object-cover border"
+      alt={fullName(student)}
+      className="h-10 w-10 rounded-xl object-cover border"
       loading="lazy"
+      referrerPolicy="no-referrer"
       onError={() => setBroken(true)}
     />
   );
@@ -48,7 +86,6 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
   const [openStudent, setOpenStudent] = useState(null);
   const { user } = useAuth();
 
-  // If you want: order by avg_percent desc (already maybe from backend)
   const rows = useMemo(() => students ?? [], [students]);
 
   if (loading) {
@@ -58,7 +95,7 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
           <Card key={i} className="rounded-2xl">
             <CardContent className="p-4 flex items-center gap-3">
               <Skeleton className="h-8 w-8 rounded-xl" />
-              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-10 w-10 rounded-xl" />
               <div className="space-y-2 flex-1">
                 <Skeleton className="h-4 w-40" />
                 <Skeleton className="h-3 w-24" />
@@ -85,18 +122,16 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
           >
             <CardContent className="p-4 flex items-center gap-3">
               {/* rank */}
-              <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-sm font-semibold">
+              <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-sm font-semibold border">
                 {idx + 1}
               </div>
 
-              {/* avatar */}
-              <Avatar student={s} />
+              {/* avatar (square) */}
+              <StudentAvatarSquare student={s} />
 
               {/* info */}
               <div className="min-w-0">
-                <div className="font-semibold truncate">
-                  {s.name ?? `${s.firstname ?? ""} ${s.lastname ?? ""}`.trim() ?? `#${s.id}`}
-                </div>
+                <div className="font-semibold truncate">{fullName(s)}</div>
                 <div className="text-sm text-muted-foreground">
                   Moyenne :{" "}
                   {s.avg_percent == null ? "—" : `${Number(s.avg_percent).toFixed(1)}%`}
