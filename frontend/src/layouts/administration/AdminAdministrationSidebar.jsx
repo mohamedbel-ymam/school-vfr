@@ -49,8 +49,8 @@ const ADMIN_DOCUMENTS_HOMEWORK = "/admin/devoirs";
 const ADMIN_SETTINGS_ROUTE = "/admin/paramètres";
 const ADMIN_PRESENCE_ROUTE = "/admin/presences";
 const ADMIN_NOTIFICATIONS_ROUTE = "/admin/notifications";
-const ADMIN_MANAGE_WAITING_LIST="/admin/waiting-list"
-const ADMIN_DISCIPLINE_ROUTE="/admin/discipline" 
+const ADMIN_MANAGE_WAITING_LIST="/admin/waiting-list";
+const ADMIN_DISCIPLINE_ROUTE="/admin/discipline" ;
 
 
 /**

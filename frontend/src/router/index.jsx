@@ -80,7 +80,12 @@ import AdminGradesHome from "../components/admin/pages/components/Grades/AdminGr
 import AdminGradesDegrees from "../components/admin/pages/components/Grades/AdminGradesDegree";
 import AdminGradesAttributionDegree from "../components/admin/pages/components/Grades/AdminGradesAttributionDegree";
 import AdminGradesResultsDegree from "../components/admin/pages/components/Grades/AdminGradesResultsDegree";
-/* Admin tests */
+import AdminSettingsHub from "../pages/admin/settings/AdminSettingsHub.jsx";
+import AdminSettingsStudents from "../components/admin/pages/components/settings/AdminSettingsStudents.jsx";
+import AdminSettingsTeachers from "../components/admin/pages/components/settings/AdminSettingsTeachers.jsx";
+import AdminSettingsParents from "../components/admin/pages/components/settings/AdminSettingsParents.jsx";
+import AdminSettingsAdmins from "../components/admin/pages/components/settings/AdminSettingsAdmins.jsx";/* Admin tests */
+
 import AdminTestsList from "@/components/admin/pages/AdminTestsList.jsx";
 import AdminTestDetails from "@/components/admin/pages/AdminTestsDetails.jsx";
 
@@ -211,7 +216,6 @@ export const router = createBrowserRouter([
               { path: "devoirs", element: <AdminDevoirs /> },
               { path: "presences", element: <ManagePresence /> },
               { path: "notifications", element: <SendNotification /> },
-              { path: "paramètres", element: <AccountSettings /> },
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
               // Notes / Admin
@@ -233,9 +237,15 @@ export const router = createBrowserRouter([
               },
               {
                 path: "notes/resultats/:degreeId",
-                element: <AdminGradesResultsDegree />,},
+                element: <AdminGradesResultsDegree /> },
                 
-              { path: "discipline", element: <AdminDisciplineDashboard /> }
+              { path: "discipline", element: <AdminDisciplineDashboard /> },
+
+              { path: "paramètres", element: <AdminSettingsHub /> },
+              { path: "paramètres/eleves", element: <AdminSettingsStudents /> },
+              { path: "paramètres/enseignants", element: <AdminSettingsTeachers /> },
+              { path: "paramètres/parents", element: <AdminSettingsParents /> },
+              { path: "paramètres/admins", element: <AdminSettingsAdmins /> },
 
             ],
           },
