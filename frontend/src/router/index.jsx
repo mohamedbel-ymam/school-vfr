@@ -80,7 +80,7 @@ import AdminGradesHome from "../components/admin/pages/components/Grades/AdminGr
 import AdminGradesDegrees from "../components/admin/pages/components/Grades/AdminGradesDegree";
 import AdminGradesAttributionDegree from "../components/admin/pages/components/Grades/AdminGradesAttributionDegree";
 import AdminGradesResultsDegree from "../components/admin/pages/components/Grades/AdminGradesResultsDegree";
-import AdminSettingsHub from "../pages/admin/settings/AdminSettingsHub.jsx";
+import AdminSettingsHub from "../components/admin/pages/components/settings/AdminSettingsHub.jsx";
 import AdminSettingsStudents from "../components/admin/pages/components/settings/AdminSettingsStudents.jsx";
 import AdminSettingsTeachers from "../components/admin/pages/components/settings/AdminSettingsTeachers.jsx";
 import AdminSettingsParents from "../components/admin/pages/components/settings/AdminSettingsParents.jsx";
