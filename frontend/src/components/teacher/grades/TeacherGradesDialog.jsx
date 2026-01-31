@@ -8,6 +8,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import { Badge } from "../../../components/ui/badge";
 import { toast } from "sonner";
 
+/* ------------------------- helpers ------------------------- */
 function labelFromSubject(code, fallback = "Matière") {
   const c = (code || "").toUpperCase().replace(/[^A-Z]/g, "");
   switch (c) {
@@ -27,14 +28,69 @@ function labelFromSubject(code, fallback = "Matière") {
 function fullName(u) {
   const f = u?.firstname ?? "";
   const l = u?.lastname ?? "";
-  return `${f} ${l}`.trim() || `#${u?.id}`;
+  const n = `${f} ${l}`.trim();
+  return n || u?.name || `#${u?.id}`;
 }
 
+function initialsFromStudent(s) {
+  const f = (s?.firstname ?? "").trim();
+  const l = (s?.lastname ?? "").trim();
+  if (f || l) return `${f[0] ?? ""}${l[0] ?? ""}`.toUpperCase();
+
+  const name = (s?.name ?? "").trim();
+  const parts = name.split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
+  return (first + last).toUpperCase() || "?";
+}
+
+function AvatarLarge({ student, size = 92 }) {
+  const [broken, setBroken] = useState(false);
+
+  // Backend should send FULL url (recommended). But we also accept relative path.
+  let src = student?.avatar_url || student?.avatar || student?.photo_url || null;
+
+  // If it's a relative storage path, you can optionally normalize here (optional):
+  // if (src && !src.startsWith("http")) src = `${import.meta.env.VITE_API_URL}/storage/${src.replace(/^\/?storage\/?/, "")}`;
+
+  const fallback = initialsFromStudent(student);
+
+  if (!src || broken) {
+    return (
+      <div
+        className="shrink-0 border bg-muted flex items-center justify-center font-semibold text-lg"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 16, // ✅ not rounded circle
+        }}
+      >
+        {fallback}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={fullName(student)}
+      loading="lazy"
+      onError={() => setBroken(true)}
+      className="shrink-0 object-cover border"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 16, // ✅ not rounded circle
+      }}
+    />
+  );
+}
+
+/* ------------------------- component ------------------------- */
 export default function TeacherGradeDialog({ open, onOpenChange, student, user }) {
   const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ✅ subject from the SAME fields you used in TeacherDashboard
   const subjectCode = user?.subject?.code || user?.subject_code || null;
   const subjectName = user?.subject?.name || user?.subject_name || "Matière";
   const subjectLabel = useMemo(
@@ -42,8 +98,6 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
     [subjectCode, subjectName]
   );
 
-  // ✅ IMPORTANT: teacher subject_id (whatever your user schema uses)
-  // choose one that exists in your DB
   const teacherSubjectId =
     user?.subject_id ??
     user?.subject?.id ??
@@ -68,7 +122,6 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
     if (!student?.id) return;
     setLoading(true);
     try {
-      // teacher scope endpoint (must exist)
       const res = await axiosClient.get("/enseignant/grades", {
         params: { student_id: student.id, term: form.term, per_page: 200 },
       });
@@ -89,11 +142,10 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
   }, [open, student?.id, form.term]);
 
   const onCreate = async () => {
-    // ✅ subject_id is automatically teacher subject
     const payload = {
       student_id: Number(student.id),
-      subject_id: Number(teacherSubjectId), // ✅ NO select, forced
-      teacher_id: Number(user.id),          // ✅ to show teacher name in admin
+      subject_id: Number(teacherSubjectId),
+      teacher_id: Number(user.id),
       term: form.term || "S1",
       exam_type: form.exam_type || "Exam",
       title: form.title || null,
@@ -125,19 +177,37 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
     }
   };
 
+  const studentName = fullName(student);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl rounded-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between gap-3 flex-wrap">
-            <span>
-              Notes — <span className="font-bold">{fullName(student)}</span>
-            </span>
+          <DialogTitle className="space-y-3">
+            {/* ✅ New top header with big avatar */}
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
+                <AvatarLarge student={student} size={92} />
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold leading-tight truncate">
+                    Notes — <span className="font-bold">{studentName}</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Matière affectée automatiquement : <b>{subjectLabel}</b>
+                  </div>
+                </div>
+              </div>
 
-            {/* ✅ subject badge (fixed) */}
-            <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
-              {subjectLabel}
-            </Badge>
+              <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
+                {subjectLabel}
+              </Badge>
+            </div>
+
+            {!teacherSubjectId ? (
+              <div className="text-sm text-red-600">
+                ⚠️ Votre compte enseignant n’a pas de <b>subject_id</b> configuré.
+              </div>
+            ) : null}
           </DialogTitle>
         </DialogHeader>
 
@@ -145,12 +215,6 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
           {/* FORM */}
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">Ajouter une note</div>
-
-            {!teacherSubjectId ? (
-              <div className="text-sm text-red-600">
-                ⚠️ Votre compte enseignant n’a pas de <b>subject_id</b> configuré.
-              </div>
-            ) : null}
 
             <div className="grid grid-cols-2 gap-2">
               <Input
@@ -195,7 +259,7 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
             </Button>
 
             <div className="text-xs text-muted-foreground">
-              Matière affectée automatiquement : <b>{subjectLabel}</b>
+              Requis : Note + Date {teacherSubjectId ? "" : " + Matière (subject_id)"}
             </div>
           </div>
 
