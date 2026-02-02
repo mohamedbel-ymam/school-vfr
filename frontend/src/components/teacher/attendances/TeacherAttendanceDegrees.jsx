@@ -1,8 +1,11 @@
 // pages/TeacherAttendanceDegrees.jsx
 import { useNavigate } from "react-router-dom";
+import { useLoaderData } from "react-router-dom";
+
 
 export default function TeacherAttendanceDegrees({ degrees }) {
   const navigate = useNavigate();
+  const degrees = useLoaderData();
 
   return (
     <div className="p-4">
