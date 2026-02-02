@@ -17,9 +17,19 @@ function initialsFromName(fullName = "") {
   return (f + l).toUpperCase() || "?";
 }
 
-function ReelsStudentCard({ student, degreeName, onPresent, onAbsent, saving }) {
+function ReelsStudentCard({
+  student,
+  degreeName,
+  onPresent,
+  onAbsent,
+  saving,
+  savingStatus, // "presence" | "absence" | null
+}) {
   const hasPhoto = !!student?.avatar_public_url;
   const initials = initialsFromName(student?.full_name || "");
+
+  const isSavingPresent = saving && savingStatus === "presence";
+  const isSavingAbsent = saving && savingStatus === "absence";
 
   return (
     <div className="w-full">
@@ -40,7 +50,6 @@ function ReelsStudentCard({ student, degreeName, onPresent, onAbsent, saving }) 
             </div>
           )}
 
-          {/* overlay */}
           <div className="absolute inset-x-0 bottom-0 p-4">
             <div className="rounded-2xl bg-black/55 backdrop-blur-md border border-white/10 p-4">
               <div className="text-white text-2xl font-extrabold leading-tight">
@@ -51,20 +60,30 @@ function ReelsStudentCard({ student, degreeName, onPresent, onAbsent, saving }) 
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
+                {/* PRESENT = GREEN */}
                 <button
                   disabled={saving}
                   onClick={onPresent}
-                  className="rounded-2xl py-4 text-lg font-semibold bg-white text-black active:scale-[0.99] disabled:opacity-50"
+                  className={[
+                    "rounded-2xl py-4 text-lg font-semibold active:scale-[0.99] disabled:opacity-70",
+                    "bg-emerald-500 text-white shadow",
+                    isSavingPresent ? "opacity-90" : "",
+                  ].join(" ")}
                 >
-                  Présent
+                  {isSavingPresent ? "En cours…" : "Présent"}
                 </button>
 
+                {/* ABSENT = RED */}
                 <button
                   disabled={saving}
                   onClick={onAbsent}
-                  className="rounded-2xl py-4 text-lg font-semibold bg-white/15 text-white border border-white/20 active:scale-[0.99] disabled:opacity-50"
+                  className={[
+                    "rounded-2xl py-4 text-lg font-semibold active:scale-[0.99] disabled:opacity-70",
+                    "bg-red-500 text-white shadow",
+                    isSavingAbsent ? "opacity-90" : "",
+                  ].join(" ")}
                 >
-                  Absent
+                  {isSavingAbsent ? "En cours…" : "Absent"}
                 </button>
               </div>
             </div>
@@ -79,6 +98,7 @@ function ReelsStudentCard({ student, degreeName, onPresent, onAbsent, saving }) 
   );
 }
 
+
 /* ------------------------- page ------------------------- */
 export default function TeacherAttendanceRun() {
   const { degreeId } = useParams();
@@ -90,6 +110,8 @@ export default function TeacherAttendanceRun() {
   const [index, setIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [savingStatus, setSavingStatus] = useState(null); // "presence" | "absence" | null
+
 
   const cardRef = useRef(null);
 
@@ -156,41 +178,35 @@ export default function TeacherAttendanceRun() {
 
   const current = students[index];
 
-  async function mark(status) {
-    if (!current || !session) return;
-    if (saving) return;
+ async function mark(status) {
+  if (!current || !session) return;
+  if (saving) return;
 
-    setSaving(true);
+  setSaving(true);
+  setSavingStatus(status);
 
-    // optimistic update
+  setStudents((prev) =>
+    prev.map((s, i) => (i === index ? { ...s, status } : s))
+  );
+
+  try {
+    await axiosClient.put("/enseignant/attendance/mark", {
+      session_id: session.id,
+      student_id: current.id,
+      status,
+    });
+
+    setIndex((i) => Math.min(i + 1, total));
+  } catch (e) {
     setStudents((prev) =>
-      prev.map((s, i) => (i === index ? { ...s, status } : s))
+      prev.map((s, i) => (i === index ? { ...s, status: STATUS.not_marked } : s))
     );
-
-    try {
-      await axiosClient.put("/enseignant/attendance/mark", {
-        session_id: session.id,
-        student_id: current.id,
-        status,
-      });
-
-      setIndex((i) => Math.min(i + 1, total)); // total => end screen
-    } catch (e) {
-      // rollback
-      setStudents((prev) =>
-        prev.map((s, i) => (i === index ? { ...s, status: STATUS.not_marked } : s))
-      );
-
-      const statusCode = e?.response?.status;
-      if (statusCode === 401) {
-        alert("Session expirée. Reconnectez-vous.");
-      } else {
-        alert(e?.response?.data?.message ?? "Erreur lors de l’enregistrement. Réessaie.");
-      }
-    } finally {
-      setSaving(false);
-    }
+    alert(e?.response?.data?.message ?? "Erreur lors de l’enregistrement. Réessaie.");
+  } finally {
+    setSaving(false);
+    setSavingStatus(null);
   }
+}
 
   /* ------------------------- UI states ------------------------- */
   if (loading) {
@@ -274,6 +290,7 @@ export default function TeacherAttendanceRun() {
           student={current}
           degreeName={degreeName}
           saving={saving}
+          savingStatus={savingStatus}
           onPresent={() => mark(STATUS.presence)}
           onAbsent={() => mark(STATUS.absence)}
         />
