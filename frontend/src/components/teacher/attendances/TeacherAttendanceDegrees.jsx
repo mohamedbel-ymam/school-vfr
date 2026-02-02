@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useLoaderData } from "react-router-dom";
 
 
-export default function TeacherAttendanceDegrees({ degrees }) {
+export default function TeacherAttendanceDegrees() {
   const navigate = useNavigate();
   const degrees = useLoaderData();
 
