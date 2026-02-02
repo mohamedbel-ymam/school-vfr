@@ -1,5 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { RequireAuth, RequireRole, GuestOnly } from "./guards";
+import { axiosClient } from "../api/axios";
+
 
 /* ===================== PAGES ===================== */
 import Home from "@/pages/Home.jsx";
@@ -97,6 +99,10 @@ import BoursierDashboard from "@/components/boursier/BoursierDashboard.jsx";
 export const LOGIN_ROUTE = "/connexion";
 
 /* ===================== ROUTER ===================== */
+const degreesLoader = async () => {
+  const res = await axiosClient.get("/enseignant/degrees");
+  return res.data || [];
+};
 
 export const router = createBrowserRouter([
   /* ---------- PUBLIC ---------- */
@@ -184,7 +190,7 @@ export const router = createBrowserRouter([
               { path: "tests/:id/results", element: <TestResults /> },
               { path: "notes", element: <TeacherGradesDashboard /> },
               { path: "discipline", element: <TeacherDisciplineDashboard /> },
-              {path:"attendance", element:<TeacherAttendanceDegrees degrees={degrees} />},
+              {path:"attendance",loader: degreesLoader, element:<TeacherAttendanceDegrees degrees={degrees} />},
               {path:"attendance/:degreeId", element: <TeacherAttendanceRun />} 
             ],
           },
