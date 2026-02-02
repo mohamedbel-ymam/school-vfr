@@ -1,7 +1,7 @@
-// pages/TeacherAttendanceRun.jsx
+// components/teacher/attendances/TeacherAttendanceRun.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { axiosClient } from "../../../api/axios"; // your configured axios instance
+import { useParams, useNavigate } from "react-router-dom";
+import { axiosClient } from "../../../api/axios";
 
 const STATUS = {
   presence: "presence",
@@ -9,13 +9,87 @@ const STATUS = {
   not_marked: "not_marked",
 };
 
+/* ------------------------- helpers ------------------------- */
+function initialsFromName(fullName = "") {
+  const parts = fullName.trim().split(/\s+/);
+  const f = parts[0]?.[0] ?? "";
+  const l = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
+  return (f + l).toUpperCase() || "?";
+}
+
+function ReelsStudentCard({ student, degreeName, onPresent, onAbsent, saving }) {
+  const hasPhoto = !!student?.avatar_public_url;
+  const initials = initialsFromName(student?.full_name || "");
+
+  return (
+    <div className="w-full">
+      <div className="relative w-full overflow-hidden rounded-3xl border">
+        <div className="relative w-full h-[62vh] min-h-[420px] bg-black">
+          {hasPhoto ? (
+            <img
+              src={student.avatar_public_url}
+              alt={student.full_name}
+              className="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-700 to-slate-900">
+              <div className="text-white text-7xl font-black tracking-widest opacity-95 select-none">
+                {initials}
+              </div>
+            </div>
+          )}
+
+          {/* overlay */}
+          <div className="absolute inset-x-0 bottom-0 p-4">
+            <div className="rounded-2xl bg-black/55 backdrop-blur-md border border-white/10 p-4">
+              <div className="text-white text-2xl font-extrabold leading-tight">
+                {student.full_name}
+              </div>
+              <div className="mt-1 text-white/75 text-sm">
+                {degreeName || "Classe"}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  disabled={saving}
+                  onClick={onPresent}
+                  className="rounded-2xl py-4 text-lg font-semibold bg-white text-black active:scale-[0.99] disabled:opacity-50"
+                >
+                  Présent
+                </button>
+
+                <button
+                  disabled={saving}
+                  onClick={onAbsent}
+                  className="rounded-2xl py-4 text-lg font-semibold bg-white/15 text-white border border-white/20 active:scale-[0.99] disabled:opacity-50"
+                >
+                  Absent
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 text-sm opacity-70 text-center">
+        Statut: <span className="font-semibold">{student.status}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------- page ------------------------- */
 export default function TeacherAttendanceRun() {
   const { degreeId } = useParams();
+  const navigate = useNavigate();
+
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
   const [students, setStudents] = useState([]);
   const [index, setIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const cardRef = useRef(null);
 
@@ -25,24 +99,58 @@ export default function TeacherAttendanceRun() {
     [students]
   );
 
+  const degreeName =
+    session?.degree_name ||
+    session?.degree?.name ||
+    session?.degreeName ||
+    "";
+
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
       setLoading(true);
+      setErrorMsg("");
+
       try {
         const res = await axiosClient.get("/enseignant/attendance/roster", {
           params: { degree_id: degreeId },
         });
-        setSession(res.data.session);
+
+        if (!mounted) return;
+
+        setSession(res.data.session || null);
         setStudents(res.data.students || []);
         setIndex(0);
+      } catch (e) {
+        if (!mounted) return;
+
+        const status = e?.response?.status;
+
+        if (status === 401) {
+          setErrorMsg("Session expirée. Veuillez vous reconnecter.");
+        } else if (status === 404) {
+          setErrorMsg(
+            "API introuvable (404). Vérifiez les routes Laravel: /api/enseignant/attendance/roster."
+          );
+        } else {
+          setErrorMsg(e?.response?.data?.message ?? "Erreur lors du chargement.");
+        }
+
+        setSession(null);
+        setStudents([]);
+        setIndex(0);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, [degreeId]);
 
   useEffect(() => {
-    // smooth "auto scroll" effect when index changes
     cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [index]);
 
@@ -53,51 +161,97 @@ export default function TeacherAttendanceRun() {
     if (saving) return;
 
     setSaving(true);
-    try {
-      // optimistic update
-      setStudents((prev) =>
-        prev.map((s, i) => (i === index ? { ...s, status } : s))
-      );
 
+    // optimistic update
+    setStudents((prev) =>
+      prev.map((s, i) => (i === index ? { ...s, status } : s))
+    );
+
+    try {
       await axiosClient.put("/enseignant/attendance/mark", {
         session_id: session.id,
         student_id: current.id,
         status,
       });
 
-      // move next
       setIndex((i) => Math.min(i + 1, total)); // total => end screen
     } catch (e) {
-      // rollback if failed
+      // rollback
       setStudents((prev) =>
         prev.map((s, i) => (i === index ? { ...s, status: STATUS.not_marked } : s))
       );
-      alert("Erreur lors de l’enregistrement. Réessaie.");
+
+      const statusCode = e?.response?.status;
+      if (statusCode === 401) {
+        alert("Session expirée. Reconnectez-vous.");
+      } else {
+        alert(e?.response?.data?.message ?? "Erreur lors de l’enregistrement. Réessaie.");
+      }
     } finally {
       setSaving(false);
     }
   }
 
+  /* ------------------------- UI states ------------------------- */
   if (loading) {
     return <div className="p-4">Chargement…</div>;
   }
 
-  // Finished screen
+  if (errorMsg) {
+    return (
+      <div className="p-6 text-center space-y-4">
+        <div className="text-xl font-semibold">Impossible de charger l’appel</div>
+        <div className="opacity-70">{errorMsg}</div>
+        <button
+          onClick={() => navigate("/enseignant/attendance")}
+          className="rounded-2xl border px-4 py-3 font-semibold"
+        >
+          Retour aux classes
+        </button>
+      </div>
+    );
+  }
+
+  if (students.length === 0) {
+    return (
+      <div className="p-6 text-center space-y-4">
+        <div className="text-xl font-semibold">Aucun élève trouvé.</div>
+        <div className="opacity-70">
+          Vérifiez la classe (degree) ou l’affectation des élèves.
+        </div>
+        <button
+          onClick={() => navigate("/enseignant/attendance")}
+          className="rounded-2xl border px-4 py-3 font-semibold"
+        >
+          Retour aux classes
+        </button>
+      </div>
+    );
+  }
+
   if (index >= total) {
     return (
       <div className="p-6 flex min-h-[70vh] items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-3">
           <div className="text-2xl font-semibold">Merci beaucoup, professeur !</div>
-          <div className="mt-2 opacity-70">
+          <div className="opacity-70">
             Présences traitées : {doneCount} / {total}
           </div>
+          <button
+            onClick={() => navigate("/enseignant/attendance")}
+            className="rounded-2xl border px-4 py-3 font-semibold"
+          >
+            Retour aux classes
+          </button>
         </div>
       </div>
     );
   }
 
+  /* ------------------------- main ------------------------- */
   return (
     <div className="p-3">
+      {/* Progress */}
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm opacity-70">
           {index + 1} / {total}
@@ -114,51 +268,23 @@ export default function TeacherAttendanceRun() {
         />
       </div>
 
-      <div ref={cardRef} className="rounded-2xl border p-4">
-        <div className="flex items-center gap-4">
-          <img
-            src={current.avatar_public_url || "/images/avatar-placeholder.png"}
-            alt={current.full_name}
-            className="h-24 w-24 rounded-2xl object-cover border"
-          />
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-wide opacity-60">
-              Élève
-            </div>
-            <div className="text-xl font-semibold truncate">
-              {current.full_name}
-            </div>
-            <div className="text-sm opacity-70 mt-1">
-              Statut: {current.status}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <button
-            disabled={saving}
-            onClick={() => mark(STATUS.presence)}
-            className="rounded-2xl py-4 text-lg font-semibold border active:scale-[0.99] disabled:opacity-50"
-          >
-            Présent
-          </button>
-
-          <button
-            disabled={saving}
-            onClick={() => mark(STATUS.absence)}
-            className="rounded-2xl py-4 text-lg font-semibold border active:scale-[0.99] disabled:opacity-50"
-          >
-            Absent
-          </button>
-        </div>
+      {/* Reels Card */}
+      <div ref={cardRef}>
+        <ReelsStudentCard
+          student={current}
+          degreeName={degreeName}
+          saving={saving}
+          onPresent={() => mark(STATUS.presence)}
+          onAbsent={() => mark(STATUS.absence)}
+        />
       </div>
 
-      {/* Optional: show next student preview */}
-      {students[index + 1] && (
-        <div className="mt-3 text-sm opacity-70">
+      {/* optional next preview */}
+      {students[index + 1] ? (
+        <div className="mt-3 text-sm opacity-70 text-center">
           Prochain: {students[index + 1].full_name}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
