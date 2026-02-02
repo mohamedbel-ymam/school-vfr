@@ -44,7 +44,8 @@ import TeacherDocuments from "@/components/teacher/TeacherDocuments.jsx";
 import TeacherDevoirs from "@/components/teacher/TeacherDevoirs.jsx";
 import TeacherGradesDashboard from "@/components/teacher/grades/TeacherGradesDashboard.jsx";
 import TeacherDisciplineDashboard from "@/components/teacher/rates/TeacherDisciplineDashboard.jsx";
-
+import TeacherAttendanceDegrees from "../components/teacher/attendances/TeacherAttendanceDegrees.jsx";
+import TeacherAttendanceRun from "../components/teacher/attendances/TeacherAttendanceRun.jsx";
 /* Teacher tests */
 import TeacherTestsList from "@/components/teacher/tests/TeacherTestsList.jsx";
 import CreateTestForm from "@/components/teacher/tests/CreateTestForm.jsx";
@@ -183,6 +184,8 @@ export const router = createBrowserRouter([
               { path: "tests/:id/results", element: <TestResults /> },
               { path: "notes", element: <TeacherGradesDashboard /> },
               { path: "discipline", element: <TeacherDisciplineDashboard /> },
+              {path:"attendance", element:<TeacherAttendanceDegrees degrees={degrees} />},
+              {path:"attendance/:degreeId", element: <TeacherAttendanceRun />} 
             ],
           },
         ],

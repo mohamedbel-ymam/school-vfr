@@ -18,6 +18,7 @@ import {
   Settings,
   LogOut,
   StarIcon,
+  BookCheck,
 } from "lucide-react";
 
 /**
@@ -30,6 +31,7 @@ export function TeacherAdministrationSidebar({ className, collapsed = false }) {
 
   const items = [
     { label: "Tableau de bord", to: "/enseignant/tableau de bord", icon: House },
+    {label:"attendance", to:"/enseignant/attendance", icon:BookCheck },
     { label: "Emploi du temps", to: "/enseignant/emploi du temps", icon: CalendarDays },
     { label: "Mes cours",       to: "/enseignant/courses",         icon: BookOpen },
     { label: "Devoirs",         to: "/enseignant/devoirs",         icon: ClipboardList },
