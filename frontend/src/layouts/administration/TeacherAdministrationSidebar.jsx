@@ -31,12 +31,12 @@ export function TeacherAdministrationSidebar({ className, collapsed = false }) {
 
   const items = [
     { label: "Tableau de bord", to: "/enseignant/tableau de bord", icon: House },
-    {label:"attendance", to:"/enseignant/attendance", icon:BookCheck },
+    { label: "Absences",       to:"/enseignant/attendance",       icon:BookCheck },
     { label: "Emploi du temps", to: "/enseignant/emploi du temps", icon: CalendarDays },
     { label: "Mes cours",       to: "/enseignant/courses",         icon: BookOpen },
     { label: "Devoirs",         to: "/enseignant/devoirs",         icon: ClipboardList },
     { label: "Examens",         to: "/enseignant/tests",           icon: ClipboardList },
-    { label: "Notes",           to: "/enseignant/notes",          icon: BarChart2 },
+    { label: "Notes",           to: "/enseignant/notes",           icon: BarChart2 },
     { label: "Discipline",      to: "/enseignant/discipline",      icon: StarIcon },
     { label: "Messages",        to: "/enseignant/messages",        icon: MessageSquare },
     { label: "Événements",      to: "/enseignant/événements",      icon: CalendarDays },
