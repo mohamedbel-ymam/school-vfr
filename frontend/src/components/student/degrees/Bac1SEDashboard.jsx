@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import DashboardScaffold from "../DashboardScaffold.jsx";
-import AttendanceApi from "../../../services/api/AttendanceApi.js";
+import studentAttendanceApi from "../../../services/api/AttendanceApi.js";
 import HomeworkApi from "../../../services/api/HomeworkApi.js";
 import { toast } from "sonner";
 
@@ -32,7 +32,7 @@ export default function Bac1SEDashboard() {
   const fetchMe = async () => {
     setLoading(true);
     try {
-      const res = await AttendanceApi.me({ period });
+      const res = await studentAttendanceApi.me({ period });
       const a = clamp(res?.attendance?.absences ?? 0);
       const j = clamp(res?.attendance?.justified_absences ?? 0);
       const p = clamp(res?.attendance?.presences ?? 0);
@@ -53,7 +53,7 @@ export default function Bac1SEDashboard() {
   // fetch global/year attendance (once)
   const fetchYear = async () => {
     try {
-      const res = await AttendanceApi.me({ period: "overall" });
+      const res = await studentAttendanceApi.me({ period: "overall" });
       const a = clamp(res?.attendance?.absences ?? 0);
       const j = clamp(res?.attendance?.justified_absences ?? 0);
       const p = clamp(res?.attendance?.presences ?? 0);

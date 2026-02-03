@@ -1,9 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardScaffold from "../DashboardScaffold.jsx";
-import AttendanceApi from "../../../services/api/AttendanceApi.js";
+import { studentAttendanceApi } from "../../../services/api/AttendanceApi";
 import HomeworkApi from "../../../services/api/HomeworkApi.js";
-import { toast } from "sonner";
 import { axiosClient } from "../../../api/axios";
 
 // helpers
@@ -14,106 +13,84 @@ const rateFrom = (a, j, p) => {
   return d ? Math.round((P / d) * 100) : 0;
 };
 
-// compute grade summary from grade rows (no need backend change)
-function computeGradesSummary(rows = []) {
-  let sumScore = 0;
-  let sumMax = 0;
-
-  for (const g of rows) {
-    const s = Number(g?.score);
-    const m = Number(g?.max_score);
-    if (!Number.isFinite(s) || !Number.isFinite(m) || m <= 0) continue;
-    sumScore += s;
-    sumMax += m;
-  }
-
-  const avg_percent = sumMax > 0 ? (sumScore / sumMax) * 100 : null;
-
-  return {
-    avg_percent,
-    count: Array.isArray(rows) ? rows.length : 0,
-  };
-}
-
 export default function College3emeDashboard() {
   const nav = useNavigate();
 
   const [period, setPeriod] = useState("month"); // 'overall' | 'month' | 'week'
-  const [loading, setLoading] = useState(true);
-  const [att, setAtt] = useState({ a: 0, j: 0, p: 0, rate: 0, range: null });
-  const [yearAtt, setYearAtt] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // ✅ new dashboard data
-  const [term] = useState("S1"); // keep simple for now
+  const [att, setAtt] = useState({ a: 0, j: 0, p: 0, rate: 0, range: null, streak: 0 });
+  const [yearAtt, setYearAtt] = useState({ a: 0, j: 0, p: 0, rate: 0 });
+
+  // ✅ keep your grade/rating system untouched
+  const [term] = useState("S1");
   const [gradesSummary, setGradesSummary] = useState(null);
   const [disciplineSummary, setDisciplineSummary] = useState(null);
 
-  // fetch current period attendance
-  const fetchMe = async () => {
+  // ---------------- Attendance (SAFE until student endpoint exists) ----------------
+  const fetchMeSafe = async () => {
     setLoading(true);
     try {
-      const res = await AttendanceApi.me({ period });
-      const a = clamp(res?.attendance?.absences ?? 0);
-      const j = clamp(res?.attendance?.justified_absences ?? 0);
-      const p = clamp(res?.attendance?.presences ?? 0);
-      setAtt({
-        a,
-        j,
-        p,
-        rate: rateFrom(a, j, p),
-        range: res?.period?.range ?? null,
-        streak: res?.attendance?.streak ?? 0,
-      });
-    } catch (e) {
-      console.error(e);
-      toast.error("Impossible de charger vos présences (période).");
-      setAtt({ a: 0, j: 0, p: 0, rate: 0, range: null });
+      // Currently student endpoints not implemented -> this will throw (by design)
+      // When you implement later: replace with a real method and map response.
+      await studentAttendanceApi.myMonthly?.();
+
+      // Example mapping later:
+      // const res = await studentAttendanceApi.me({ period });
+      // const a = clamp(res?.attendance?.absences ?? 0);
+      // const j = clamp(res?.attendance?.justified_absences ?? 0);
+      // const p = clamp(res?.attendance?.presences ?? 0);
+      // setAtt({ a, j, p, rate: rateFrom(a, j, p), range: res?.period?.range ?? null, streak: res?.attendance?.streak ?? 0 });
+    } catch {
+      // keep 0 but don't crash / don't toast spam
+      setAtt({ a: 0, j: 0, p: 0, rate: 0, range: null, streak: 0 });
     } finally {
       setLoading(false);
     }
   };
 
-  // fetch full year attendance once
-  const fetchYear = async () => {
+  const fetchYearSafe = async () => {
     try {
-      const res = await AttendanceApi.me({ period: "overall" });
-      const a = clamp(res?.attendance?.absences ?? 0);
-      const j = clamp(res?.attendance?.justified_absences ?? 0);
-      const p = clamp(res?.attendance?.presences ?? 0);
-      setYearAtt({ a, j, p, rate: rateFrom(a, j, p) });
-    } catch (e) {
-      console.error(e);
-      toast.error("Impossible de charger vos présences (année).");
-      setYearAtt(null);
+      // Later: call overall endpoint
+      setYearAtt({ a: 0, j: 0, p: 0, rate: 0 });
+    } catch {
+      setYearAtt({ a: 0, j: 0, p: 0, rate: 0 });
     }
   };
 
-  // ✅ fetch grade summary (student)
+  useEffect(() => {
+    fetchYearSafe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetchMeSafe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
+
+  // ---------------- Grades summary (KEEP AS IS) ----------------
   const fetchGradesSummary = async () => {
     try {
-      // change if your endpoint differs:
-    const res = await axiosClient.get("/eleve/grades", { params: { term } });
-    const summary = res?.data?.summary;
+      const res = await axiosClient.get("/eleve/grades", { params: { term } });
+      const summary = res?.data?.summary;
 
-    setGradesSummary({
-    avg_percent: summary?.avg_percent ?? null,
-    count: summary?.count ?? 0,
-    termLabel: term,
-    updated_at: new Date().toLocaleDateString(),
-  });
+      setGradesSummary({
+        avg_percent: summary?.avg_percent ?? null,
+        count: summary?.count ?? 0,
+        termLabel: term,
+        updated_at: new Date().toLocaleDateString("fr-FR"),
+      });
     } catch (e) {
       console.error(e);
       setGradesSummary(null);
     }
   };
 
-  // ✅ fetch discipline summary (aggregated)
+  // ---------------- Discipline summary (KEEP AS IS) ----------------
   const fetchDisciplineSummary = async () => {
     try {
-      // change if your endpoint differs:
       const res = await axiosClient.get("/eleve/ratings", { params: { term, per_page: 50 } });
       const rows = res?.data?.data?.data ?? res?.data?.data ?? [];
-      // take latest row (backend should latest())
       const latest = Array.isArray(rows) && rows.length ? rows[0] : null;
 
       setDisciplineSummary(
@@ -140,21 +117,12 @@ export default function College3emeDashboard() {
   };
 
   useEffect(() => {
-    fetchYear();
-  }, []);
-
-  useEffect(() => {
-    fetchMe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
-
-  // ✅ load summaries once for test
-  useEffect(() => {
     fetchGradesSummary();
     fetchDisciplineSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---------------- UI ----------------
   const stats = useMemo(
     () => [
       { title: "Séances du jour", value: 1 },
@@ -172,7 +140,6 @@ export default function College3emeDashboard() {
   ];
 
   const [homeworks, setHomeworks] = useState([]);
-
   useEffect(() => {
     (async () => {
       try {
@@ -196,7 +163,6 @@ export default function College3emeDashboard() {
       period={period}
       onPeriodChange={setPeriod}
       homeworks={homeworks}
-      // ✅ new props
       gradesSummary={gradesSummary}
       disciplineSummary={disciplineSummary}
     />
