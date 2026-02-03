@@ -197,6 +197,45 @@ export default function AccountSettings() {
       ) : null}
 
       {/* ---------------- Avatar (Student only) ---------------- */}
+      {/* Instructions photo (visible uniquement pour les élèves) */}
+{user?.role === "student" && (
+  <div className="mt-4 rounded-2xl border bg-slate-50/70 p-4 text-sm leading-relaxed">
+    <p className="font-semibold">📸 Photo de profil — règles de validation</p>
+
+    <p className="mt-2 text-muted-foreground">
+      Pour que votre photo soit <span className="font-medium text-foreground">approuvée par l’administration</span>,
+      veuillez respecter ces consignes. Une fois envoyée, la photo restera{" "}
+      <span className="font-medium text-foreground">en attente de validation</span>.  
+      Si elle est refusée, vous pourrez en envoyer une nouvelle.
+    </p>
+
+    <ul className="mt-3 space-y-1 text-muted-foreground list-disc pl-5">
+      <li>
+        Photo <span className="font-medium text-foreground">récente</span>, nette, bien éclairée, visage visible.
+      </li>
+      <li>
+        <span className="font-medium text-foreground">Une seule personne</span> sur la photo (vous uniquement).
+      </li>
+      <li>
+        <span className="font-medium text-foreground">Sans filtres</span> excessifs, sans lunettes qui cachent le visage,
+        sans masque.
+      </li>
+      <li>
+        Fond neutre de préférence, tenue correcte (photo de type “identité” recommandée).
+      </li>
+      <li>
+        Formats acceptés : <span className="font-medium text-foreground">JPG / PNG / WEBP</span> — taille max :{" "}
+        <span className="font-medium text-foreground">4 Mo</span>.
+      </li>
+    </ul>
+
+    <p className="mt-3 text-xs text-muted-foreground">
+      ✅ Après validation, votre photo apparaîtra partout dans l’application (tableaux, listes, cartes). <br />
+      🔁 Toute modification ultérieure devra aussi être revalidée par l’administration.
+    </p>
+  </div>
+)}
+
       {user?.role === "student" && (
         <Card className="rounded-2xl">
           <CardContent className="pt-6 space-y-4">
