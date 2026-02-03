@@ -6,7 +6,7 @@ import { Skeleton } from "../../../../components/ui/skeleton";
 import { toast } from "sonner";
 
 // reuse your already-working degrees api (same as teacher discipline)
-import { DegreeApi } from "../../../../services/api/admin/DegreeApi";
+import { AdminGradesServices } from "../../../../services/api/admin/AdminGradesServices";
 
 export default function AdminAttendanceDegrees() {
   const navigate = useNavigate();
@@ -18,7 +18,7 @@ export default function AdminAttendanceDegrees() {
     (async () => {
       try {
         setLoading(true);
-        const res = await DegreeApi.list();
+        const res = await AdminGradesServices.list();
         if (!mounted) return;
         setDegrees(res.data?.data ?? res.data ?? []);
       } catch (e) {

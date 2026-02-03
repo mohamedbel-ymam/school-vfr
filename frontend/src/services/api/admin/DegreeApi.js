@@ -1,6 +1,6 @@
 import { axiosClient } from "../../../api/axios";
 
-const DegreeApi = {
+export const DegreeApi = {
   // Admin list (paginated)
   list: (params = {}) => axiosClient.get("/admin/degrees", { params }),
 
