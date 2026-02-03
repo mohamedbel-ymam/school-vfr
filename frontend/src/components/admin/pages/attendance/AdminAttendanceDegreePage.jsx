@@ -38,28 +38,44 @@ export default function AdminAttendanceDegreePage() {
   const [dirty, setDirty] = useState({});
   const dirtyCount = Object.keys(dirty).length;
 
-  async function load() {
-    setLoading(true);
-    setDirty({});
-    try {
-      const res = await adminAttendanceApi.weekly({
-        degreeId: Number(degreeId),
-        weekStart,
-      });
-      const payload = res.data;
+async function load() {
+  setLoading(true);
+  setDirty({});
+  try {
+    // ✅ backfill ALL 7 days (recommended) so every cell has record_id
+    const days = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
+    await Promise.all(
+      days.map((date) =>
+        adminAttendanceApi.backfill({
+          degreeId: Number(degreeId),
+          date,
+          defaultStatus: "not_marked",
+          onlyMissing: true,
+        }).catch(() => null)
+      )
+    );
 
-      setDegreeName(payload?.degree?.name ?? degreeNameFromNav ?? "");
-      setWeekDays(payload?.week?.days ?? Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i)));
-      setRows(payload?.rows ?? []);
-    } catch (e) {
-      console.error(e);
-      toast.error(e?.response?.data?.message ?? "Erreur chargement présences.");
-      setWeekDays([]);
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
+    // ✅ now fetch weekly matrix
+    const res = await adminAttendanceApi.weekly({
+      degreeId: Number(degreeId),
+      weekStart,
+    });
+
+    const payload = res.data;
+
+    setDegreeName(payload?.degree?.name ?? degreeNameFromNav ?? "");
+    setWeekDays(payload?.week?.days ?? days);
+    setRows(payload?.rows ?? []);
+  } catch (e) {
+    console.error(e);
+    toast.error(e?.response?.data?.message ?? "Erreur chargement présences.");
+    setWeekDays([]);
+    setRows([]);
+  } finally {
+    setLoading(false);
   }
+}
+
 
   useEffect(() => {
     load();
