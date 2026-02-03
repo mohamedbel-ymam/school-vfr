@@ -37,7 +37,7 @@ import {
 // APIs
 import DocumentApi from "../../../services/api/DocumentApi";
 import HomeworkApi from "../../../services/api/HomeworkApi";
-import AttendanceApi from "../../../services/api/AttendanceApi";
+import AttendanceApi from "../../../services/api/admin/AttendanceApi";
 import { axiosClient } from "../../../api/axios";
 
 import { useAuth } from "../../../context/AuthContext";
