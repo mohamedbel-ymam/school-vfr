@@ -73,8 +73,8 @@ import ManageEvents from "@/components/admin/pages/ManageEvents.jsx";
 import ManageGroups from "@/components/admin/pages/ManageGroups.jsx";
 import ManageWaitingList from "@/components/admin/pages/ManageWaitingList.jsx";
 import ManageMonthlyPlans from "@/components/admin/pages/ManageMonthlyPlans.jsx";
-import ManagePresence from "@/components/admin/pages/ManagePresence.jsx";
-import AdminDocuments from "@/components/admin/pages/AdminDocuments.jsx";
+import AdminAttendanceDegrees from "../components/admin/pages/attendance/AdminAttendanceDegrees.jsx";
+import AdminAttendanceDegreePage from "../components/admin/pages/attendance/AdminAttendanceDegreePage.jsx";import AdminDocuments from "@/components/admin/pages/AdminDocuments.jsx";
 import AdminDevoirs from "@/components/admin/pages/AdminDevoirs.jsx";
 import SendNotification from "@/components/admin/pages/SendNotification.jsx";
 import AdminsPage from "@/components/admin/pages/AdminsPage.jsx";
@@ -220,7 +220,8 @@ export const router = createBrowserRouter([
               { path: "waiting-list", element: <ManageWaitingList /> },
               { path: "documents", element: <AdminDocuments /> },
               { path: "devoirs", element: <AdminDevoirs /> },
-              { path: "presences", element: <ManagePresence /> },
+              { path: "presences", element: <AdminAttendanceDegrees /> },
+              { path: "presences/:degreeId", element: <AdminAttendanceDegreePage /> },
               { path: "notifications", element: <SendNotification /> },
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
