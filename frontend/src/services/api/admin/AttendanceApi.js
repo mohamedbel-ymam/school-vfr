@@ -1,5 +1,5 @@
 // src/services/api/AttendanceApi.js
-import { axiosClient } from "../../../api/axios";
+import { axiosClient } from "../../api/axios";
 
 /**
  * This file serves BOTH:
