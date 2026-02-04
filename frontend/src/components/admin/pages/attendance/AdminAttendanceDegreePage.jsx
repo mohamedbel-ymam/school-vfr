@@ -1,9 +1,11 @@
+// src/components/admin/pages/attendance/AdminAttendanceDegreePage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
 import { toast } from "sonner";
 import { adminAttendanceApi } from "../../../../services/api/admin/AdminAttendanceServices";
 
+/* ------------------------- date helpers ------------------------- */
 function startOfWeekMonday(date = new Date()) {
   const d = new Date(date);
   const day = (d.getDay() + 6) % 7; // Monday=0
@@ -17,7 +19,11 @@ function addDays(yyyyMMdd, n) {
 }
 function frDay(yyyyMMdd) {
   const d = new Date(`${yyyyMMdd}T00:00:00`);
-  return d.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" });
+  return d.toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 export default function AdminAttendanceDegreePage() {
@@ -38,51 +44,56 @@ export default function AdminAttendanceDegreePage() {
   const [dirty, setDirty] = useState({});
   const dirtyCount = Object.keys(dirty).length;
 
-async function load() {
-  setLoading(true);
-  setDirty({});
-  try {
-    // ✅ backfill ALL 7 days (recommended) so every cell has record_id
-    const days = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
-    await Promise.all(
-      days.map((date) =>
-        adminAttendanceApi.backfill({
-          degreeId: Number(degreeId),
-          date,
-          defaultStatus: "not_marked",
-          onlyMissing: true,
-        }).catch(() => null)
-      )
-    );
+  const daysOfWeek = useMemo(
+    () => Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i)),
+    [weekStart]
+  );
 
-    // ✅ now fetch weekly matrix
-    const res = await adminAttendanceApi.weekly({
-      degreeId: Number(degreeId),
-      weekStart,
-    });
+  async function load() {
+    setLoading(true);
+    setDirty({});
+    try {
+      // ✅ ensure record_id exists for each day (so admin can toggle later)
+      await Promise.all(
+        daysOfWeek.map((date) =>
+          adminAttendanceApi
+            .backfill({
+              degreeId: Number(degreeId),
+              date,
+              defaultStatus: "not_marked",
+              onlyMissing: true,
+            })
+            .catch(() => null)
+        )
+      );
 
-    const payload = res.data;
+      // ✅ fetch weekly matrix
+      const res = await adminAttendanceApi.weekly({
+        degreeId: Number(degreeId),
+        weekStart,
+      });
 
-    setDegreeName(payload?.degree?.name ?? degreeNameFromNav ?? "");
-    setWeekDays(payload?.week?.days ?? days);
-    setRows(payload?.rows ?? []);
-  } catch (e) {
-    console.error(e);
-    toast.error(e?.response?.data?.message ?? "Erreur chargement présences.");
-    setWeekDays([]);
-    setRows([]);
-  } finally {
-    setLoading(false);
+      const payload = res.data;
+
+      setDegreeName(payload?.degree?.name ?? degreeNameFromNav ?? "");
+      setWeekDays(payload?.week?.days ?? daysOfWeek);
+      setRows(payload?.rows ?? []);
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.response?.data?.message ?? "Erreur chargement présences.");
+      setWeekDays([]);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }
-}
-
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [degreeId, weekStart]);
 
-  // Build list of absences to adjust (teacher only sets absence/presence)
+  // Build list of absences to adjust
   const absenceList = useMemo(() => {
     const list = [];
     for (const r of rows) {
@@ -90,7 +101,6 @@ async function load() {
         const cell = r.days?.[d];
         if (!cell?.record_id) continue;
 
-        // only show absent or justified absent (admin can flip)
         if (cell.status === "absence" || cell.status === "absence_justifiee") {
           list.push({
             student_id: r.student_id,
@@ -102,12 +112,13 @@ async function load() {
         }
       }
     }
-    // sort by date then name
-    list.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : a.full_name.localeCompare(b.full_name)));
+    list.sort((a, b) =>
+      a.date > b.date ? 1 : a.date < b.date ? -1 : a.full_name.localeCompare(b.full_name)
+    );
     return list;
   }, [rows, weekDays]);
 
-  // Helper: update a cell locally + dirty map
+  // Update a cell locally + dirty map
   function setCell(recordId, studentId, date, status) {
     setDirty((prev) => ({ ...prev, [recordId]: status }));
 
@@ -117,11 +128,11 @@ async function load() {
 
         const oldCell = r.days?.[date] ?? { record_id: recordId, status: "not_marked" };
         const nextDays = {
-          ...r.days,
+          ...(r.days ?? {}),
           [date]: { ...oldCell, record_id: recordId, status },
         };
 
-        // recompute counts automatically (this gives your “reduce absence when justify” behavior)
+        // recompute counts
         const statuses = Object.values(nextDays).map((c) => c.status);
         const presence = statuses.filter((s) => s === "presence").length;
         const absence = statuses.filter((s) => s === "absence").length;
@@ -173,11 +184,13 @@ async function load() {
     window.open(url, "_blank");
   }
 
-  // Optional: if you add summary export endpoint later, use this instead
-  function exportWeekSummaryOptional() {
+  function exportWeekSummary() {
+    const from = weekStart;
+    const to = addDays(weekStart, 6);
     const url = adminAttendanceApi.exportWeeklySummaryUrl({
       degreeId: Number(degreeId),
-      weekStart,
+      from,
+      to,
     });
     window.open(url, "_blank");
   }
@@ -194,7 +207,7 @@ async function load() {
 
   return (
     <div className="p-4 space-y-4">
-      {/* Top header */}
+      {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="text-sm text-muted-foreground">Classe</div>
@@ -218,7 +231,7 @@ async function load() {
         </div>
       </div>
 
-      {/* Tabs = 2 big divs */}
+      {/* Tabs */}
       <div className="grid grid-cols-2 gap-2">
         <button
           onClick={() => setTab("adjust")}
@@ -255,9 +268,14 @@ async function load() {
             </Button>
           ) : (
             <>
-              {/* Use raw export now; swap to exportWeekSummaryOptional() if you add summary export endpoint */}
-              <Button variant="secondary" onClick={exportWeekRaw} disabled={loading}>
-                Export Excel
+              {/* ✅ Prefer summary export */}
+              <Button variant="secondary" onClick={exportWeekSummary} disabled={loading}>
+                Export (Résumé)
+              </Button>
+
+              {/* optional raw export */}
+              <Button variant="outline" onClick={exportWeekRaw} disabled={loading}>
+                Export (Brut)
               </Button>
             </>
           )}
@@ -281,11 +299,15 @@ async function load() {
           ) : (
             <div className="divide-y">
               {absenceList.map((a) => (
-                <div key={a.record_id} className="p-3 flex items-center justify-between gap-3 flex-wrap">
+                <div
+                  key={a.record_id}
+                  className="p-3 flex items-center justify-between gap-3 flex-wrap"
+                >
                   <div className="min-w-0">
                     <div className="font-semibold truncate">{a.full_name}</div>
                     <div className="text-sm opacity-70">
-                      {frDay(a.date)} • {a.status === "absence_justifiee" ? "Absence justifiée" : "Absence"}
+                      {frDay(a.date)} •{" "}
+                      {a.status === "absence_justifiee" ? "Absence justifiée" : "Absence"}
                     </div>
                   </div>
 
@@ -302,9 +324,7 @@ async function load() {
                       Justifiée
                     </label>
 
-                    <span className="text-xs opacity-70">
-                      #{a.record_id}
-                    </span>
+                    <span className="text-xs opacity-70">#{a.record_id}</span>
                   </div>
                 </div>
               ))}
@@ -335,8 +355,7 @@ async function load() {
           </table>
 
           <div className="p-3 text-sm opacity-70">
-            Export: utilise actuellement l’export brut (par enregistrement).  
-            Si tu ajoutes l’endpoint “export-weekly-summary”, on exportera directement ce tableau.
+            “Export (Résumé)” génère 1 ligne par élève avec les compteurs (présence/absence/justifiée).
           </div>
         </div>
       )}

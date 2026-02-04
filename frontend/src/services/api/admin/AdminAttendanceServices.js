@@ -26,6 +26,15 @@ export const adminAttendanceApi = {
       only_missing: onlyMissing,
       ...(studentIds?.length ? { student_ids: studentIds } : {}),
     }),
+    exportWeeklySummaryUrl: ({ degreeId, from, to }) => {
+  const base = axiosClient.defaults.baseURL;
+  const qs = new URLSearchParams({
+    degree_id: String(degreeId),
+    from,
+    to,
+  });
+  return `${base}/admin/attendance/export-weekly-summary?${qs.toString()}`;
+    },
 
   // ✅ matches: Route::get('attendance/export', ...)
   exportRangeUrl: ({ degreeId, from, to }) => {
