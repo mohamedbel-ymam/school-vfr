@@ -26,8 +26,14 @@ const PARAM_SEG = "paramètres";
 function AvatarBadge({ user }) {
   const [broken, setBroken] = useState(false);
 
-  // ✅ Only approved avatar (recommended)
-  const src = user?.avatar_url || user?.avatar || user?.photo_url || null;
+  // ✅ Prefer approved/public avatar first (what your backend already exposes in other places)
+  const src =
+    user?.avatar_public_url ||
+    user?.avatar_url ||
+    user?.photo_url ||
+    user?.avatar ||
+    null;
+
   const initials = getInitials(user);
 
   return (
@@ -46,7 +52,6 @@ function AvatarBadge({ user }) {
         </div>
       )}
 
-      {/* online dot */}
       <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-800" />
     </div>
   );
