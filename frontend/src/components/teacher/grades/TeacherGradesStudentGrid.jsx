@@ -121,6 +121,7 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
   if (!rows.length) {
     return <div className="text-sm text-muted-foreground">Aucun élève.</div>;
   }
+  console.log(students?.[0])
 
   return (
     <>
@@ -202,4 +203,4 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
     </>
   );
 }
-console.log(students?.[0])
+
