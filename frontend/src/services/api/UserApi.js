@@ -202,7 +202,7 @@ const UserApi = {
   // ✅ shim used by SendNotification.jsx
   all() {
     // GET /api/admin/users?per_page=1000
-    return axiosClient.get("/admin/users", { params: { per_page: 1000 } });
+    return axiosClient.get("/admin/users", { params: { per_page: 10000 } });
   },
 
   // --- Role-scoped helpers (keep your existing return shape) ---
