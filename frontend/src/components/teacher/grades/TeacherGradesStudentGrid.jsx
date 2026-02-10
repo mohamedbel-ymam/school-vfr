@@ -202,3 +202,4 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
     </>
   );
 }
+console.log(students?.[0])
