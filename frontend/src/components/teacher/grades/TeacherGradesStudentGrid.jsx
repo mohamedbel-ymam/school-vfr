@@ -36,13 +36,21 @@ function fullName(s) {
   const n = `${f} ${l}`.trim();
   return n || (s?.name ?? "").trim() || `#${s?.id ?? "?"}`;
 }
-
+function pickAvatarUrl(u) {
+  // ✅ prefer public url (what you said works)
+  return (
+    u?.avatar_public_url ||
+    u?.avatar_url ||
+    u?.avatar ||
+    u?.photo_url ||
+    null
+  );
+}
 function StudentAvatarSquare({ student }) {
   const [broken, setBroken] = useState(false);
 
   // ✅ your working line
-  let src = student?.avatar_url || student?.avatar || student?.photo_url || null;
-
+  let src = pickAvatarUrl(student);
   // optional: normalize if backend returns "/storage/..."
   if (src && typeof src === "string" && src.startsWith("/")) {
     src = `https://api.takwaetablissement.com${src}`;

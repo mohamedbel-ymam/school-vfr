@@ -23,16 +23,13 @@ const ROLE_ROOTS = [
 ];
 const PARAM_SEG = "paramètres";
 
+
 function AvatarBadge({ user }) {
   const [broken, setBroken] = useState(false);
 
   // ✅ Prefer approved/public avatar first (what your backend already exposes in other places)
-  const src =
-    user?.avatar_public_url ||
-    user?.avatar_url ||
-    user?.photo_url ||
-    user?.avatar ||
-    null;
+  const src = pickAvatarUrl(user);
+
 
   const initials = getInitials(user);
 
@@ -155,6 +152,15 @@ export default function DefaultDropDownMenu({ children, profileHref = "/account"
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+function pickAvatarUrl(u) {
+  return (
+    u?.avatar_public_url ||
+    u?.avatar_url ||
+    u?.avatar ||
+    u?.photo_url ||
+    null
   );
 }
 

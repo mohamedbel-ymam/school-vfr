@@ -42,32 +42,34 @@ function initialsFromStudent(s) {
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
   return (first + last).toUpperCase() || "?";
 }
-
+function pickAvatarUrl(u) {
+  // ✅ prefer public url (what you said works)
+  return (
+    u?.avatar_public_url ||
+    u?.avatar_url ||
+    u?.avatar ||
+    u?.photo_url ||
+    null
+  );
+}
 function AvatarLarge({ student, size = 92 }) {
   const [broken, setBroken] = useState(false);
 
-  // ✅ your working line
-  let src = student?.avatar_url || student?.avatar || student?.photo_url || null;
+  let src = pickAvatarUrl(student);
 
-  // ✅ normalize relative URL (optional but recommended)
+  // normalize relative
   if (src && typeof src === "string" && src.startsWith("/")) {
     src = `https://api.takwaetablissement.com${src}`;
   }
 
   const fallback = initialsFromStudent(student);
-
-  const boxStyle = {
-    width: size,
-    height: size,
-    borderRadius: 16, // ✅ square-rounded, not circle
-  };
+  const boxStyle = { width: size, height: size, borderRadius: 16 };
 
   if (!src || broken) {
     return (
       <div
         className="shrink-0 border bg-muted flex items-center justify-center font-semibold text-lg"
         style={boxStyle}
-        aria-label={fullName(student)}
       >
         {fallback || "?"}
       </div>
@@ -86,6 +88,7 @@ function AvatarLarge({ student, size = 92 }) {
     />
   );
 }
+
 
 
 /* ------------------------- component ------------------------- */
