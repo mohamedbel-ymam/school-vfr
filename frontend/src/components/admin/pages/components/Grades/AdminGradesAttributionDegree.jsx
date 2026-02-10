@@ -2,16 +2,21 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { axiosClient } from "../../../../../api/axios";
 
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../../components/ui/card";
+import { Card, CardContent, CardHeader } from "../../../../../components/ui/card";
 import { Skeleton } from "../../../../../components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../../components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../../../components/ui/select";
 import { Button } from "../../../../../components/ui/button";
 import { Input } from "../../../../../components/ui/input";
 import { Separator } from "../../../../../components/ui/separator";
 import { toast } from "sonner";
 import { Search, Users } from "lucide-react";
 
-// ✅ adapte le chemin exact chez toi
 import StudentGradesDialog from "./StudentGradesDialog.jsx";
 
 /* ----------------------------- helpers ----------------------------- */
@@ -26,8 +31,13 @@ function toAvg20(totalScore, totalMax) {
   return (s / m) * 20;
 }
 
-function safeStr(v) {
-  return v == null ? "" : String(v);
+function normName(s) {
+  // ✅ search ONLY by student name (no email)
+  const name =
+    s?.name ??
+    [s?.firstname, s?.lastname].filter(Boolean).join(" ").trim() ??
+    "";
+  return name.toLowerCase();
 }
 
 export default function AdminGradesAttributionDegree() {
@@ -39,7 +49,7 @@ export default function AdminGradesAttributionDegree() {
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
 
-  const [q, setQ] = useState(""); // ✅ local search
+  const [q, setQ] = useState(""); // ✅ name search only
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [open, setOpen] = useState(false);
 
@@ -53,12 +63,9 @@ export default function AdminGradesAttributionDegree() {
         }),
       ]);
 
-      const degName =
-        degRes?.data?.data?.name ??
-        degRes?.data?.name ??
-        `Degré #${degreeId}`;
-
-      setDegreeName(degName);
+      setDegreeName(
+        degRes?.data?.data?.name ?? degRes?.data?.name ?? `Degré #${degreeId}`
+      );
 
       const rows = unwrap(lbRes);
       setStudents(Array.isArray(rows) ? rows : []);
@@ -95,7 +102,7 @@ export default function AdminGradesAttributionDegree() {
         ...s,
         avg20,
         displayName,
-        _search: `${displayName} ${safeStr(s.email)} ${safeStr(s.id)}`.toLowerCase(),
+        _nameSearch: normName(s),
       };
     });
   }, [students]);
@@ -103,7 +110,10 @@ export default function AdminGradesAttributionDegree() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return cards;
-    return cards.filter((s) => s._search.includes(needle));
+
+    // ✅ match by words: "anass sanhaji" works even if typed "anass" or "sanhaji"
+    const parts = needle.split(/\s+/).filter(Boolean);
+    return cards.filter((s) => parts.every((p) => s._nameSearch.includes(p)));
   }, [cards, q]);
 
   const onClickStudent = (s) => {
@@ -155,7 +165,7 @@ export default function AdminGradesAttributionDegree() {
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Rechercher un élève… (nom, email, ID)"
+                placeholder="Rechercher par nom/prénom…"
                 className="pl-9 rounded-xl"
                 disabled={loading}
               />
