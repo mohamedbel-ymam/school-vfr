@@ -16,8 +16,25 @@ import {
 
 /* --------------------------- small helpers ---------------------------- */
 const nf = (n) => (Number.isFinite(+n) ? (+n).toLocaleString() : "—");
-const fmtPct = (v) => (Number.isFinite(+v) ? `${(+v).toFixed(1)}%` : "—");
 const fmtStar = (v) => (Number.isFinite(+v) ? (+v).toFixed(2) : "—");
+
+// ✅ percent -> /20 (backward compatible)
+function fmtNote20(gradesSummary) {
+  if (!gradesSummary) return "—";
+
+  // Prefer avg_20 if you add it later in backend
+  if (Number.isFinite(+gradesSummary.avg_20)) {
+    return `${(+gradesSummary.avg_20).toFixed(2)}/20`;
+  }
+
+  // Fallback: convert avg_percent to /20
+  if (Number.isFinite(+gradesSummary.avg_percent)) {
+    const note20 = (+gradesSummary.avg_percent * 20) / 100;
+    return `${note20.toFixed(2)}/20`;
+  }
+
+  return "—";
+}
 
 function statusFrom(a, j) {
   const A = Math.max(0, +a || 0);
@@ -74,49 +91,6 @@ function AnimatedRing({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
         />
       </svg>
 
-      <div className="absolute inset-0 grid place-items-center">
-        <div className="text-center">
-          <div className="text-xl font-semibold">{pct}%</div>
-          <div className="text-[11px] text-muted-foreground">{label}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------- Legacy static ring (fallback) ------------ */
-function Ring({ value = 0, size = 112, stroke = 10, label = "Taux" }) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(100, Number.isFinite(+value) ? +value : 0));
-  const dash = c - (pct / 100) * c;
-
-  return (
-    <div className="relative inline-block" style={{ width: size, height: size }}>
-      <svg width={size} height={size} role="img" aria-label={`${label}: ${pct}%`}>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          strokeWidth={stroke}
-          fill="none"
-          className="text-muted/30"
-          stroke="currentColor"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          strokeWidth={stroke}
-          fill="none"
-          stroke="currentColor"
-          className="text-green-600 transition-all duration-500"
-          strokeDasharray={c}
-          strokeDashoffset={dash}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </svg>
       <div className="absolute inset-0 grid place-items-center">
         <div className="text-center">
           <div className="text-xl font-semibold">{pct}%</div>
@@ -207,22 +181,7 @@ function HomeworkTicker({ items = [] }) {
 /**
  * DashboardScaffold
  *
- * Props:
- * - title: string
- * - images: string[]
- * - stats: Array<{ title, value, hint?, right? }>
- * - shortcuts: Array<{ label, onClick }>
- * - onBack: () => void
- * - attendance?: { a:number, j:number, p:number, rate:number, range?:{from?:string,to?:string}, streak?:number }  // current period
- * - attendanceYear?: { a:number, j:number, p:number, rate:number }                                              // GLOBAL YEAR
- * - homeworks?: Array<any>   // optional: for the ticker
- * - attendanceLoading?: boolean
- * - period?: 'overall'|'month'|'week'
- * - onPeriodChange?: (p) => void
- *
- * ✅ NEW (optional):
- * - gradesSummary?: { avg_percent?:number, count?:number, termLabel?:string, updated_at?:string }
- * - disciplineSummary?: { avg_stars?:number, teacher_count?:number, admin_count?:number, termLabel?:string, periodLabel?:string }
+ * ✅ Notes now show /20 (not %)
  */
 export default function DashboardScaffold({
   title,
@@ -239,7 +198,6 @@ export default function DashboardScaffold({
   period,
   onPeriodChange,
 
-  // ✅ NEW (safe, optional)
   gradesSummary,
   disciplineSummary,
 }) {
@@ -279,7 +237,7 @@ export default function DashboardScaffold({
         </div>
       </div>
 
-      {/* Attendance block (personal) */}
+      {/* Attendance block */}
       <Card className="rounded-2xl overflow-hidden">
         <div className="p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
@@ -291,13 +249,10 @@ export default function DashboardScaffold({
                 </div>
               ) : null}
             </div>
-            {/* Streak chip (auto-hide if 0) */}
             <StreakFlame days={streak} />
           </div>
 
-          {/* Current period + Year global */}
           <div className="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-4">
-            {/* Current period ring (animated) */}
             <Card className="rounded-2xl lg:col-span-2">
               <CardContent className="p-4 flex items-center justify-center min-h-[152px]">
                 {attendanceLoading ? (
@@ -308,7 +263,6 @@ export default function DashboardScaffold({
               </CardContent>
             </Card>
 
-            {/* Counters for period */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:col-span-3">
               <StatCard title="Présences" value={attendanceLoading ? "…" : nf(p)} hint="Total comptabilisé" />
               <StatCard title="Absences (non just.)" value={attendanceLoading ? "…" : nf(a)} hint="À surveiller" />
@@ -316,7 +270,6 @@ export default function DashboardScaffold({
             </div>
           </div>
 
-          {/* YEAR (GLOBAL) summary — always visible if provided */}
           {attendanceYear && (
             <div className="mt-4 rounded-2xl border p-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -347,10 +300,9 @@ export default function DashboardScaffold({
         </div>
       </Card>
 
-      {/* ✅ Results block (Notes + Discipline) */}
+      {/* ✅ Notes + Discipline */}
       {(gradesSummary || disciplineSummary) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Notes */}
           <Card className="rounded-2xl">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold">Notes</CardTitle>
@@ -362,7 +314,7 @@ export default function DashboardScaffold({
                     {gradesSummary?.termLabel ?? "Moyenne"}
                   </div>
                   <div className="text-3xl font-semibold">
-                    {fmtPct(gradesSummary?.avg_percent)}
+                    {fmtNote20(gradesSummary)}
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground">
@@ -381,7 +333,6 @@ export default function DashboardScaffold({
             </CardContent>
           </Card>
 
-          {/* Discipline */}
           <Card className="rounded-2xl">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold">Discipline ⭐</CardTitle>
@@ -419,10 +370,8 @@ export default function DashboardScaffold({
         </div>
       )}
 
-      {/* Homework ticker (optional) */}
-      {Array.isArray(homeworks) && homeworks.length > 0 && (
-        <HomeworkTicker items={homeworks} />
-      )}
+      {/* Homework ticker */}
+      {Array.isArray(homeworks) && homeworks.length > 0 && <HomeworkTicker items={homeworks} />}
 
       {/* Carousel */}
       {!!images.length && (
@@ -446,7 +395,7 @@ export default function DashboardScaffold({
         </Carousel>
       )}
 
-      {/* Optional extra stats */}
+      {/* Extra stats */}
       {stats?.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {stats.map((s) => (

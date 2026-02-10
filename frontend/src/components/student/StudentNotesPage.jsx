@@ -10,19 +10,37 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 
-function pct(score, max) {
+function clampNum(n) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : 0;
+}
+
+// Convert any (score/max) to /20
+function to20(score, max) {
   const s = Number(score);
   const m = Number(max);
-  if (!m || m <= 0) return null;
-  return (s / m) * 100;
+  if (!Number.isFinite(s) || !Number.isFinite(m) || m <= 0) return null;
+  return (s / m) * 20;
+}
+
+function fmt20(v) {
+  if (v == null) return "—";
+  return `${v.toFixed(2)}/20`;
 }
 
 export default function StudentNotesPage() {
   const [loading, setLoading] = useState(true);
 
-  // backend returns grouped object + summary now
-  const [groups, setGroups] = useState([]); // [{ subject_name, grades: [] }]
-  const [summary, setSummary] = useState({ totalPct: null, count: 0, sumScore: 0, sumMax: 0 });
+  // [{ subject_name, grades: [] }]
+  const [groups, setGroups] = useState([]);
+
+  // overall summary computed from totals (weighted by max_score)
+  const [summary, setSummary] = useState({
+    avg20: null,
+    count: 0,
+    sumScore: 0,
+    sumMax: 0,
+  });
 
   const [term, setTerm] = useState("S1");
 
@@ -31,49 +49,55 @@ export default function StudentNotesPage() {
     try {
       const res = await studentGradesApi.list({ term });
 
-      // ✅ summary from backend
-      const avg = res?.data?.summary?.avg_percent ?? null;
-      const count = res?.data?.summary?.count ?? 0;
-
-      // ✅ grouped grades (object: { "Math": [..], "Physique": [..] })
+      // grouped grades (object: { "Math": [..], "Physique": [..] })
       const bySubjectObj = res?.data?.grades_by_subject ?? {};
 
-      const normalized = Object.entries(bySubjectObj).map(([subject_name, grades]) => ({
-        subject_name,
-        grades: Array.isArray(grades) ? grades : [],
-      }));
+      const normalized = Object.entries(bySubjectObj).map(
+        ([subject_name, grades]) => ({
+          subject_name,
+          grades: Array.isArray(grades) ? grades : [],
+        })
+      );
 
       // sort subjects alphabetically
       normalized.sort((a, b) => a.subject_name.localeCompare(b.subject_name));
 
-      // sort each subject grades by date desc
+      // sort each subject grades by date desc (safe)
       for (const b of normalized) {
-        b.grades.sort((a, b) =>
-          String(b?.graded_at ?? "").localeCompare(String(a?.graded_at ?? ""))
+        b.grades.sort((x, y) =>
+          String(y?.graded_at ?? "").localeCompare(String(x?.graded_at ?? ""))
         );
       }
 
-      // compute totals (optional, for displaying score/max below)
+      // compute totals for weighted average (score/max then to /20)
       let sumScore = 0;
       let sumMax = 0;
+      let count = 0;
+
       for (const block of normalized) {
         for (const g of block.grades) {
-          const s = Number(g.score);
-          const m = Number(g.max_score);
-          if (!m || m <= 0) continue;
+          const s = Number(g?.score);
+          const m = Number(g?.max_score);
+          if (!Number.isFinite(s) || !Number.isFinite(m) || m <= 0) continue;
           sumScore += s;
           sumMax += m;
+          count += 1;
         }
       }
 
+      const avg20 = sumMax > 0 ? (sumScore / sumMax) * 20 : null;
+
+      setGroups(normalized);
       setSummary({
-        totalPct: avg == null ? (sumMax > 0 ? (sumScore / sumMax) * 100 : null) : Number(avg),
+        avg20,
         count,
         sumScore,
         sumMax,
       });
-
-      setGroups(normalized);
+    } catch (e) {
+      console.error(e);
+      setGroups([]);
+      setSummary({ avg20: null, count: 0, sumScore: 0, sumMax: 0 });
     } finally {
       setLoading(false);
     }
@@ -113,20 +137,21 @@ export default function StudentNotesPage() {
           <div>
             <div className="text-sm text-muted-foreground">Moyenne générale</div>
             <div className="text-2xl font-semibold">
-              {summary.totalPct == null ? "—" : `${summary.totalPct.toFixed(1)}%`}
+              {summary.avg20 == null ? "—" : `${summary.avg20.toFixed(2)}/20`}
             </div>
           </div>
 
           <div className="text-sm text-muted-foreground">
-            Notes: <span className="font-medium text-foreground">{summary.count}</span>
+            Notes:{" "}
+            <span className="font-medium text-foreground">{summary.count}</span>
             {" • "}
             Total:{" "}
             <span className="font-medium text-foreground">
-              {Number(summary.sumScore).toFixed(2)}
+              {clampNum(summary.sumScore).toFixed(2)}
             </span>{" "}
             /{" "}
             <span className="font-medium text-foreground">
-              {Number(summary.sumMax).toFixed(2)}
+              {clampNum(summary.sumMax).toFixed(2)}
             </span>
           </div>
         </CardContent>
@@ -145,7 +170,9 @@ export default function StudentNotesPage() {
           ))}
         </div>
       ) : groups.length === 0 ? (
-        <div className="text-sm text-muted-foreground">Aucune note pour le moment.</div>
+        <div className="text-sm text-muted-foreground">
+          Aucune note pour le moment.
+        </div>
       ) : (
         <div className="space-y-3">
           {groups.map((block) => (
@@ -155,7 +182,8 @@ export default function StudentNotesPage() {
 
                 <div className="space-y-2">
                   {block.grades.map((g) => {
-                    const p = pct(g.score, g.max_score);
+                    const note20 = to20(g.score, g.max_score);
+
                     return (
                       <div
                         key={g.id}
@@ -163,8 +191,12 @@ export default function StudentNotesPage() {
                       >
                         <div className="min-w-0">
                           <div className="font-medium truncate">
-                            {g.exam_type ?? "Examen"} — {g.score}/{g.max_score}
-                            {p == null ? "" : ` • ${p.toFixed(1)}%`}
+                            {g.exam_type ?? "Évaluation"} —{" "}
+                            <span className="opacity-80">
+                              {g.score}/{g.max_score}
+                            </span>
+                            {" • "}
+                            <span className="font-semibold">{fmt20(note20)}</span>
                           </div>
 
                           <div className="text-xs text-muted-foreground">
