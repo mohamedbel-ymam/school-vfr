@@ -46,25 +46,30 @@ function initialsFromStudent(s) {
 function AvatarLarge({ student, size = 92 }) {
   const [broken, setBroken] = useState(false);
 
-  // Backend should send FULL url (recommended). But we also accept relative path.
+  // ✅ your working line
   let src = student?.avatar_url || student?.avatar || student?.photo_url || null;
 
-  // If it's a relative storage path, you can optionally normalize here (optional):
-  // if (src && !src.startsWith("http")) src = `${import.meta.env.VITE_API_URL}/storage/${src.replace(/^\/?storage\/?/, "")}`;
+  // ✅ normalize relative URL (optional but recommended)
+  if (src && typeof src === "string" && src.startsWith("/")) {
+    src = `https://api.takwaetablissement.com${src}`;
+  }
 
   const fallback = initialsFromStudent(student);
+
+  const boxStyle = {
+    width: size,
+    height: size,
+    borderRadius: 16, // ✅ square-rounded, not circle
+  };
 
   if (!src || broken) {
     return (
       <div
         className="shrink-0 border bg-muted flex items-center justify-center font-semibold text-lg"
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 16, // ✅ not rounded circle
-        }}
+        style={boxStyle}
+        aria-label={fullName(student)}
       >
-        {fallback}
+        {fallback || "?"}
       </div>
     );
   }
@@ -74,16 +79,14 @@ function AvatarLarge({ student, size = 92 }) {
       src={src}
       alt={fullName(student)}
       loading="lazy"
+      referrerPolicy="no-referrer"
       onError={() => setBroken(true)}
       className="shrink-0 object-cover border"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 16, // ✅ not rounded circle
-      }}
+      style={boxStyle}
     />
   );
 }
+
 
 /* ------------------------- component ------------------------- */
 export default function TeacherGradeDialog({ open, onOpenChange, student, user }) {

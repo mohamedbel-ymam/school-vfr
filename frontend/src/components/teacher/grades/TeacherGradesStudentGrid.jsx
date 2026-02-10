@@ -40,14 +40,14 @@ function fullName(s) {
 function StudentAvatarSquare({ student }) {
   const [broken, setBroken] = useState(false);
 
-  const raw =
-    student?.avatar_url ||
-    student?.avatar ||
-    student?.photo_url ||
-    student?.avatar?.url ||
-    null;
+  // ✅ your working line
+  let src = student?.avatar_url || student?.avatar || student?.photo_url || null;
 
-  const src = normalizeAvatarUrl(raw);
+  // optional: normalize if backend returns "/storage/..."
+  if (src && typeof src === "string" && src.startsWith("/")) {
+    src = `https://api.takwaetablissement.com${src}`;
+  }
+
   const fallback = initialsFromStudent(student);
 
   if (!src || broken) {
@@ -69,6 +69,7 @@ function StudentAvatarSquare({ student }) {
     />
   );
 }
+
 
 /* ------------------------------ component ------------------------------ */
 export default function TeacherGradesStudentGrid({ students = [], loading }) {
