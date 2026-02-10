@@ -46,15 +46,6 @@ function initialsFromStudent(s) {
 
 const API_ORIGIN = "https://api.takwaetablissement.com";
 
-function pickAvatarUrl(u) {
-  return (
-    u?.avatar_public_url ||
-    u?.avatar_url ||
-    u?.avatar ||
-    u?.photo_url ||
-    null
-  );
-}
 
 function pickAvatarUrl(u) {
   return u?.avatar_public_url || u?.avatar_url || u?.avatar || u?.photo_url || null;
