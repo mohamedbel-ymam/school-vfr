@@ -32,13 +32,16 @@ function fullName(s) {
 }
 
 function pickAvatarUrl(u) {
-  return (
-    u?.avatar_public_url ||
-    u?.avatar_url ||
-    u?.avatar ||
-    u?.photo_url ||
-    null
-  );
+  return u?.avatar_public_url || u?.avatar_url || u?.avatar || u?.photo_url || null;
+}
+
+function toPublicAvatarUrl(src) {
+  if (!src) return null;
+  if (src.startsWith("http://") || src.startsWith("https://")) return src;
+
+  // "avatars/approved/223/avatar.png" => ".../storage/avatars/approved/223/avatar.png"
+  const clean = src.replace(/^\/+/, "");
+  return `${API_ORIGIN}/storage/${clean.replace(/^storage\//, "")}`;
 }
 
 function normalizeAvatarUrl(url) {
@@ -51,7 +54,7 @@ function normalizeAvatarUrl(url) {
 function StudentAvatarSquare({ student }) {
   const [broken, setBroken] = useState(false);
 
-  let src = pickAvatarUrl(student);
+  let src = toPublicAvatarUrl(pickAvatarUrl(student));
   src = normalizeAvatarUrl(src);
 
   const fallback = initialsFromStudent(student);
@@ -76,12 +79,19 @@ function StudentAvatarSquare({ student }) {
   );
 }
 
+/** ✅ convert avg_percent to /20 */
+function avgTo20(avg_percent) {
+  const p = Number(avg_percent);
+  if (!Number.isFinite(p)) return null;
+  return (p / 100) * 20; // same as p/5
+}
+
 /* ------------------------------ component ------------------------------ */
 export default function TeacherGradesStudentGrid({ students = [], loading }) {
   const [openStudent, setOpenStudent] = useState(null);
   const { user } = useAuth();
 
-  // ✅ search by NAME (not email)
+  // search by NAME
   const [q, setQ] = useState("");
 
   const rows = useMemo(() => students ?? [], [students]);
@@ -121,7 +131,6 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
   if (!rows.length) {
     return <div className="text-sm text-muted-foreground">Aucun élève.</div>;
   }
-  console.log(students?.[0])
 
   return (
     <>
@@ -140,11 +149,7 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
             </div>
 
             {!!q && (
-              <Button
-                variant="secondary"
-                className="rounded-xl"
-                onClick={() => setQ("")}
-              >
+              <Button variant="secondary" className="rounded-xl" onClick={() => setQ("")}>
                 <X className="h-4 w-4 mr-2" />
                 Effacer
               </Button>
@@ -162,34 +167,45 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
         <div className="text-sm text-muted-foreground">Aucun résultat.</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {filtered.map((s, idx) => (
-            <Card
-              key={s.id}
-              className="rounded-2xl cursor-pointer hover:shadow-sm transition"
-              onClick={() => setOpenStudent(s)}
-            >
-              <CardContent className="p-4 flex items-center gap-3">
-                {/* rank */}
-                <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-sm font-semibold border">
-                  {idx + 1}
-                </div>
+          {filtered.map((s, idx) => {
+            const avg20 = avgTo20(s.avg_percent);
 
-                {/* avatar */}
-                <StudentAvatarSquare student={s} />
-
-                {/* info */}
-                <div className="min-w-0">
-                  <div className="font-semibold truncate">{fullName(s)}</div>
-                  <div className="text-sm text-muted-foreground">
-                    Moyenne :{" "}
-                    {s.avg_percent == null
-                      ? "—"
-                      : `${Number(s.avg_percent).toFixed(1)}%`}
+            return (
+              <Card
+                key={s.id}
+                className="rounded-2xl cursor-pointer hover:shadow-sm transition"
+                onClick={() => setOpenStudent(s)}
+              >
+                <CardContent className="p-4 flex items-center gap-3">
+                  {/* rank */}
+                  <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-sm font-semibold border">
+                    {idx + 1}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                  {/* avatar */}
+                  <StudentAvatarSquare student={s} />
+
+                  {/* info */}
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{fullName(s)}</div>
+
+                    <div className="text-sm text-muted-foreground">
+                      Moyenne :{" "}
+                      <span className="font-medium text-foreground">
+                        {avg20 == null ? "—" : `${avg20.toFixed(2)} / 20`}
+                      </span>
+                      {s.grades_count != null ? (
+                        <span className="text-xs text-muted-foreground">
+                          {" "}
+                          • {s.grades_count} note(s)
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -203,4 +219,3 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
     </>
   );
 }
-

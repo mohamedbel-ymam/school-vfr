@@ -56,17 +56,26 @@ function pickAvatarUrl(u) {
   );
 }
 
-function normalizeAvatarUrl(url) {
-  if (!url || typeof url !== "string") return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  if (url.startsWith("/")) return `${API_ORIGIN}${url}`;
-  return `${API_ORIGIN}/${url}`;
+function pickAvatarUrl(u) {
+  return u?.avatar_public_url || u?.avatar_url || u?.avatar || u?.photo_url || null;
 }
+
+function toPublicAvatarUrl(src) {
+  if (!src) return null;
+  if (src.startsWith("http://") || src.startsWith("https://")) return src;
+
+  // src like "avatars/approved/223/avatar.png"
+  // public disk URL is: https://api.takwaetablissement.com/storage/avatars/approved/223/avatar.png
+  const API = "https://api.takwaetablissement.com";
+  const clean = src.replace(/^\/+/, "");
+  return `${API}/storage/${clean.replace(/^storage\//, "")}`;
+}
+
 
 function AvatarLarge({ student, size = 92 }) {
   const [broken, setBroken] = useState(false);
 
-  let src = normalizeAvatarUrl(pickAvatarUrl(student));
+  let src = toPublicAvatarUrl(pickAvatarUrl(student));
   const fallback = initialsFromStudent(student);
 
   const boxStyle = { width: size, height: size, borderRadius: 16 };
