@@ -1,3 +1,4 @@
+// src/components/teacher/grades/TeacherGradesStudentGrid.jsx
 import React, { useMemo, useState } from "react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Skeleton } from "../../../components/ui/skeleton";
@@ -23,21 +24,14 @@ function initialsFromStudent(s) {
 
 const API_ORIGIN = "https://api.takwaetablissement.com";
 
-function normalizeAvatarUrl(url) {
-  if (!url || typeof url !== "string") return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  if (url.startsWith("/")) return `${API_ORIGIN}${url}`;
-  return `${API_ORIGIN}/${url}`;
-}
-
 function fullName(s) {
   const f = (s?.firstname ?? "").trim();
   const l = (s?.lastname ?? "").trim();
   const n = `${f} ${l}`.trim();
   return n || (s?.name ?? "").trim() || `#${s?.id ?? "?"}`;
 }
+
 function pickAvatarUrl(u) {
-  // ✅ prefer public url (what you said works)
   return (
     u?.avatar_public_url ||
     u?.avatar_url ||
@@ -46,15 +40,19 @@ function pickAvatarUrl(u) {
     null
   );
 }
+
+function normalizeAvatarUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) return `${API_ORIGIN}${url}`;
+  return `${API_ORIGIN}/${url}`;
+}
+
 function StudentAvatarSquare({ student }) {
   const [broken, setBroken] = useState(false);
 
-  // ✅ your working line
   let src = pickAvatarUrl(student);
-  // optional: normalize if backend returns "/storage/..."
-  if (src && typeof src === "string" && src.startsWith("/")) {
-    src = `https://api.takwaetablissement.com${src}`;
-  }
+  src = normalizeAvatarUrl(src);
 
   const fallback = initialsFromStudent(student);
 
@@ -78,7 +76,6 @@ function StudentAvatarSquare({ student }) {
   );
 }
 
-
 /* ------------------------------ component ------------------------------ */
 export default function TeacherGradesStudentGrid({ students = [], loading }) {
   const [openStudent, setOpenStudent] = useState(null);
@@ -92,7 +89,6 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
   const filtered = useMemo(() => {
     const query = String(q ?? "").toLowerCase().trim();
     if (!query) return rows;
-
     return rows.filter((s) => fullName(s).toLowerCase().includes(query));
   }, [rows, q]);
 
@@ -143,7 +139,11 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
             </div>
 
             {!!q && (
-              <Button variant="secondary" className="rounded-xl" onClick={() => setQ("")}>
+              <Button
+                variant="secondary"
+                className="rounded-xl"
+                onClick={() => setQ("")}
+              >
                 <X className="h-4 w-4 mr-2" />
                 Effacer
               </Button>
@@ -173,7 +173,7 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
                   {idx + 1}
                 </div>
 
-                {/* avatar (square) */}
+                {/* avatar */}
                 <StudentAvatarSquare student={s} />
 
                 {/* info */}
@@ -181,7 +181,9 @@ export default function TeacherGradesStudentGrid({ students = [], loading }) {
                   <div className="font-semibold truncate">{fullName(s)}</div>
                   <div className="text-sm text-muted-foreground">
                     Moyenne :{" "}
-                    {s.avg_percent == null ? "—" : `${Number(s.avg_percent).toFixed(1)}%`}
+                    {s.avg_percent == null
+                      ? "—"
+                      : `${Number(s.avg_percent).toFixed(1)}%`}
                   </div>
                 </div>
               </CardContent>

@@ -1,3 +1,4 @@
+// src/components/teacher/grades/TeacherGradesDialog.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { axiosClient } from "../../../api/axios";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
@@ -25,10 +26,10 @@ function labelFromSubject(code, fallback = "Matière") {
 }
 
 function fullName(u) {
-  const f = u?.firstname ?? "";
-  const l = u?.lastname ?? "";
+  const f = (u?.firstname ?? "").trim();
+  const l = (u?.lastname ?? "").trim();
   const n = `${f} ${l}`.trim();
-  return n || u?.name || `#${u?.id}`;
+  return n || (u?.name ?? "").trim() || `#${u?.id ?? "?"}`;
 }
 
 function initialsFromStudent(s) {
@@ -37,13 +38,15 @@ function initialsFromStudent(s) {
   if (f || l) return `${f[0] ?? ""}${l[0] ?? ""}`.toUpperCase();
 
   const name = (s?.name ?? "").trim();
-  const parts = name.split(/\s+/);
+  const parts = name.split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] ?? "";
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
   return (first + last).toUpperCase() || "?";
 }
+
+const API_ORIGIN = "https://api.takwaetablissement.com";
+
 function pickAvatarUrl(u) {
-  // ✅ prefer public url (what you said works)
   return (
     u?.avatar_public_url ||
     u?.avatar_url ||
@@ -52,17 +55,20 @@ function pickAvatarUrl(u) {
     null
   );
 }
+
+function normalizeAvatarUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) return `${API_ORIGIN}${url}`;
+  return `${API_ORIGIN}/${url}`;
+}
+
 function AvatarLarge({ student, size = 92 }) {
   const [broken, setBroken] = useState(false);
 
-  let src = pickAvatarUrl(student);
-
-  // normalize relative
-  if (src && typeof src === "string" && src.startsWith("/")) {
-    src = `https://api.takwaetablissement.com${src}`;
-  }
-
+  let src = normalizeAvatarUrl(pickAvatarUrl(student));
   const fallback = initialsFromStudent(student);
+
   const boxStyle = { width: size, height: size, borderRadius: 16 };
 
   if (!src || broken) {
@@ -89,10 +95,8 @@ function AvatarLarge({ student, size = 92 }) {
   );
 }
 
-
-
 /* ------------------------- component ------------------------- */
-export default function TeacherGradeDialog({ open, onOpenChange, student, user }) {
+export default function TeacherGradesDialog({ open, onOpenChange, student, user }) {
   const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -189,7 +193,6 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
       <DialogContent className="max-w-4xl rounded-2xl">
         <DialogHeader>
           <DialogTitle className="space-y-3">
-            {/* ✅ New top header with big avatar */}
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3">
                 <AvatarLarge student={student} size={92} />
@@ -279,7 +282,10 @@ export default function TeacherGradeDialog({ open, onOpenChange, student, user }
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-auto pr-2">
                 {grades.map((g) => (
-                  <div key={g.id} className="border rounded-xl p-3 flex items-start justify-between gap-3">
+                  <div
+                    key={g.id}
+                    className="border rounded-xl p-3 flex items-start justify-between gap-3"
+                  >
                     <div className="min-w-0">
                       <div className="font-semibold truncate">
                         {g.exam_type ?? "Examen"} — {g.score}/{g.max_score}
