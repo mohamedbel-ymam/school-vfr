@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
 import { LOGIN_ROUTE } from "../router/pahts.js";
-import { HomeIcon, LogInIcon, Menu, TestTube, X } from "lucide-react";
+import { HomeIcon, LogInIcon, Menu, FlaskConical, X } from "lucide-react";
 import { ModeToggle } from "../components/mode-toggle.jsx";
 
 export default function GuestLayout() {
@@ -27,7 +27,7 @@ export default function GuestLayout() {
           }
           onClick={() => setOpen(false)}
         >
-          <TestTube />
+          <FlaskConical />
           Lab
         </NavLink>
       </li>
