@@ -94,6 +94,10 @@ import AdminTestDetails from "@/components/admin/pages/AdminTestsDetails.jsx";
 
 /* ===================== BOURSIER ===================== */
 import BoursierDashboard from "@/components/boursier/BoursierDashboard.jsx";
+//Experiment routes 
+import LabCatalogPage from "../pages/lab/LabCatalogPage";
+import LabExperimentPage from "../pages/lab/LabExperimentPage";
+import LabAttemptPage from "../pages/lab/LabAttemptPage";
 
 /* ===================== CONSTANT ===================== */
 export const LOGIN_ROUTE = "/connexion";
@@ -119,6 +123,9 @@ export const router = createBrowserRouter([
     children: [
       { path: LOGIN_ROUTE, element: <Login /> },
       { path: "/waiting-list", element: <PublicWaitingList /> },
+      { path: "/lab", element: <LabCatalogPage /> },
+      { path: "/lab/:slug", element: <LabExperimentPage /> },
+      { path: "/lab/attempt/:attemptId", element: <LabAttemptPage /> },
     ],
   },
 

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
 import { LOGIN_ROUTE } from "../router/pahts.js";
-import { HomeIcon, LogInIcon, Menu, X } from "lucide-react";
+import { HomeIcon, LogInIcon, Menu, TestTube, X } from "lucide-react";
 import { ModeToggle } from "../components/mode-toggle.jsx";
 
 export default function GuestLayout() {
@@ -12,6 +12,25 @@ export default function GuestLayout() {
 
   const navItem = (
     <ul className="flex flex-col md:flex-row md:items-center gap-2 md:gap-1 text-sm">
+      
+      <li>
+        <NavLink
+          to="/lab"
+          end
+          className={({ isActive }) =>
+            [
+              "flex items-center gap-2 rounded-full px-3 py-2 transition",
+              isActive
+                ? "bg-slate-900/5 text-slate-900 ring-1 ring-slate-900/10 dark:bg-white/10 dark:text-white dark:ring-white/15"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10",
+            ].join(" ")
+          }
+          onClick={() => setOpen(false)}
+        >
+          <TestTube />
+          Lab
+        </NavLink>
+      </li>
       <li>
         <NavLink
           to="/"
@@ -47,6 +66,7 @@ export default function GuestLayout() {
           Connexion
         </NavLink>
       </li>
+
     </ul>
   );
 
