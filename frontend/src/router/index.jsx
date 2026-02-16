@@ -123,9 +123,9 @@ export const router = createBrowserRouter([
     children: [
       { path: LOGIN_ROUTE, element: <Login /> },
       { path: "/waiting-list", element: <PublicWaitingList /> },
-      { path: "/lab", element: <LabCatalogPage /> },
-      { path: "/lab/:slug", element: <LabExperimentPage /> },
-      { path: "/lab/attempt/:attemptId", element: <LabAttemptPage /> },
+      // { path: "/lab", element: <LabCatalogPage /> },
+      // { path: "/lab/:slug", element: <LabExperimentPage /> },
+      // { path: "/lab/attempt/:attemptId", element: <LabAttemptPage /> },
     ],
   },
 

@@ -13,7 +13,7 @@ export default function GuestLayout() {
   const navItem = (
     <ul className="flex flex-col md:flex-row md:items-center gap-2 md:gap-1 text-sm">
       
-      <li>
+      {/* <li>
         <NavLink
           to="/lab"
           end
@@ -30,7 +30,7 @@ export default function GuestLayout() {
           <FlaskConical />
           Lab
         </NavLink>
-      </li>
+      </li> */}
       <li>
         <NavLink
           to="/"
