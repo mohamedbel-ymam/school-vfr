@@ -26,8 +26,8 @@ export default function TeacherAttendanceDegrees() {
   }, []);
 
   const tiles = useMemo(() => {
-    const real = degrees.slice(0, 6); // you said 6 degrees
-    const fillersCount = Math.max(0, 6 - real.length);
+    const real = degrees.slice(0, 7); // you said 6 degrees
+    const fillersCount = Math.max(0, 7 - real.length);
     const fillers = Array.from({ length: fillersCount }).map((_, i) => ({
       id: `soon-${i}`,
       name: "Bientôt",
@@ -45,7 +45,7 @@ export default function TeacherAttendanceDegrees() {
 
       {loadingDegrees ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 7 }).map((_, i) => (
             <Card key={i} className="rounded-2xl">
               <CardContent className="p-6">
                 <Skeleton className="h-5 w-32" />
