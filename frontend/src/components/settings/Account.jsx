@@ -198,7 +198,7 @@ export default function AccountSettings() {
 
       {/* ---------------- Avatar (Student only) ---------------- */}
       {/* Instructions photo (visible uniquement pour les élèves) */}
-{user?.role === "student" && (
+{/* {user?.role === "student" && (
   <div className="mt-4 rounded-2xl border bg-slate-50/70 p-4 text-sm leading-relaxed">
     <p className="font-semibold">📸 Photo de profil — règles de validation</p>
 
@@ -285,7 +285,7 @@ export default function AccountSettings() {
             </Button>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* ---------------- Password ---------------- */}
       <Card className="rounded-2xl">
