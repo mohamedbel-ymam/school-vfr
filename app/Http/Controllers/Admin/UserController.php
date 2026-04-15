@@ -33,15 +33,15 @@ class UserController extends Controller
     public function index(Request $r, DegreeResolver $resolver)
     {
         $perPage = (int) $r->query('per_page', 15);
-        $perPage = max(1, min($perPage, 200));
+        $perPage = max(1, min($perPage, 1000));
 
         $query = User::query()
-            ->with([
-                'subject:id,name',
-                // 👇 inclure slug
-                'degree:id,name,slug',
-                'parentUser:id,firstname,lastname',
-            ])
+    ->with([
+        'subject:id,name',
+        'degree:id,name,slug',
+        'parentUser:id,firstname,lastname',
+        'groups:id,name,slug,degree_id' // 🆕 include groups
+    ])
             ->select([
                 'id','firstname','lastname','email',
                 'role',

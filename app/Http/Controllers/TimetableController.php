@@ -2,288 +2,330 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\StoreTimetableRequest;
+use App\Http\Resources\TimetableResource;
 use App\Models\Timetable;
-use App\Models\Subject;
-use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TimetableController extends Controller
 {
-    /** Admin listing with optional filters. */
-    public function adminList(Request $req)
-    {
-        $q = Timetable::with([
-            'subject:id,name',
-            'degree:id,name',
-            'room:id,name',
-            // keep relation identifiers in EN in your models. If your Timetable model relation is `teacher()`, use 'teacher' here.
-            'teacher:id,firstname,lastname',
+    /* ========================= List / Filter =========================
+       Query params:
+         - degree_id (int, optional)
+         - teacher_id (int, optional)
+         - day (1..7) or day_of_week (1..7)
+         - week_start (Y-m-d)
+         - per_page (default 100; max 1000)
+    ==================================================================*/
+  public function index(Request $req)
+{
+    $q = Timetable::query()
+        ->with(['subject', 'teacher', 'room', 'group']);
+
+    // normalize day param
+    $dow = $req->query('day_of_week') ?? $req->query('day');
+    if ($dow) {
+        $q->where('day_of_week', (int) $dow);
+    }
+
+    if ($req->filled('degree_id')) {
+        $q->where('degree_id', (int) $req->query('degree_id'));
+    }
+
+    if ($req->filled('teacher_id')) {
+        $q->where('teacher_id', (int) $req->query('teacher_id'));
+    }
+
+    if ($req->filled('week_start')) {
+        $q->whereDate('week_start', $req->query('week_start'));
+    }
+
+    /* 🔥 GROUP VISIBILITY RULE 🔥 */
+    if ($req->filled('group_id')) {
+        $groupId = (int) $req->query('group_id');
+
+        $q->where(function ($qq) use ($groupId) {
+            $qq->whereNull('group_id')
+               ->orWhere('group_id', $groupId);
+        });
+    }
+
+    // ordering
+    if (Schema::hasColumn('timetables', 'degree_id')) {
+        $q->orderBy('degree_id');
+    }
+    if (Schema::hasColumn('timetables', 'day_of_week')) {
+        $q->orderBy('day_of_week');
+    }
+
+    if (Schema::hasColumn('timetables', 'start_time')) {
+        $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END');
+        $q->orderBy('start_time');
+    } elseif (Schema::hasColumn('timetables', 'period')) {
+        $q->orderBy('period');
+    }
+
+    $perPage = max(1, min((int) $req->query('per_page', 100), 1000));
+
+    return TimetableResource::collection(
+        $q->paginate($perPage)
+    );
+}
+
+    /* ============================ Create ============================ */
+    public function store(StoreTimetableRequest $request)
+{
+    $validated = $request->validated();
+    Log::info('[timetables.store] validated', $validated);
+
+    try {
+        $data = $this->normalizedPayload($validated);
+
+        // Force SQL-friendly times (HH:MM:SS); NULL stays NULL
+        $toHMS = function ($v) {
+            if (!$v) return null;
+            if (preg_match('/^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/', $v, $m)) {
+                $h = str_pad((string)((int)$m[1]), 2, '0', STR_PAD_LEFT);
+                $i = str_pad((string)((int)$m[2]), 2, '0', STR_PAD_LEFT);
+                $s = isset($m[3]) ? str_pad((string)((int)$m[3]), 2, '0', STR_PAD_LEFT) : '00';
+                return "$h:$i:$s";
+            }
+            return $v; // let DB fail if truly invalid
+        };
+        $data['start_time'] = $toHMS($data['start_time'] ?? null);
+        $data['end_time']   = $toHMS($data['end_time']   ?? null);
+
+        Log::info('[timetables.store] normalized', $data);
+
+        $t = \App\Models\Timetable::create($data);
+        $t->load(['subject','teacher','room','group']);
+
+        // 🔧 Return raw JSON (avoid Resource while debugging)
+        return response()->json([
+            'ok'   => true,
+            'item' => $t,
+        ], 201);
+    } catch (\Throwable $e) {
+        Log::error('[timetables.store] exception: '.$e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
         ]);
+        return response()->json([
+            'message' => 'Server Error (store timetable)',
+            'error'   => $e->getMessage(),
+        ], 500);
+    }
+}
 
-        if ($t = $req->query('teacher_id')) $q->where('teacher_id', $t);
-        if ($d = $req->query('degree_id'))  $q->where('degree_id', $d);
-        
-        $q = $this->applyTimeOrdering(
-            $q->orderBy('degree_id')
-        );
 
-        return $q->orderBy('degree_id')
-                 ->orderBy('day_of_week')
-                 ->orderByRaw("CASE WHEN period IS NOT NULL AND period <> '' THEN 0 ELSE 1 END")
-                 ->orderBy('period')
-                 ->orderBy('start_time')
-                 ->paginate((int)$req->query('per_page', 100));
+    /* ============================= Read ============================= */
+    public function show(Timetable $timetable)
+    {
+        $timetable->load(['subject','teacher','room','group']);
+        return new TimetableResource($timetable);
     }
 
-    /** Student → lessons for the authenticated student (optional ?degree_id=...) */
-    public function student(Request $request)
-    {
-        $user = $request->user(); // role: student
-        $degreeId = $request->query('degree_id') ?: $this->resolveStudentDegreeId($user->id);
+    /* ============================= Update =========================== */
+    public function update(StoreTimetableRequest $request, \App\Models\Timetable $timetable)
+{
+    $validated = $request->validated();
+    Log::info('[timetables.update] validated', $validated);
 
-        if (!$degreeId) {
-            return response()->json([
-                'message' => "Aucun niveau trouvé pour cet élève. Passez ?degree_id=… si nécessaire."
-            ], 422);
-        }
+    try {
+        $data = $this->normalizedPayload($validated);
 
-        $lessons = $this->applyTimeOrdering(
-            Timetable::with([
-                'subject:id,name',
-                'degree:id,name',
-                'room:id,name',
-                'teacher:id,firstname,lastname',
-            ])->where('degree_id', $degreeId)
-        )->get();
+        $toHMS = function ($v) {
+            if (!$v) return null;
+            if (preg_match('/^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/', $v, $m)) {
+                $h = str_pad((string)((int)$m[1]), 2, '0', STR_PAD_LEFT);
+                $i = str_pad((string)((int)$m[2]), 2, '0', STR_PAD_LEFT);
+                $s = isset($m[3]) ? str_pad((string)((int)$m[3]), 2, '0', STR_PAD_LEFT) : '00';
+                return "$h:$i:$s";
+            }
+            return $v;
+        };
+        $data['start_time'] = $toHMS($data['start_time'] ?? null);
+        $data['end_time']   = $toHMS($data['end_time']   ?? null);
 
-        return response()->json(['data' => ['lessons' => $lessons]]);
-    }
-
-    /** Teacher → lessons for the authenticated teacher (optional ?degree_id=...) */
-    public function teacher(Request $request)
-    {
-        $user = $request->user(); // role: teacher
-        $degreeId = $request->query('degree_id');
-
-        $lessons = $this->applyTimeOrdering(
-            Timetable::with([
-                'subject:id,name',
-                'degree:id,name',
-                'room:id,name',
-                'teacher:id,firstname,lastname',
-            ])
-            ->where('teacher_id', $user->id) // adjust if FK points elsewhere
-            ->when($degreeId, fn($q) => $q->where('degree_id', $degreeId))
-        )->get();
-
-        return response()->json(['data' => ['lessons' => $lessons]]);
-    }
-
-    /** Parent → lessons for a selected child (?child_id=…) */
-    public function parent(Request $request)
-    {
-        $parent = $request->user(); // role: parent
-        $childId = (int) $request->query('child_id');
-        if (!$childId) {
-            return response()->json(['message' => 'Le paramètre child_id est requis.'], 422);
-        }
-
-        // Optionally verify linkage parent->child here if you have a linking table.
-
-        $degreeId = $this->resolveStudentDegreeId($childId);
-
-        if (!$degreeId) {
-            return response()->json(['message' => "Aucun niveau trouvé pour l'enfant sélectionné."], 404);
-        }
-
-        $lessons = $this->applyTimeOrdering(
-            Timetable::with([
-                'subject:id,name',
-                'degree:id,name',
-                'room:id,name',
-                'teacher:id,firstname,lastname',
-            ])->where('degree_id', $degreeId)
-        )->get();
-
-        return response()->json(['data' => ['lessons' => $lessons]]);
-    }
-
-    protected function safeValue(string $table, array $where, string $column)
-    {
-        if (!Schema::hasTable($table)) return null;
-        try {
-            return DB::table($table)->where($where)->value($column);
-        } catch (\Throwable $e) {
-            return null;
-        }
-    }
-
-    /** Best-effort resolver for a student’s degree_id without assuming specific schema. */
-    protected function resolveStudentDegreeId(int $userId): ?int
-    {
-        // 1) users.degree_id
-        $id = $this->safeValue('users', ['id' => $userId], 'degree_id');
-        if ($id) return (int) $id;
-
-        // 2) degree_user pivot (user_id, degree_id)
-        $id = $this->safeValue('degree_user', ['user_id' => $userId], 'degree_id');
-        if ($id) return (int) $id;
-
-        // 3) common alternates
-        foreach (['student_degrees', 'enrollments', 'user_degrees', 'students'] as $tbl) {
-            $id = $this->safeValue($tbl, ['user_id' => $userId], 'degree_id');
-            if ($id) return (int) $id;
-        }
-
-        // (Avoid accented table names in schema; keep identifiers ASCII)
-        return null;
-    }
-
-    public function store(Request $request)
-    {
-        // normalize keys from FE
-        $request->merge([
-            'start_time' => $request->input('start_time') ?? $request->input('starts_at'),
-            'end_time'   => $request->input('end_time')   ?? $request->input('ends_at'),
-        ]);
-
-        $data = $request->validate([
-            'degree_id'   => ['required','exists:degrees,id'],
-            'subject_id'  => ['required','exists:subjects,id'],
-            'teacher_id'  => ['required','exists:users,id'],
-            'room_id'     => ['nullable','exists:rooms,id'],
-            'day_of_week' => ['required','integer', Rule::in([1,2,3,4,5,6,7])],
-
-            'period'      => ['nullable','string','max:50','required_without_all:start_time,end_time'],
-            'start_time'  => ['nullable','date_format:H:i','required_without:period'],
-            'end_time'    => ['nullable','date_format:H:i','required_with:start_time','after:start_time'],
-
-            'title'       => ['sometimes','string','max:255'],
-        ]);
-
-        if (empty($data['title'])) {
-            $data['title'] = $this->composeTitle($data);
-        }
-
-        $row = Timetable::create($data)->load([
-            'subject:id,name',
-            'degree:id,name',
-            'room:id,name',
-            'teacher:id,firstname,lastname',
-        ]);
-
-        return response()->json(['data' => $row], 201);
-    }
-
-    public function update(Request $request, Timetable $timetable)
-    {
-        $request->merge([
-            'start_time' => $request->input('start_time') ?? $request->input('starts_at'),
-            'end_time'   => $request->input('end_time')   ?? $request->input('ends_at'),
-        ]);
-
-        $data = $request->validate([
-            'degree_id'   => ['sometimes','exists:degrees,id'],
-            'subject_id'  => ['sometimes','exists:subjects,id'],
-            'teacher_id'  => ['sometimes','exists:users,id'],
-            'room_id'     => ['sometimes','nullable','exists:rooms,id'],
-            'day_of_week' => ['sometimes','integer', Rule::in([1,2,3,4,5,6,7])],
-            'period'      => ['sometimes','nullable','string','max:50'],
-            'start_time'  => ['sometimes','nullable','date_format:H:i'],
-            'end_time'    => ['sometimes','nullable','date_format:H:i','after:start_time'],
-            'title'       => ['sometimes','string','max:255'],
-        ]);
-
-        // Invariant: at least a period or a time range
-        $period     = array_key_exists('period', $data)     ? $data['period']     : $timetable->period;
-        $start_time = array_key_exists('start_time', $data) ? $data['start_time'] : $timetable->start_time;
-        $end_time   = array_key_exists('end_time', $data)   ? $data['end_time']   : $timetable->end_time;
-
-        if (empty($period) && (empty($start_time) || empty($end_time))) {
-            return response()->json([
-                'message' => 'Fournissez une période ou bien start_time & end_time (HH:MM).',
-            ], 422);
-        }
-
-        // Recompose title if not explicitly provided
-        if (!array_key_exists('title', $data)) {
-            $dirtyPreview = array_merge($timetable->only([
-                'subject_id','teacher_id','day_of_week','period','start_time','end_time'
-            ]), $data);
-            $data['title'] = $this->composeTitle($dirtyPreview);
-        }
+        Log::info('[timetables.update] normalized', $data);
 
         $timetable->update($data);
+        $timetable->load(['subject','teacher','room','group']);
 
         return response()->json([
-            'data' => $timetable->fresh()->load([
-                'subject:id,name','degree:id,name','room:id,name','teacher:id,firstname,lastname'
-            ]),
+            'ok'   => true,
+            'item' => $timetable,
         ]);
+    } catch (\Throwable $e) {
+        Log::error('[timetables.update] exception: '.$e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+        ]);
+        return response()->json([
+            'message' => 'Server Error (update timetable)',
+            'error'   => $e->getMessage(),
+        ], 500);
     }
+}
 
+    /* ============================ Delete ============================ */
     public function destroy(Timetable $timetable)
     {
         $timetable->delete();
-        return response()->noContent();
+        return response()->json(['ok' => true]);
     }
 
-    /** ---------- helpers ---------- */
+    /* ========================= Role helpers =========================
+       (Use in your route groups for student/teacher/parent dashboards)
+    ==================================================================*/
+public function student(Request $req)
+{
+    $user = $req->user();
 
-    private function composeTitle(array $d): string
-    {
-        $subject = !empty($d['subject_id']) ? optional(Subject::find($d['subject_id']))->name : null;
-        $teacher = !empty($d['teacher_id']) ? optional(User::find($d['teacher_id'])) : null;
-        $teacherName = $teacher ? trim(($teacher->firstname ?? '').' '.($teacher->lastname ?? '')) : null;
+    // Resolve degree
+    $degreeId =
+        $user->degree_id ??
+        optional($user->degree)->id ??
+        optional($user->classe)->degree_id ??
+        optional(optional($user->classe)->degree)->id;
 
-        $dayNames = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
-        $day = $dayNames[$d['day_of_week'] ?? null] ?? 'Jour';
-
-        if (!empty($d['start_time']) && !empty($d['end_time'])) {
-            $when = "{$day} {$d['start_time']}–{$d['end_time']}";
-        } elseif (!empty($d['period'])) {
-            $when = "{$day} • Période {$d['period']}";
-        } else {
-            $when = $day;
-        }
-
-        $pieces = array_filter([
-            $subject ?: 'Cours',
-            $when,
-            $teacherName ? "— {$teacherName}" : null,
+    if (!$degreeId) {
+        return response()->json([
+            'data' => [],
+            'message' => 'Student has no assigned degree',
         ]);
-
-        return implode(' — ', $pieces);
     }
 
-    protected function applyTimeOrdering($q)
+    // Resolve group (OPTIONAL)
+    $groupId =
+        $user->group_id ??
+        optional($user->group)->id ??
+        optional($user->classe)->group_id ??
+        null;
+
+    $q = Timetable::query()
+        ->with(['subject', 'teacher', 'room'])
+        ->where('degree_id', $degreeId);
+
+    if ($groupId) {
+        // Student WITH group:
+        // show lessons for his group + global lessons
+        $q->where(function ($qq) use ($groupId) {
+            $qq->whereNull('group_id')
+               ->orWhere('group_id', $groupId);
+        });
+    } else {
+        // Student WITHOUT group:
+        // only global lessons
+        $q->whereNull('group_id');
+    }
+
+    // optional filters
+    if ($req->filled('week_start')) {
+        $q->whereDate('week_start', $req->query('week_start'));
+    }
+
+    return TimetableResource::collection(
+        $q->orderBy('day_of_week')->paginate(100)
+    );
+}
+
+
+
+    public function teacher(Request $req)
     {
-        if (Schema::hasColumn('timetables', 'day_of_week')) {
-            $q->orderBy('day_of_week');
+        // expects teacher_id = auth()->id() or provided
+        $req->merge(['teacher_id' => $req->query('teacher_id') ?? optional($req->user())->id]);
+        return $this->index($req);
+    }
+public function parent(Request $req)
+{
+    $user = $req->user();
+
+    // Resolve child (adapt if you support multiple children later)
+    $child =
+        $user->child ??
+        optional($user->children)->first();
+
+    if (!$child) {
+        return response()->json([
+            'data' => [],
+            'message' => 'Parent has no linked child'
+        ]);
+    }
+
+    // Resolve degree
+    $degreeId =
+        $child->degree_id ??
+        optional($child->degree)->id ??
+        optional($child->classe)->degree_id ??
+        optional(optional($child->classe)->degree)->id;
+
+    // Resolve group (OPTIONAL)
+    $groupId =
+        $child->group_id ??
+        optional($child->group)->id ??
+        optional($child->classe)->group_id ??
+        optional(optional($child->classe)->group)->id;
+
+    if (!$degreeId) {
+        return response()->json([
+            'data' => [],
+            'message' => 'Child has no assigned degree'
+        ]);
+    }
+
+    $req->merge([
+        'degree_id' => $degreeId,
+        'group_id'  => $groupId, // 🔥 important
+    ]);
+
+    return $this->index($req);
+}
+
+
+    /* ========================= Normalization ======================== */
+
+    /**
+     * Accept:
+     * - day OR day_of_week  (1..7)
+     * - hour_from/hour_to  OR period
+     * - start_time/end_time (already in HH:MM) are also accepted
+     */
+    private function normalizedPayload(array $in): array
+    {
+        $out = $in;
+
+        // day normalization
+        if (!empty($in['day']) && empty($in['day_of_week'])) {
+            $out['day_of_week'] = (int)$in['day'];
         }
+        unset($out['day']);
 
-        $hasStartTime = Schema::hasColumn('timetables', 'start_time');
-        $hasStartsAt  = Schema::hasColumn('timetables', 'starts_at');
+        // hours normalization
+        // Priority: explicit start_time/end_time > hour_from/hour_to > period
+        if (!empty($in['hour_from'])) $out['start_time'] = $this->hhmm($in['hour_from']);
+        if (!empty($in['hour_to']))   $out['end_time']   = $this->hhmm($in['hour_to']);
 
-        if ($hasStartTime && $hasStartsAt) {
-            $q->orderByRaw('CASE WHEN COALESCE(starts_at, start_time) IS NULL THEN 1 ELSE 0 END');
-            $q->orderByRaw('COALESCE(starts_at, start_time)');
-        } elseif ($hasStartsAt) {
-            $q->orderByRaw('CASE WHEN starts_at IS NULL THEN 1 ELSE 0 END');
-            $q->orderBy('starts_at');
-        } elseif ($hasStartTime) {
-            $q->orderByRaw('CASE WHEN start_time IS NULL THEN 1 ELSE 0 END');
-            $q->orderBy('start_time');
+        if (!empty($out['start_time'])) $out['start_time'] = $this->hhmm($out['start_time']);
+        if (!empty($out['end_time']))   $out['end_time']   = $this->hhmm($out['end_time']);
+
+        // If only period given, keep start/end null (model will expose computed start/end)
+        // If both times present, period optional.
+        return $out;
+    }
+
+    private function hhmm(string $v): string
+    {
+        if (preg_match('/^\s*(\d{1,2}):(\d{2})(?::\d{2})?\s*$/', $v, $m)) {
+            $h = str_pad((string)((int)$m[1]), 2, '0', STR_PAD_LEFT);
+            $i = $m[2];
+            return "$h:$i";
         }
-
-        if (Schema::hasColumn('timetables', 'period')) {
-            $q->orderBy('period');
-        }
-
-        return $q;
+        // last fallback: return unchanged, DB rule will catch if invalid
+        return $v;
     }
 }
+

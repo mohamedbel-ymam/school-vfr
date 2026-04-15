@@ -14,7 +14,7 @@ return new class extends Migration {
 
     public function up(): void
     {
-        DB::transaction(function () {
+        
             // 1) Columns
             if (!Schema::hasColumn('degrees', 'slug')) {
                 Schema::table('degrees', function (Blueprint $table) {
@@ -130,7 +130,7 @@ return new class extends Migration {
 
             // 7) Final pass: set slug+position on canonical only; leave legacy rows with slug = NULL
             // (API will only expose slug != NULL)
-        });
+        
     }
 
     public function down(): void

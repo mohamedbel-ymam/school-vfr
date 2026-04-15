@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Gate;
 class AuthServiceProvider extends ServiceProvider
 {
     protected $policies = [
-        // 'App\Models\Model' => 'App\Policies\ModelPolicy',
+	Grade::class => GradePolicy::class,
     ];
 
     public function boot(): void
@@ -21,6 +21,12 @@ class AuthServiceProvider extends ServiceProvider
             return strtolower((string) $user->role) === 'admin';
         });
          Gate::define('admin', fn($user) => $user->role === 'admin');
-
+	
+	Gate::define('manage timetables', function (User $user) {
+        // allow both admin & superadmin if you use either; adjust to your setup
+        $role = strtolower((string) $user->role);
+        return in_array($role, ['admin','superadmin'], true)
+            || ($user->hasAnyRole?->call($user, ['admin','superadmin']) ?? false); // works if Spatie HasRoles is on User
+    });
     }
 }

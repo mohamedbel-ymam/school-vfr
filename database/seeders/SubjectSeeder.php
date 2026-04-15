@@ -12,7 +12,7 @@ class SubjectSeeder extends Seeder
         $subjects = [
             ['name' => 'Mathematique', 'code' => 'MATH'],
             ['name' => 'Physique & Chimie',     'code' => 'PC'],
-            ['name' => 'Sciene de la vie & terre',   'code' => 'SVT'],
+            ['name' => 'Science de la vie & terre',   'code' => 'SVT'],
             ['name' => 'Anglais',     'code' => 'ANG'],
             ['name' => 'Histoire-Geographie',     'code' => 'HIS-GEO'],
             ['name' => 'Arabe',     'code' => 'ARAB'],

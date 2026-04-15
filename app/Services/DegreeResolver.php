@@ -16,7 +16,8 @@ class DegreeResolver
         ],
         'bac1-se' => ['1er année bac (se)','third','tronc commun','tronc-commun'],
         'bac1-sm' => ['1er année bac (sm)','fourth','1ère année bac','1er année bac','première année bac'],
-        'bac2'    => ['2ème année bac','final','2eme annee bac','bac 2'],
+        'bac2-gr1' => ['2ème année bac groupe 1','final','2eme annee bac gr1','bac 2 groupe 1'],
+        'bac2-gr2' => ['2ème année bac groupe 2','finale','2eme annee bac gr2','bac 2 groupe 2'],
     ];
 
     public function resolveToId(string|int|null $val): ?int

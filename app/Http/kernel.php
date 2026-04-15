@@ -17,30 +17,26 @@ class Kernel extends HttpKernel
     /**
      * The application's route middleware groups.
      */
-    protected $middlewareGroups = [
-        'web' => [
-            EncryptCookies::class,
-            AddQueuedCookiesToResponse::class,
-            StartSession::class,
-            ShareErrorsFromSession::class,
-            VerifyCsrfToken::class,
-            SubstituteBindings::class,
-            
-        ],
+protected $middlewareGroups = [
+    'web' => [
+        \Illuminate\Http\Middleware\HandleCors::class,
+        \App\Http\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \App\Http\Middleware\VerifyCsrfToken::class,
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+    ],
 
-        'api' => [
-            HandleCors::class,
-            EnsureFrontendRequestsAreStateful::class,
-            'throttle:api',
-            SubstituteBindings::class,
-        ],
-    ];
-
+    'api' => [
+        \Illuminate\Http\Middleware\HandleCors::class,
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+    ],
+];
     /**
      * Laravel 10/11 name
      */
     protected $middlewareAliases = [
-        // Laravel defaults
         'auth'              => \Illuminate\Auth\Middleware\Authenticate::class,
         'auth.basic'        => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'cache.headers'     => \Illuminate\Http\Middleware\SetCacheHeaders::class,
