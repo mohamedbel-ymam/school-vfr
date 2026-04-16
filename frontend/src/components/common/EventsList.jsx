@@ -166,9 +166,9 @@ export default function EventsList({ query = {} }) {
 
                 {/* footer actions */}
                 <div className="mt-2 flex items-center justify-between">
-                  <div className="text-xs text-muted-foreground">
+                  {/* <div className="text-xs text-muted-foreground">
                     ID&nbsp;#{ev.id}
-                  </div>
+                  </div> */}
 
                   {ev.data?.cta_url && (
                     <Button asChild size="sm" className="shadow-sm">
