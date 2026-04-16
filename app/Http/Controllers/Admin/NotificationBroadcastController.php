@@ -6,13 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Notifications\AdminBroadcast;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class NotificationBroadcastController extends Controller
 {
     public function store(Request $req)
     {
-        // Accept both flat body and { payload: {...} }
         $raw = $req->input('payload', $req->all());
 
         $rules = [
@@ -31,15 +31,13 @@ class NotificationBroadcastController extends Controller
             'user_ids.*' => ['integer','exists:users,id'],
         ];
 
-        // Validate explicitly against the array
         $data = validator($raw, $rules)->validate();
 
         $audience = $data['audience'];
         $title    = $data['title'];
         $message  = $data['message'] ?? ($data['content'] ?? '');
-        $channels = !empty($data['channels']) ? $data['channels'] : ['database']; // kept for future via()
+        $channels = !empty($data['channels']) ? $data['channels'] : ['database'];
 
-        // Per-audience guards
         if ($audience === 'degree_students' && empty($data['degree_id'])) {
             return response()->json(['message' => 'degree_id est requis pour degree_students.'], 422);
         }
@@ -50,7 +48,6 @@ class NotificationBroadcastController extends Controller
             return response()->json(['message' => 'user_ids est requis pour users.'], 422);
         }
 
-        // Role aliases (column or Spatie)
         $ROLE_ALIASES = [
             'student' => ['student','élève','eleve','etudiant','étudiant'],
             'teacher' => ['teacher','enseignant','prof','professeur'],
@@ -58,7 +55,6 @@ class NotificationBroadcastController extends Controller
             'admin'   => ['admin','administrateur','administrator'],
         ];
 
-        // Helper to OR-match a canonical role against column OR spatie roles
         $applyRole = function ($q, string $key) use ($ROLE_ALIASES) {
             $aliases = $ROLE_ALIASES[$key] ?? [$key];
             $q->where(function ($qq) use ($aliases) {
@@ -69,9 +65,7 @@ class NotificationBroadcastController extends Controller
             });
         };
 
-        // Build recipients query
         $q = User::query();
-
         $roleMap = [
             'all_students' => ['student'],
             'all_teachers' => ['teacher'],
@@ -79,7 +73,6 @@ class NotificationBroadcastController extends Controller
         ];
 
         if (isset($roleMap[$audience])) {
-            // OR across mapped roles (usually one)
             $q->where(function ($wrap) use ($roleMap, $audience, $applyRole) {
                 foreach ($roleMap[$audience] as $canon) {
                     $wrap->orWhere(function ($qq) use ($applyRole, $canon) {
@@ -104,16 +97,27 @@ class NotificationBroadcastController extends Controller
             return response()->json(['message' => 'Aucun destinataire trouvé.'], 422);
         }
 
-        // Notify — AdminBroadcast expects (title, message)
+        $broadcastId = (string) Str::ulid();
+        $sentBy = $req->user()?->id;
+
         foreach ($users as $u) {
-            $u->notify(new AdminBroadcast($title, $message));
+            $u->notify(new AdminBroadcast($title, $message, [
+                'broadcast_id' => $broadcastId,
+                'audience'     => $audience,
+                'degree_id'    => $data['degree_id'] ?? null,
+                'user_id'      => $audience === 'user'  ? ($data['user_id'] ?? null)  : null,
+                'user_ids'     => $audience === 'users' ? ($data['user_ids'] ?? [])   : [],
+                'sent_by'      => $sentBy,
+                'channels'     => $channels,
+            ]));
         }
 
         return response()->json([
-            'ok'       => true,
-            'count'    => $users->count(),
-            'audience' => $audience,
-            'channels' => $channels,
+            'ok'           => true,
+            'broadcast_id' => $broadcastId,
+            'count'        => $users->count(),
+            'audience'     => $audience,
+            'channels'     => $channels,
         ], 201);
     }
 }

@@ -7,8 +7,6 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Database\QueryException;
 use Illuminate\Validation\Rule;
 use App\Services\DegreeResolver;
 
@@ -27,7 +25,7 @@ class UserController extends Controller
             'enseignant'                     => 'teacher',
             'administrateur','administrator' => 'admin',
             'parent', 'teacher', 'student', 'admin' => $r,
-            default                          => $r, // will be rejected later
+            default                          => $r, // sera rejeté plus loin
         };
     }
 
@@ -35,14 +33,15 @@ class UserController extends Controller
     public function index(Request $r, DegreeResolver $resolver)
     {
         $perPage = (int) $r->query('per_page', 15);
-        $perPage = max(1, min($perPage, 200));
+        $perPage = max(1, min($perPage, 1000));
 
         $query = User::query()
-            ->with([
-                'subject:id,name',
-                'degree:id,name,slug',
-                'parentUser:id,firstname,lastname',
-            ])
+    ->with([
+        'subject:id,name',
+        'degree:id,name,slug',
+        'parentUser:id,firstname,lastname',
+        'groups:id,name,slug,degree_id' // 🆕 include groups
+    ])
             ->select([
                 'id','firstname','lastname','email',
                 'role',
@@ -50,11 +49,12 @@ class UserController extends Controller
                 'created_at','updated_at',
             ]);
 
-        // Filter: role (FR or EN)
+        // Filtre: role (FR ou EN)
         if ($r->filled('role')) {
             $role = $this->normalizeRole((string)$r->query('role'));
             if (in_array($role, ['student','teacher','parent','admin'], true)) {
                 $modelHasRoles = config('permission.table_names.model_has_roles', 'model_has_roles');
+                // Si Spatie présent, utiliser scope role(), sinon colonne role
                 if (Schema::hasTable($modelHasRoles)) {
                     try { $query->role($role); }
                     catch (\Throwable $e) { $query->where('role', $role); }
@@ -62,6 +62,7 @@ class UserController extends Controller
                     $query->where('role', $role);
                 }
             } else {
+                // rôle invalide → résultat vide
                 return response()->json([
                     'data' => [],
                     'meta' => ['current_page'=>1,'last_page'=>1,'per_page'=>$perPage,'total'=>0],
@@ -69,13 +70,14 @@ class UserController extends Controller
             }
         }
 
-        // Filter: degree (id | slug | FR alias)
+        // Filtre: degree (id | slug | alias FR)
         if ($r->filled('degree')) {
             $degreeInput = $r->query('degree');
             $degreeId = $resolver->resolveToId($degreeInput);
             if ($degreeId) {
                 $query->where('degree_id', $degreeId);
             } else {
+                // invalide → résultat vide
                 return response()->json([
                     'data' => [],
                     'meta' => ['current_page'=>1,'last_page'=>1,'per_page'=>$perPage,'total'=>0],
@@ -83,7 +85,7 @@ class UserController extends Controller
             }
         }
 
-        // Search (?q=)
+        // Filtre de recherche (?q=)
         if ($r->filled('q')) {
             $q = trim((string)$r->query('q', ''));
             if ($q !== '') {
@@ -112,7 +114,7 @@ class UserController extends Controller
     /** POST /admin/users */
     public function store(Request $r, DegreeResolver $resolver)
     {
-        // Base validation
+        // Validation de base
         $data = $r->validate([
             'firstname'          => ['required','string','max:255'],
             'lastname'           => ['required','string','max:255'],
@@ -124,19 +126,22 @@ class UserController extends Controller
             'gender'             => ['nullable', Rule::in(['m','f'])],
             'blood_type'         => ['nullable','string','max:10'],
             'date_of_birth'      => ['nullable','date'],
-            // accept either degree_id (validated) OR degree/alias/slug (resolved below)
+            // On autorise l’entrée via degree_id (déjà validée) OU via degree/alias/slug
             'degree_id'          => ['nullable','exists:degrees,id'],
             'subject_id'         => ['nullable','exists:subjects,id'],
             'student_parent_id'  => ['nullable','exists:users,id'],
+            // 'degree' non validable via Rule -> résolu plus bas (id|slug|alias)
         ]);
 
-        // Role
+        // Rôle
         $data['role'] = $this->normalizeRole($data['role']);
         if (!in_array($data['role'], ['student','teacher','parent','admin'], true)) {
-            return response()->json(['message' => "Rôle invalide. Utilisez: élève, enseignant, parent, admin."], 422);
+            return response()->json([
+                'message' => "Rôle invalide. Utilisez: élève, enseignant, parent, admin.",
+            ], 422);
         }
 
-        // Degree: resolve id|slug|alias if provided (priority: 'degree' > degree_id)
+        // Degree: résoudre id|slug|alias si présent (priority: degree param > degree_id déjà donné)
         $degreeInput = $r->input('degree', null);
         if ($degreeInput !== null && $degreeInput !== '') {
             $resolvedId = $resolver->resolveToId($degreeInput);
@@ -146,7 +151,7 @@ class UserController extends Controller
             $data['degree_id'] = $resolvedId;
         }
 
-        // Role-specific requirements
+        // Exigences spécifiques au rôle
         if ($data['role'] === 'teacher') {
             $r->validate(['subject_id' => ['required','exists:subjects,id']]);
         }
@@ -154,41 +159,16 @@ class UserController extends Controller
             $r->validate(['degree_id' => ['required','exists:degrees,id']]);
         }
 
-        // Normalize empty strings -> null (avoid SQL 1292 and similar)
-        foreach (['address','phone','blood_type','date_of_birth','degree_id','subject_id','student_parent_id'] as $k) {
-            if (array_key_exists($k, $data) && ('' === $data[$k] || ' ' === $data[$k])) {
-                $data[$k] = null;
-            }
-        }
-        if (!empty($data['date_of_birth'])) {
-            $d = trim((string)$data['date_of_birth']);
-            if ($d === '0000-00-00') $data['date_of_birth'] = null;
-        }
-
         // Password hash
         $data['password'] = Hash::make($data['password']);
 
-        try {
-            $user = DB::transaction(function () use ($data) {
-                $u = User::create($data);
-                return $u->load([
-                    'subject:id,name',
-                    'degree:id,name,slug',
-                    'parentUser:id,firstname,lastname',
-                ]);
-            });
-        } catch (QueryException $e) {
-            $msg = $e->getMessage();
-            if (str_contains($msg, 'Incorrect date value') || str_contains($msg, 'Invalid datetime format')) {
-                return response()->json([
-                    'message' => 'Validation error',
-                    'errors' => ['date_of_birth' => ['Date invalide (format attendu: YYYY-MM-DD).']],
-                ], 422);
-            }
-            throw $e;
-        }
+        $user = User::create($data)->load([
+            'subject:id,name',
+            'degree:id,name,slug',
+            'parentUser:id,firstname,lastname',
+        ]);
 
-        // Sync Spatie role if present
+        // Sync Spatie role si présent
         $modelHasRoles = config('permission.table_names.model_has_roles', 'model_has_roles');
         if (Schema::hasTable($modelHasRoles) && method_exists($user, 'syncRoles')) {
             try { $user->syncRoles([$data['role']]); } catch (\Throwable $e) {}
@@ -228,9 +208,10 @@ class UserController extends Controller
             'degree_id'          => ['nullable','exists:degrees,id'],
             'subject_id'         => ['nullable','exists:subjects,id'],
             'student_parent_id'  => ['nullable','exists:users,id'],
+            // 'degree' traité à part
         ]);
 
-        // Role (if supplied)
+        // Role (si fourni)
         if (array_key_exists('role', $data)) {
             $data['role'] = $this->normalizeRole($data['role']);
             if (!in_array($data['role'], ['student','teacher','parent','admin'], true)) {
@@ -238,7 +219,7 @@ class UserController extends Controller
             }
         }
 
-        // Degree via 'degree' id|slug|alias
+        // Degree (si fourni via 'degree' id|slug|alias)
         if ($r->filled('degree')) {
             $resolvedId = $resolver->resolveToId($r->input('degree'));
             if (!$resolvedId) {
@@ -256,23 +237,13 @@ class UserController extends Controller
             }
         }
 
-        // Normalize empty strings -> null
-        foreach (['address','phone','blood_type','date_of_birth','degree_id','subject_id','student_parent_id'] as $k) {
-            if (array_key_exists($k, $data) && ('' === $data[$k] || ' ' === $data[$k])) {
-                $data[$k] = null;
-            }
-        }
-        if (array_key_exists('date_of_birth', $data) && $data['date_of_birth'] === '0000-00-00') {
-            $data['date_of_birth'] = null;
-        }
-
-        // Effective role (current if not changed)
+        // Rôle effectif (prend en compte le rôle actuel si non modifié)
         $effectiveRole = $data['role'] ?? (
             is_string($user->role) ? $user->role :
             (method_exists($user->role,'value') ? $user->role->value : (string)$user->role)
         );
 
-        // Post-constraints by role
+        // Exigences par rôle au final
         if ($effectiveRole === 'teacher' && empty($data['subject_id']) && !$user->subject_id) {
             return response()->json(['errors' => ['subject_id' => ['Subject is required for teachers.']]], 422);
         }
@@ -280,20 +251,9 @@ class UserController extends Controller
             return response()->json(['errors' => ['degree_id' => ['Degree is required for students.']]], 422);
         }
 
-        try {
-            $user->update($data);
-        } catch (QueryException $e) {
-            $msg = $e->getMessage();
-            if (str_contains($msg, 'Incorrect date value') || str_contains($msg, 'Invalid datetime format')) {
-                return response()->json([
-                    'message' => 'Validation error',
-                    'errors' => ['date_of_birth' => ['Date invalide (format attendu: YYYY-MM-DD).']],
-                ], 422);
-            }
-            throw $e;
-        }
+        $user->update($data);
 
-        // Sync Spatie on role change
+        // Sync Spatie sur changement de rôle
         if (array_key_exists('role', $data)) {
             $modelHasRoles = config('permission.table_names.model_has_roles', 'model_has_roles');
             if (Schema::hasTable($modelHasRoles) && method_exists($user, 'syncRoles')) {

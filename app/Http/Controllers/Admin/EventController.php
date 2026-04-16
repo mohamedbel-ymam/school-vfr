@@ -4,16 +4,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
+use App\Models\User;
+use App\Notifications\EventPublished;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class EventController extends Controller
 {
-    /**
-     * Accept "YYYY-MM-DDTHH:MM" from <input type="datetime-local">
-     * and return "YYYY-MM-DD HH:MM:SS" which the 'date' rule parses reliably.
-     */
     private function normalizeDate(?string $v): ?string
     {
         if ($v === null || $v === '') return $v;
@@ -53,7 +52,6 @@ class EventController extends Controller
 
         $perPage = (int) $r->query('per_page', 20);
         $perPage = max(1, min($perPage, 200));
-
         $page = $q->paginate($perPage);
 
         return response()->json([
@@ -70,7 +68,6 @@ class EventController extends Controller
     /** POST /admin/evenements */
     public function store(Request $r)
     {
-        // Normalize date inputs before validation
         $r->merge([
             'starts_at' => $this->normalizeDate($r->input('starts_at')),
             'ends_at'   => $this->normalizeDate($r->input('ends_at')),
@@ -83,31 +80,35 @@ class EventController extends Controller
             'ends_at'     => ['nullable', 'date', 'after_or_equal:starts_at'],
             'location'    => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'data'        => ['nullable'], // array or JSON string (multipart)
-            'image'       => [
-                'nullable',
-                'file',
-                'mimetypes:image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif',
-                'max:7168', // ~7MB
-            ],
+            'data'        => ['nullable'],
+            'image'       => ['nullable','file','mimetypes:image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif','max:7168'],
         ]);
 
-        // Decode JSON string for 'data' when multipart sends it as text
         if (is_string($data['data'] ?? null)) {
             $decoded = json_decode($data['data'], true);
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $data['data'] = $decoded;
-            }
+            if (json_last_error() === JSON_ERROR_NONE) $data['data'] = $decoded;
         }
 
         $data['created_by'] = (int) $r->user()->id;
 
         if ($r->hasFile('image')) {
-            // Use ASCII directory name
             $data['image_path'] = $r->file('image')->store('events', 'public');
         }
 
         $event = Event::create($data);
+
+        // Notifications (don’t crash on failure)
+        try {
+            $roles    = $event->data['roles']     ?? ['student','teacher','parent'];
+            $degreeId = $event->data['degree_id'] ?? null;
+
+            $aud = User::query()->whereIn('role', $roles);
+            if ($degreeId) $aud->where('degree_id', $degreeId);
+
+            $aud->select('id')->chunkById(1000, function ($chunk) use ($event) {
+                Notification::send($chunk, new EventPublished($event));
+            });
+        } catch (\Throwable $e) { report($e); }
 
         return response()->json(['data' => $event], 201);
     }
@@ -121,7 +122,6 @@ class EventController extends Controller
     /** PUT /admin/evenements/{event} */
     public function update(Request $r, Event $event)
     {
-        // Normalize date inputs before validation
         $r->merge([
             'starts_at' => $this->normalizeDate($r->input('starts_at')),
             'ends_at'   => $this->normalizeDate($r->input('ends_at')),
@@ -135,38 +135,46 @@ class EventController extends Controller
             'location'     => ['nullable', 'string', 'max:255'],
             'description'  => ['nullable', 'string'],
             'data'         => ['nullable'],
-            'image'        => [
-                'nullable',
-                'file',
-                'mimetypes:image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif',
-                'max:7168',
-            ],
+            'image'        => ['nullable','file','mimetypes:image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif','max:7168'],
             'remove_image' => ['nullable', 'boolean'],
         ]);
 
         if (is_string($data['data'] ?? null)) {
             $decoded = json_decode($data['data'], true);
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $data['data'] = $decoded;
-            }
+            if (json_last_error() === JSON_ERROR_NONE) $data['data'] = $decoded;
         }
 
-        // Replace uploaded image
         if ($r->hasFile('image')) {
-            if ($event->image_path) {
-                Storage::disk('public')->delete($event->image_path);
-            }
+            if ($event->image_path) Storage::disk('public')->delete($event->image_path);
             $data['image_path'] = $r->file('image')->store('events', 'public');
         }
 
-        // Explicitly remove current image (truthy only)
         if ($r->boolean('remove_image') && $event->image_path) {
             Storage::disk('public')->delete($event->image_path);
             $data['image_path'] = null;
         }
         unset($data['remove_image']);
 
+        $was = $event->replicate();
         $event->fill($data)->save();
+
+        // Optional: notify on important changes
+        try {
+            $dirty = ['title','starts_at','ends_at','location','description','template','image_path'];
+            $changed = false;
+            foreach ($dirty as $k) { if ($event->$k != $was->$k) { $changed = true; break; } }
+            if ($changed) {
+                $roles    = $event->data['roles']     ?? ['student','teacher','parent'];
+                $degreeId = $event->data['degree_id'] ?? null;
+
+                $aud = User::query()->whereIn('role', $roles);
+                if ($degreeId) $aud->where('degree_id', $degreeId);
+
+                $aud->select('id')->chunkById(1000, function ($chunk) use ($event) {
+                    Notification::send($chunk, new EventPublished($event));
+                });
+            }
+        } catch (\Throwable $e) { report($e); }
 
         return response()->json(['data' => $event]);
     }
@@ -174,11 +182,8 @@ class EventController extends Controller
     /** DELETE /admin/evenements/{event} */
     public function destroy(Event $event)
     {
-        if ($event->image_path) {
-            Storage::disk('public')->delete($event->image_path);
-        }
+        if ($event->image_path) Storage::disk('public')->delete($event->image_path);
         $event->delete();
-
-        return response()->noContent(); // 204
+        return response()->noContent();
     }
 }

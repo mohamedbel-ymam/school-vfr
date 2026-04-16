@@ -63,8 +63,8 @@ class DocumentController extends Controller
             'title'       => ['required','string','max:200'],
             'description' => ['nullable','string'],
             'degree_id'   => ['required','integer','exists:degrees,id'],
-            'file'        => ['required','file', 'max:51200'], // 50 MB
-        ]);
+            'file'        => ['required','file','mimes:pdf','max:10240'], // 10240 KB = 10MB
+    ]);
 
         $file = $r->file('file');
         $path = $file->store("documents/{$data['degree_id']}/".date('Y/m'), 'public');

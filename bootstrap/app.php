@@ -1,42 +1,51 @@
 <?php
-
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
-use Illuminate\Http\Middleware\HandleCors; // CORS
+use Illuminate\Http\Middleware\HandleCors;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
-use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful; // Sanctum SPA
-
-// Spatie (single, correct namespaces)
-use Spatie\Permission\Middleware\PermissionMiddleware as MiddlewarePermissionMiddleware;
-use Spatie\Permission\Middleware\RoleMiddleware as MiddlewareRoleMiddleware;
-use Spatie\Permission\Middleware\RoleOrPermissionMiddleware as MiddlewareRoleOrPermissionMiddleware;
+// Spatie
+use Spatie\Permission\Middleware\PermissionMiddleware;
+use Spatie\Permission\Middleware\RoleMiddleware;
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web: __DIR__ . '/../routes/web.php',
-        api: __DIR__ . '/../routes/api.php',
-        commands: __DIR__ . '/../routes/console.php',
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware) {
-        // Run CORS for every request (incl. OPTIONS preflight)
-        $middleware->use([
-            HandleCors::class,
-        ]);
-        // Sanctum: treat SPA origins as stateful on API group
-        $middleware->api(prepend: [
-            EnsureFrontendRequestsAreStateful::class,
-        ]);
+->withMiddleware(function (Middleware $middleware) {
 
-        // Spatie aliases
-        $middleware->alias([
-            'role'               => MiddlewareRoleMiddleware::class,
-            'permission'         => MiddlewarePermissionMiddleware::class,
-            'role_or_permission' => MiddlewareRoleOrPermissionMiddleware::class,
-        ]);
-    })
+    // 🌍 Global CORS
+    $middleware->use([
+        HandleCors::class,
+    ]);
+
+    // 🔐 Sanctum SPA (stateful cookies)
+    $middleware->api(prepend: [
+        EnsureFrontendRequestsAreStateful::class,
+    ]);
+
+    // 🚨🔥 DISABLE CSRF COMPLETELY (REQUIRED FOR CROSS-SUBDOMAIN SPA)
+    $middleware->validateCsrfTokens(except: [
+        '*', // 👈 THIS IS THE KEY
+    ]);
+
+    // Spatie
+    $middleware->alias([
+    'role'               => RoleMiddleware::class,
+    'permission'         => PermissionMiddleware::class,
+    'role_or_permission' => RoleOrPermissionMiddleware::class,    ]);
+})
+->withProviders([
+    App\Providers\RouteServiceProvider::class,
+])
+
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })

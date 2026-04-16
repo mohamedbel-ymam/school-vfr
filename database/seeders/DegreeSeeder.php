@@ -3,29 +3,29 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Schema;
 use App\Models\Degree;
 
 class DegreeSeeder extends Seeder
 {
     public function run(): void
     {
-        Schema::disableForeignKeyConstraints();
-        Degree::truncate();
-        Schema::enableForeignKeyConstraints();
-
-        $now = now();
-        $rows = [
-            ['name' => 'First Year',  'description' => '1st year'],
-            ['name' => 'Second Year', 'description' => '2nd year'],
-            ['name' => 'Third Year',  'description' => '3rd year'],
-            ['name' => 'Fourth Year', 'description' => '4th year'],
-            ['name' => 'Final Year',  'description' => 'Final year'],
+        $degrees = [
+            ['slug' => 'college-3eme', 'name' => '3ème Année Collège', 'description' => 'Cycle Collégial'],
+            ['slug' => 'tronc-commun', 'name' => 'Tronc Commun', 'description' => 'Cycle Secondaire'],
+            ['slug' => 'bac1-se',      'name' => '1ère Année Bac (Sciences Éxperimentales)', 'description' => 'Bac 1 SE'],
+            ['slug' => 'bac1-sm',      'name' => '1ère Année Bac (Sciences Mathématiques)', 'description' => 'Bac 1 SM'],
+            ['slug' => 'bac2-gr1',     'name' => '2ème Année Bac (Groupe 1)', 'description' => 'Bac 2 Groupe 1'],
+            ['slug' => 'bac2-gr2',     'name' => '2ème Année Bac (Groupe 2)', 'description' => 'Bac 2 Groupe 2'],
         ];
 
-        // add timestamps if your table has them
-        $rows = array_map(fn($r) => $r + ['created_at' => $now, 'updated_at' => $now], $rows);
-
-        Degree::insert($rows);
+        foreach ($degrees as $deg) {
+            Degree::updateOrCreate(
+                ['slug' => $deg['slug']],
+                [
+                    'name' => $deg['name'],
+                    'description' => $deg['description'] ?? null,
+                ]
+            );
+        }
     }
 }

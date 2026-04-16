@@ -2,75 +2,122 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
-// use App\Enums\UserRole; // only if you really use it
+use Illuminate\Support\Facades\Storage;
 
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
+    /**
+     * Spatie guard
+     */
     protected $guard_name = 'web';
 
-    /* ---------------- Relationships ---------------- */
-    public function degree()  { return $this->belongsTo(Degree::class); }
-    public function subject() { return $this->belongsTo(Subject::class); }
-    public function parent()      { return $this->belongsTo(User::class, 'student_parent_id'); }
-    public function parentUser()  { return $this->parent(); }
-    public function children()    { return $this->hasMany(User::class, 'student_parent_id'); }
+    /* -----------------------------------------------------------------
+     | Mass assignment / Hidden / Casts
+     |-----------------------------------------------------------------*/
 
-    /* ---------------- Mass assignment / Hidden / Casts ---------------- */
     protected $fillable = [
-        'firstname','lastname','date_of_birth','gender','blood_type','address','phone','email','password',
-        'role','degree_id','subject_id','student_parent_id','email_verified_at',
+        'firstname',
+        'lastname',
+        'date_of_birth',
+        'gender',
+        'blood_type',
+        'address',
+        'phone',
+        'email',
+        'password',
+
+        'degree_id',
+        'subject_id',
+        'student_parent_id',
+        'email_verified_at', 	
+ 	'avatar_status',
     ];
 
-    protected $hidden = ['password','remember_token'];
+    protected $hidden = [
+        'password',
+        'remember_token',
+	'avatar_pending_url',
+    'avatar_reviewed_at',
+    'avatar_reviewed_by',
+ 'avatar_url',   ];
 
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password'          => 'hashed',
-        // 'role' => UserRole::class, // only if using backed enum
+	'avatar_reviewed_at' => 'datetime',
     ];
 
-    // ✅ Only these are appended. DO NOT append "roles" here.
-    protected $appends = ['degree_slug', 'degree_obj'];
+    /**
+     * Appended attributes (SAFE names only)
+     */
+    protected $appends = [
+        'degree_slug',
+        'degree_obj',
+        'full_name',
+	'avatar_public_url',
+    ];
 
-    /* ---------------- Accessors / Mutators ---------------- */
-    protected function role(): Attribute
+    /* -----------------------------------------------------------------
+     | Relationships
+     |-----------------------------------------------------------------*/
+
+    public function degree()
     {
-        return Attribute::make(
-            get: function ($value) {
-                if ($value instanceof \BackedEnum) $value = $value->value;
-                return self::normalizeRole($value);
-            },
-            set: function ($value) {
-                if ($value instanceof \BackedEnum) $value = $value->value;
-                return self::normalizeRole($value);
-            }
-        );
+        return $this->belongsTo(Degree::class);
     }
 
-    private static function normalizeRole(?string $r): ?string
+    public function subject()
     {
-        if ($r === null) return null;
-        $r = preg_replace('/\x{00A0}/u', '', $r);
-        $r = strtolower(trim($r));
-
-        return match ($r) {
-            'élève','eleve','étudiant','etudiant','student'    => 'student',
-            'enseignant','prof','professeur','teacher'          => 'teacher',
-            'parent'                                            => 'parent',
-            'administrateur','administrator','admin'            => 'admin',
-            default                                             => $r,
-        };
+        return $this->belongsTo(Subject::class,'subject_id');
     }
 
-    // ✅ Appended: degree_slug / degree_obj (safe names, no collisions)
+    // Parent / children (same users table)
+    public function parentUser()
+    {
+        return $this->belongsTo(User::class, 'student_parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(User::class, 'student_parent_id');
+    }
+
+    // Groups (pivot: group_user)
+    public function groups()
+    {
+        return $this->belongsToMany(Group::class, 'group_user')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+public function getAvatarPublicUrlAttribute()
+{
+    if (($this->avatar_status ?? 'none') !== 'approved') return null;
+    if (!$this->avatar_url) return null;
+
+    // already absolute
+    if (preg_match('/^https?:\/\//', $this->avatar_url)) return $this->avatar_url;
+
+    // avatar_url stored like: "avatars/approved/223/avatar.png"
+    return Storage::disk('public')->url($this->avatar_url); // => /storage/avatars/approved/223/avatar.png
+}
+    // Boursier
+    public function boursierProfile()
+    {
+        return $this->hasOne(BoursierProfile::class, 'user_id');
+    }
+
+    /* -----------------------------------------------------------------
+     | Accessors (SAFE)
+     |-----------------------------------------------------------------*/
+
     public function getDegreeSlugAttribute(): ?string
     {
         return $this->degree?->slug;
@@ -78,17 +125,35 @@ class User extends Authenticatable
 
     public function getDegreeObjAttribute()
     {
-        return $this->degree; // alias for FE convenience
+        return $this->degree;
     }
 
-    /* ---------------- Convenience ---------------- */
     public function getFullNameAttribute(): string
     {
         return trim("{$this->firstname} {$this->lastname}");
     }
 
-    public function isAdmin(): bool   { return $this->role === 'admin'; }
-    public function isTeacher(): bool { return $this->role === 'teacher'; }
-    public function isStudent(): bool { return $this->role === 'student'; }
-    public function isParent(): bool  { return $this->role === 'parent'; }
+    /* -----------------------------------------------------------------
+     | Role helpers (Spatie-compatible)
+     |-----------------------------------------------------------------*/
+
+    public function isAdmin(): bool
+    {
+        return $this->hasRole('admin');
+    }
+
+    public function isTeacher(): bool
+    {
+        return $this->hasRole('teacher');
+    }
+
+    public function isStudent(): bool
+    {
+        return $this->hasRole('student');
+    }
+
+    public function isParent(): bool
+    {
+        return $this->hasRole('parent');
+    }
 }

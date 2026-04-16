@@ -11,20 +11,22 @@ class MeController extends Controller
     {
         $user = $request->user()->load([
             'degree:id,slug,name',
+            'subject:id,name,code', // ✅ ADD THIS
         ]);
 
-        // Build roles array safely (Spatie or fallback to single role column)
-        $spatie = method_exists($user, 'getRoleNames') ? $user->getRoleNames() : collect();
-        $roles  = ($spatie && $spatie->count() > 0)
-            ? $spatie->values()->all()
-            : array_values(array_filter([$user->role]));
+        $spatie = method_exists($user, 'getRoleNames')
+            ? $user->getRoleNames()
+            : collect();
 
-        return response()->json([
-            'data' => array_merge($user->toArray(), [
-                'roles'       => $roles,                                   // what FE expects
-                'degree_slug' => $user->degree?->slug,                     // convenience
-                'degree_obj'  => $user->degree?->only(['id','slug','name'])// light object
-            ]),
-        ]);
+        $roles = $user->getRoleNames()->values()->all();
+
+	return response()->json([
+  	'data' => array_merge($user->toArray(), [
+    	'roles' => $roles,
+    	'role'  => $roles[0] ?? null, // ✅ derived, not stored
+    	'user' => $request->user()->load('subject:id,name,code'),
+  	
+]),
+	]);
     }
 }

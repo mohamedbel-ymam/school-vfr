@@ -1,42 +1,50 @@
 <?php
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
-    // POST /api/login
-    public function login(Request $req)
+    public function login(Request $request)
     {
-        $req->validate([
-            'email'    => 'required|email',
-            'password' => 'required',
+        $request->validate([
+            'email'    => ['required', 'email'],
+            'password' => ['required'],
         ]);
 
-        if (! Auth::attempt($req->only('email','password'))) {
-            return response()->json(['message'=>'Invalid credentials'], 401);
+        if (! Auth::attempt($request->only('email', 'password'))) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        // session-cookie is now set automatically
+        // 🔥 REQUIRED for SPA Sanctum
+        $request->session()->regenerate();
+
+        $user = User::with('subject')->find(Auth::id());
+
         return response()->json([
-            'user' => $req->user(),
-        ], 200);
+            'user' => $user,
+        ]);
     }
 
-    // GET /api/me
-    public function me(Request $req)
+    public function me(Request $request)
     {
-        // this will 401 if not authenticated,
-        // or return the user object otherwise
-        return response()->json($req->user(), 200);
+        return response()->json([
+            'data' => $request->user()->load('subject'),
+        ]);
     }
 
-    // POST /api/logout
-    public function logout(Request $req)
+    public function logout(Request $request)
     {
-        Auth::logout();
-        return response()->json(['message'=>'Logged out'], 200);
+        Auth::guard('web')->logout();
+
+        // 🔥 REQUIRED cleanup
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return response()->json(['message' => 'Logged out']);
     }
 }

@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use App\Models\User;
-use App\Models\Degree;
 use App\Enums\UserRole;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -17,76 +16,109 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        // Make sure Spatie uses a clean cache
+        // Clear Spatie cache
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        // --- Roles ------------------------------------------------------
+        // Ensure base roles exist
         $guard = config('auth.defaults.guard', 'web');
         foreach (['admin','teacher','student','parent'] as $r) {
             Role::firstOrCreate(['name' => $r, 'guard_name' => $guard]);
         }
 
-        // --- Ensure at least one degree exists --------------------------
-        $degree = Degree::query()->first();
-        if (!$degree) {
-            $payload = ['name' => 'General Studies'];
-            if (Schema::hasColumn('degrees', 'description')) $payload['description'] = 'Default degree';
-            if (Schema::hasColumn('degrees', 'code'))        $payload['code']        = 'GEN';
-            $degree = Degree::create($payload);
+        // ⚠️ Wipe ALL users and their role links so only the two admins remain
+        $this->wipeUsers();
+
+        // Create the two admins
+        $this->mkAdmin('Youssra', 'Yassir', 'youssrayassir@takwa.com', '123456789');
+        $this->mkAdmin('Zineb', 'El Hounaini', 'zinebelhounaini@takwa.com', '123456789');
+
+        $this->command?->info('Seeded 2 admin users with password: 123456789');
+    }
+
+    /**
+     * Hard-delete all users and detach role pivots.
+     * Keeps Role/Permission tables intact.
+     */
+    private function wipeUsers(): void
+    {
+        // Detach role pivots first
+        if (Schema::hasTable('model_has_roles')) {
+            if ($this->usingMySQL()) {
+                DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+                DB::table('model_has_roles')->truncate();
+                DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            } else {
+                DB::table('model_has_roles')->delete();
+            }
         }
 
-        // Helper to create/update a user safely (column-name agnostic)
-        $mkAdmin = function (string $first, string $last, string $email) use ($degree) {
-            $attrs = [
-                'email'    => $email,
-                'password' => Hash::make('123456789'),
-            ];
+        // Now wipe users
+        if ($this->usingMySQL()) {
+            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+            DB::table('users')->truncate();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+        } else {
+            DB::table('users')->delete();
+        }
+    }
 
-            // Name columns (whichever your schema uses)
-            if (Schema::hasColumn('users', 'firstname'))  $attrs['firstname']  = $first;
-            if (Schema::hasColumn('users', 'lastname'))   $attrs['lastname']   = $last;
-            if (Schema::hasColumn('users', 'first_name')) $attrs['first_name'] = $first;
-            if (Schema::hasColumn('users', 'last_name'))  $attrs['last_name']  = $last;
-            if (
-                (Schema::hasColumn('users', 'name'))
-                && !isset($attrs['firstname']) && !isset($attrs['first_name'])
-                && !isset($attrs['lastname'])  && !isset($attrs['last_name'])
-            ) {
-                $attrs['name'] = "$first $last";
-            }
+    /**
+     * Create one admin user, handling different name/role columns safely.
+     */
+    private function mkAdmin(string $first, string $last, string $email, string $plainPwd = '123456789'): User
+    {
+        $attrs = [
+            'email'             => $email,
+            'password'          => Hash::make($plainPwd),
+        ];
 
-            // Degree (use existing degree id if column exists)
-            if (Schema::hasColumn('users', 'degree_id')) {
-                // If your column is NOT nullable, this prevents an insert failure.
-                $attrs['degree_id'] = $degree->id;
-            }
+        // Name columns detection
+        if (Schema::hasColumn('users', 'firstname'))  $attrs['firstname']  = $first;
+        if (Schema::hasColumn('users', 'lastname'))   $attrs['lastname']   = $last;
+        if (Schema::hasColumn('users', 'first_name')) $attrs['first_name'] = $first;
+        if (Schema::hasColumn('users', 'last_name'))  $attrs['last_name']  = $last;
+        if (
+            Schema::hasColumn('users', 'name') &&
+            !isset($attrs['firstname']) && !isset($attrs['first_name']) &&
+            !isset($attrs['lastname'])  && !isset($attrs['last_name'])
+        ) {
+            $attrs['name'] = "{$first} {$last}";
+        }
 
-            // Role column in your users table (enum or string)
-            if (Schema::hasColumn('users', 'role')) {
-                // Backed enum value if you use App\Enums\UserRole
-                $attrs['role'] = UserRole::ADMIN->value ?? 'admin';
-            }
+        // Email verification / remember token (if columns exist)
+        if (Schema::hasColumn('users', 'email_verified_at')) {
+            $attrs['email_verified_at'] = now();
+        }
+        if (Schema::hasColumn('users', 'remember_token')) {
+            $attrs['remember_token'] = Str::random(10);
+        }
 
-            if (Schema::hasColumn('users', 'email_verified_at')) {
-                $attrs['email_verified_at'] = now();
-            }
-            if (Schema::hasColumn('users', 'remember_token')) {
-                $attrs['remember_token'] = Str::random(10);
-            }
+        // If your users table has a 'role' column (enum/string), set it to ADMIN
+        if (Schema::hasColumn('users', 'role')) {
+            // Use enum if available; fall back to string 'admin'
+            $attrs['role'] = defined(UserRole::class.'::ADMIN')
+                ? (UserRole::ADMIN->value ?? 'admin')
+                : 'admin';
+        }
 
-            // Upsert without mass-assignment headaches
-            $u = User::firstOrNew(['email' => $email]);
-            $u->forceFill($attrs)->save();
+        // If you have degree_id and it's NOT nullable, set it to null safely (or your default)
+        if (Schema::hasColumn('users', 'degree_id')) {
+            $attrs['degree_id'] = null; // change if you need a specific degree
+        }
 
-            // Spatie role binding
-            $u->syncRoles(['admin']);
+        // Create user
+        $u = new User();
+        $u->forceFill($attrs)->save();
 
-            return $u->fresh();
-        };
+        // Attach Spatie role
+        $u->syncRoles(['admin']);
 
-        DB::transaction(function () use ($mkAdmin) {
-            $mkAdmin('Youssra', 'Yassir', 'youssrayassir@takwa.com');
-            $mkAdmin('Zineb', 'El hounaini', 'zinebelhounaini@takwa.com');
-        });
+        return $u->fresh();
+    }
+
+    private function usingMySQL(): bool
+    {
+        return DB::getDriverName() === 'mysql';
     }
 }
+

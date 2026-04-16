@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use Illuminate\Support\Facades\Schema;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceStat;
 use App\Models\User;
@@ -18,86 +19,116 @@ class AttendanceController extends Controller
      * Response: { data: { items: [...], meta: {...} } }
      */
     public function index(Request $request)
-    {
-        $q        = trim((string) $request->query('q', ''));
-        $period   = $request->query('period', 'overall');   // overall|month|week
-        $perPage  = max(1, min(100, (int) $request->query('per_page', 25)));
-        $degreeId = $request->query('degree_id');           // NEW: filter by degree
+{
+    $q        = trim((string) $request->query('q', ''));
+    $period   = $request->query('period', 'overall');
+    $perPage  = max(1, min(100, (int) $request->query('per_page', 25)));
+    $degreeId = $request->query('degree_id');
 
-        [$scope, $key, $meta] = $this->resolveScopeAndKey($period);
+    [$scope, $key, $meta] = $this->resolveScopeAndKey($period);
 
-        // Pull students (role: student); include degree name; apply search + degree filter
-        $students = User::role('student')
-            ->leftJoin('degrees', 'degrees.id', '=', 'users.degree_id')
-            ->when($degreeId, fn ($qb) => $qb->where('users.degree_id', $degreeId)) // ← degree filter
-            ->when($q !== '', function ($qb) use ($q) {
-                $like = "%{$q}%";
-                $qb->where(function ($w) use ($like) {
-                    $w->where('users.firstname', 'like', $like)
-                      ->orWhere('users.lastname', 'like', $like)
-                      ->orWhere('users.email', 'like', $like)
-                      ->orWhere('degrees.name', 'like', $like);
-                });
-            })
-            ->select([
-                'users.id',
-                'users.firstname',
-                'users.lastname',
-                'users.email',
-                'users.degree_id',
-                'degrees.name as degree_name',
-            ])
-            ->orderBy('users.lastname')
-            ->orderBy('users.firstname')
-            ->paginate($perPage);
+    // --- Start a plain builder (NO ->role() call) ---
+    $builder = \App\Models\User::query();
 
-        // Stats for current period
-        $stats = AttendanceStat::query()
-            ->where('scope', $scope)
-            ->where('period_key', $key)
-            ->whereIn('student_id', $students->pluck('id'))
-            ->get()
-            ->keyBy('student_id');
-
-        $items = $students->getCollection()->map(function ($u) use ($stats) {
-            $s = $stats->get($u->id);
-            return [
-                'id'        => (int) $u->id,
-                'firstname' => $u->firstname,
-                'lastname'  => $u->lastname,
-                'email'     => $u->email,
-                'degree'    => $u->degree_id ? [
-                    'id'   => (int) $u->degree_id,
-                    'name' => $u->degree_name,
-                ] : null,
-                'attendance' => [
-                    'absences'            => (int) ($s->absences ?? 0),
-                    'justified_absences'  => (int) ($s->justified_absences ?? 0),
-                    'presences'           => (int) ($s->presences ?? 0),
-                ],
-            ];
-        })->values();
-
-        return response()->json([
-            'data' => [
-                'items' => $items,
-                'meta'  => [
-                    'page'     => $students->currentPage(),
-                    'per_page' => $students->perPage(),
-                    'total'    => $students->total(),
-                    'period'   => [
-                        'scope' => $scope,
-                        'key'   => $key,
-                        'range' => $meta, // from/to for week or month
-                    ],
-                    'filters'  => [
-                        'degree_id' => $degreeId, // echo back applied filter
-                    ],
-                ],
-            ],
-        ]);
+    // Prefer Spatie if present; else fall back to a column `role` or `roles` JSON
+    if (method_exists(new \App\Models\User, 'scopeRole')) {
+        // Spatie-Permission installed and trait on User
+        $builder->role('student');
+    } else {
+        // Fallbacks if you keep a role string or JSON roles column
+        $builder->where(function ($w) {
+            $w->where('role', 'student'); // string column
+            if (Schema::hasColumn('users', 'roles')) {
+                // if you store roles as JSON array, this will work on MySQL 8+
+                $w->orWhereJsonContains('roles', 'student');
+            }
+        });
     }
 
+    // Optional join with degrees if schema is present
+    $hasDegreeId = Schema::hasColumn('users', 'degree_id');
+    $hasDegrees  = Schema::hasTable('degrees');
+
+    if ($hasDegreeId && $hasDegrees) {
+        $builder->leftJoin('degrees', 'degrees.id', '=', 'users.degree_id');
+    }
+
+    // Filters
+    if ($degreeId && $hasDegreeId) {
+        $builder->where('users.degree_id', $degreeId);
+    }
+
+    if ($q !== '') {
+        $like = "%{$q}%";
+        $builder->where(function ($w) use ($like, $hasDegrees) {
+            $w->where('users.firstname', 'like', $like)
+              ->orWhere('users.lastname', 'like', $like)
+              ->orWhere('users.email', 'like', $like);
+            if ($hasDegrees) {
+                $w->orWhere('degrees.name', 'like', $like);
+            }
+        });
+    }
+
+    // Selects (add degree fields only if we joined)
+    $select = [
+        'users.id', 'users.firstname', 'users.lastname', 'users.email',
+    ];
+    if ($hasDegreeId)  $select[] = 'users.degree_id';
+    if ($hasDegreeId && $hasDegrees) $select[] = 'degrees.name as degree_name';
+
+    $students = $builder
+        ->select($select)
+        ->orderBy('users.lastname')
+        ->orderBy('users.firstname')
+        ->paginate($perPage);
+
+    // ... keep the rest of your method exactly the same ...
+    $stats = \App\Models\AttendanceStat::query()
+        ->where('scope', $scope)
+        ->where('period_key', $key)
+        ->whereIn('student_id', $students->pluck('id'))
+        ->get()
+        ->keyBy('student_id');
+
+    $items = $students->getCollection()->map(function ($u) use ($stats) {
+        $s = $stats->get($u->id);
+        return [
+            'id'        => (int) $u->id,
+            'firstname' => $u->firstname,
+            'lastname'  => $u->lastname,
+            'email'     => $u->email,
+            'degree'    => (isset($u->degree_id) && $u->degree_id) ? [
+                'id'   => (int) $u->degree_id,
+                'name' => $u->degree_name ?? null,
+            ] : null,
+            'attendance' => [
+                'absences'            => (int) ($s->absences ?? 0),
+                'justified_absences'  => (int) ($s->justified_absences ?? 0),
+                'presences'           => (int) ($s->presences ?? 0),
+            ],
+        ];
+    })->values();
+
+    return response()->json([
+        'data' => [
+            'items' => $items,
+            'meta'  => [
+                'page'     => $students->currentPage(),
+                'per_page' => $students->perPage(),
+                'total'    => $students->total(),
+                'period'   => [
+                    'scope' => $scope,
+                    'key'   => $key,
+                    'range' => $meta,
+                ],
+                'filters'  => [
+                    'degree_id' => $degreeId,
+                ],
+            ],
+        ],
+    ]);
+}
     /**
      * Bulk update counters for many students.
      * Body: { period?: 'overall'|'month'|'week', updates: [{ student_id, absences, justified_absences?, presences, period? }, ...] }
@@ -270,3 +301,4 @@ class AttendanceController extends Controller
         }
     }
 }
+

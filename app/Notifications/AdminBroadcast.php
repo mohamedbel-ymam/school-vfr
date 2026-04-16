@@ -3,11 +3,9 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
-// use Illuminate\Notifications\Messages\MailMessage; // if you later add mail
 
-class AdminBroadcast extends Notification /* implements ShouldQueue */
+class AdminBroadcast extends Notification
 {
     use Queueable;
 
@@ -15,9 +13,6 @@ class AdminBroadcast extends Notification /* implements ShouldQueue */
     public string $message;
     public array $meta;
 
-    /**
-     * $meta should include: broadcast_id, audience, degree_id, user_id(s), sent_by, channels...
-     */
     public function __construct(string $title, string $message, array $meta = [])
     {
         $this->title   = $title;
@@ -27,9 +22,7 @@ class AdminBroadcast extends Notification /* implements ShouldQueue */
 
     public function via($notifiable): array
     {
-        // For now we only persist in DB (UI reads from /admin/notifications & /notifications)
-        return ['database'];
-        // If you add mail later, return ['database','mail'] and implement toMail()
+        return ['database']; // add 'mail' later if you want
     }
 
     public function toDatabase($notifiable): array

@@ -1,13 +1,27 @@
 <?php
 
 return [
-    'paths' => [ 'api/*', 'sanctum/csrf-cookie', 'login', 'logout', 'connexion', 'deconnexion', 'déconnexion'],
+
+    'paths' => [
+        'api/*',
+        'sanctum/csrf-cookie',
+        '*',
+    ],
+
     'allowed_methods' => ['*'],
-    'allowed_origins' => ['https://takwaetablissement.com', 'https://www.takwaetablissement.com'],
+
+    'allowed_origins' => [
+        'https://takwaetablissement.com',
+        'https://www.takwaetablissement.com',
+    ],
+
+    'allowed_origins_patterns' => [],
+
     'allowed_headers' => ['*'],
+
     'exposed_headers' => [],
+
     'max_age' => 0,
-    'supports_credentials' => true,  
+
+    'supports_credentials' => true,
 ];
-
-
