@@ -92,7 +92,7 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
         { label: "Emplois du temps", to: ADMIN_TIMETABLES_ROUTE, icon: CalendarDays },
         { label: "Examens", to: ADMIN_EXAMS_ROUTE, icon: ClipboardList },
         { label: "Notes", to: ADMIN_GRADES_ROUTE, icon: BookOpen },
-        { label: "discipline", to:ADMIN_STUDENT_CONTACT, icon: UserCircleIcon }
+        // { label: "discipline", to:ADMIN_STUDENT_CONTACT, icon: UserCircleIcon }
 
 
       ],
