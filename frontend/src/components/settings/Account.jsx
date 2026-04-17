@@ -63,70 +63,70 @@ export default function AccountSettings() {
   const previewUrl = useMemo(() => (selectedFile ? URL.createObjectURL(selectedFile) : null), [selectedFile]);
 
   // cleanup preview URL
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+  // useEffect(() => {
+  //   return () => {
+  //     if (previewUrl) URL.revokeObjectURL(previewUrl);
+  //   };
+  // }, [previewUrl]);
 
-  const loadAvatarStatus = async () => {
-    // only for students (optional guard)
-    if (user?.role !== "student") return;
+  // const loadAvatarStatus = async () => {
+  //   // only for students (optional guard)
+  //   if (user?.role !== "student") return;
 
-    setAvatarLoading(true);
-    try {
-      const res = await StudentAvatarApi.status();
-      const d = res?.data?.data ?? {};
-      setAvatarStatus(d.status ?? "none");
-      setAvatarUrl(d.avatar_url ?? null);
-      setAvatarPendingUrl(d.avatar_pending_url ?? null);
-    } catch (e) {
-      // silent but log
-      console.error(e);
-    } finally {
-      setAvatarLoading(false);
-    }
-  };
+  //   setAvatarLoading(true);
+  //   try {
+  //     const res = await StudentAvatarApi.status();
+  //     const d = res?.data?.data ?? {};
+  //     setAvatarStatus(d.status ?? "none");
+  //     setAvatarUrl(d.avatar_url ?? null);
+  //     setAvatarPendingUrl(d.avatar_pending_url ?? null);
+  //   } catch (e) {
+  //     // silent but log
+  //     console.error(e);
+  //   } finally {
+  //     setAvatarLoading(false);
+  //   }
+  // };
 
-  useEffect(() => {
-    loadAvatarStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  // useEffect(() => {
+  //   loadAvatarStatus();
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [user?.id]);
 
-  const onUploadAvatar = async () => {
-    if (!selectedFile) return;
+  // const onUploadAvatar = async () => {
+  //   if (!selectedFile) return;
 
-    setSavedMsg("");
-    setErrorMsg("");
-    setAvatarLoading(true);
+  //   setSavedMsg("");
+  //   setErrorMsg("");
+  //   setAvatarLoading(true);
 
-    try {
-      const res = await StudentAvatarApi.upload(selectedFile);
-      const msg = res?.data?.message || "Photo envoyée. En attente de validation.";
-      setSavedMsg(msg);
-      toast({ title: msg });
-      setSelectedFile(null);
-      await loadAvatarStatus();
-      setTimeout(() => setSavedMsg(""), 3000);
-    } catch (err) {
-      const status = err?.response?.status;
-      const data = err?.response?.data;
+  //   try {
+  //     const res = await StudentAvatarApi.upload(selectedFile);
+  //     const msg = res?.data?.message || "Photo envoyée. En attente de validation.";
+  //     setSavedMsg(msg);
+  //     toast({ title: msg });
+  //     setSelectedFile(null);
+  //     await loadAvatarStatus();
+  //     setTimeout(() => setSavedMsg(""), 3000);
+  //   } catch (err) {
+  //     const status = err?.response?.status;
+  //     const data = err?.response?.data;
 
-      if (status === 422) {
-        const msg =
-          data?.message ||
-          (data?.errors?.avatar?.[0] ?? "Fichier invalide. Utilisez JPG/PNG/WEBP (max 4MB).");
-        setErrorMsg(msg);
-        toast({ title: "Erreur", description: msg });
-      } else {
-        const msg = data?.message || "Impossible d’envoyer la photo.";
-        setErrorMsg(msg);
-        toast({ title: "Erreur", description: msg });
-      }
-    } finally {
-      setAvatarLoading(false);
-    }
-  };
+  //     if (status === 422) {
+  //       const msg =
+  //         data?.message ||
+  //         (data?.errors?.avatar?.[0] ?? "Fichier invalide. Utilisez JPG/PNG/WEBP (max 4MB).");
+  //       setErrorMsg(msg);
+  //       toast({ title: "Erreur", description: msg });
+  //     } else {
+  //       const msg = data?.message || "Impossible d’envoyer la photo.";
+  //       setErrorMsg(msg);
+  //       toast({ title: "Erreur", description: msg });
+  //     }
+  //   } finally {
+  //     setAvatarLoading(false);
+  //   }
+  // };
 
   // ------------------- Password form -------------------
   const [submitting, setSubmitting] = useState(false);
@@ -173,11 +173,11 @@ export default function AccountSettings() {
     }
   };
 
-  const badge = badgeForAvatarStatus(avatarStatus);
+  // const badge = badgeForAvatarStatus(avatarStatus);
 
   // Decide which image to show:
   // priority: preview > pending > approved > placeholder
-  const shownImg = previewUrl || avatarPendingUrl || avatarUrl || null;
+  // const shownImg = previewUrl || avatarPendingUrl || avatarUrl || null;
 
   return (
     <div className="mx-auto max-w-xl space-y-4">
