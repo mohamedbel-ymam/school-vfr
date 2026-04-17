@@ -1,97 +1,153 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getAdminStudentContacts } from "../../../services/adminStudentContactsService";
 
 export default function AdminStudentContactsPage() {
+  const [degrees, setDegrees] = useState([]);
   const [students, setStudents] = useState([]);
+  const [selectedDegreeId, setSelectedDegreeId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [studentsLoading, setStudentsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    loadStudents();
+    loadInitialData();
   }, []);
 
-  const loadStudents = async () => {
+  const loadInitialData = async () => {
     try {
       setLoading(true);
       setError("");
-      const res = await getAdminStudentContacts();
-      setStudents(res.data || []);
+
+      const data = await getAdminStudentContacts();
+      setDegrees(data.degrees || []);
+      setStudents(data.students || []);
+      setSelectedDegreeId(data.selected_degree_id || null);
     } catch (err) {
       console.error(err);
-      setError("Impossible de charger les contacts des étudiants.");
+      setError("Impossible de charger les degrés.");
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredStudents = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return students;
+  const handleDegreeClick = async (degree) => {
+    try {
+      setStudentsLoading(true);
+      setError("");
+      setSelectedDegreeId(degree.id);
 
-    return students.filter((student) =>
-      [
-        student.full_name,
-        student.email,
-        student.phone,
-        student.degree,
-      ]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(q))
-    );
-  }, [students, search]);
+      const data = await getAdminStudentContacts(degree.id);
+      setStudents(data.students || []);
+    } catch (err) {
+      console.error(err);
+      setError("Impossible de charger les étudiants de ce niveau.");
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
 
-  if (loading) return <div className="p-6">Chargement...</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  const selectedDegree = degrees.find((d) => d.id === selectedDegreeId);
+
+  if (loading) {
+    return <div className="p-6">Chargement...</div>;
+  }
+
+  if (error && degrees.length === 0) {
+    return <div className="p-6 text-red-600">{error}</div>;
+  }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Contacts des étudiants</h1>
+    <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Contacts des étudiants</h1>
+        <p className="text-sm text-gray-500">
+          Sélectionnez un niveau pour afficher les étudiants correspondants.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold">Niveaux</h2>
+
+        {degrees.length === 0 ? (
+          <p className="text-sm text-gray-500">Aucun niveau trouvé.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {degrees.map((degree) => {
+              const isActive = selectedDegreeId === degree.id;
+
+              return (
+                <button
+                  key={degree.id}
+                  onClick={() => handleDegreeClick(degree)}
+                  className={`rounded-xl border px-4 py-4 text-left transition ${
+                    isActive
+                      ? "border-blue-600 bg-blue-50 text-blue-700"
+                      : "border-gray-200 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-semibold">{degree.name}</div>
+                  <div className="mt-1 text-sm text-gray-500">
+                    Voir les étudiants
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border bg-white shadow-sm">
+        <div className="border-b px-5 py-4">
+          <h2 className="text-lg font-semibold">
+            {selectedDegree
+              ? `Étudiants de ${selectedDegree.name}`
+              : "Étudiants"}
+          </h2>
           <p className="text-sm text-gray-500">
-            Consultation rapide des informations administratives.
+            {selectedDegree
+              ? `${students.length} étudiant(s) trouvés`
+              : "Choisissez un niveau pour afficher les étudiants"}
           </p>
         </div>
 
-        <input
-          type="text"
-          placeholder="Rechercher nom, email, téléphone, niveau..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-xl border px-4 py-2 md:w-96"
-        />
-      </div>
+        {error && (
+          <div className="px-5 pt-4 text-sm text-red-600">{error}</div>
+        )}
 
-      <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-100 text-left">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Nom complet</th>
-              <th className="px-4 py-3 font-semibold">Email</th>
-              <th className="px-4 py-3 font-semibold">Téléphone</th>
-              <th className="px-4 py-3 font-semibold">Niveau</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStudents.length === 0 ? (
-              <tr>
-                <td colSpan="4" className="px-4 py-6 text-center text-gray-500">
-                  Aucun résultat.
-                </td>
-              </tr>
-            ) : (
-              filteredStudents.map((student) => (
-                <tr key={student.id} className="border-t">
-                  <td className="px-4 py-3">{student.full_name || "-"}</td>
-                  <td className="px-4 py-3">{student.email || "-"}</td>
-                  <td className="px-4 py-3">{student.phone || "-"}</td>
-                  <td className="px-4 py-3">{student.degree || "-"}</td>
+        {studentsLoading ? (
+          <div className="p-6">Chargement des étudiants...</div>
+        ) : !selectedDegreeId ? (
+          <div className="p-6 text-gray-500">
+            Veuillez sélectionner un niveau.
+          </div>
+        ) : students.length === 0 ? (
+          <div className="p-6 text-gray-500">
+            Aucun étudiant trouvé pour ce niveau.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-left">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Nom complet</th>
+                  <th className="px-4 py-3 font-semibold">Email</th>
+                  <th className="px-4 py-3 font-semibold">Téléphone</th>
+                  <th className="px-4 py-3 font-semibold">Niveau</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {students.map((student) => (
+                  <tr key={student.id} className="border-t">
+                    <td className="px-4 py-3">{student.full_name || "-"}</td>
+                    <td className="px-4 py-3">{student.email || "-"}</td>
+                    <td className="px-4 py-3">{student.phone || "-"}</td>
+                    <td className="px-4 py-3">{student.degree || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
