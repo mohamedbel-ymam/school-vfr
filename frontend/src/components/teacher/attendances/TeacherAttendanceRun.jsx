@@ -35,20 +35,7 @@ function ReelsStudentCard({
     <div className="w-full">
       <div className="relative w-full overflow-hidden rounded-3xl border">
         <div className="relative w-full h-[62vh] min-h-[420px] bg-black">
-          {hasPhoto ? (
-            <img
-              src={student.avatar_public_url}
-              alt={student.full_name}
-              className="absolute inset-0 w-full h-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-700 to-slate-900">
-              <div className="text-white text-7xl font-black tracking-widest opacity-95 select-none">
-                {initials}
-              </div>
-            </div>
-          )}
+          
 
           <div className="absolute inset-x-0 bottom-0 p-4">
             <div className="rounded-2xl bg-black/55 backdrop-blur-md border border-white/10 p-4">
