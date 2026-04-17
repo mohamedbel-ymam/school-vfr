@@ -33,18 +33,18 @@ const schema = z
   });
 
 // ------------------- Avatar helpers -------------------
-// function badgeForAvatarStatus(status) {
-//   switch (status) {
-//     case "approved":
-//       return { text: "Validée ✅", cls: "border-green-300 bg-green-50 text-green-800" };
-//     case "pending":
-//       return { text: "En attente de validation ⏳", cls: "border-amber-300 bg-amber-50 text-amber-800" };
-//     case "rejected":
-//       return { text: "Refusée ❌ (vous pouvez renvoyer une photo)", cls: "border-red-300 bg-red-50 text-red-800" };
-//     default:
-//       return { text: "Aucune photo", cls: "border-slate-200 bg-slate-50 text-slate-700" };
-//   }
-// }
+function badgeForAvatarStatus(status) {
+  switch (status) {
+    case "approved":
+      return { text: "Validée ✅", cls: "border-green-300 bg-green-50 text-green-800" };
+    case "pending":
+      return { text: "En attente de validation ⏳", cls: "border-amber-300 bg-amber-50 text-amber-800" };
+    case "rejected":
+      return { text: "Refusée ❌ (vous pouvez renvoyer une photo)", cls: "border-red-300 bg-red-50 text-red-800" };
+    default:
+      return { text: "Aucune photo", cls: "border-slate-200 bg-slate-50 text-slate-700" };
+  }
+}
 
 export default function AccountSettings() {
   const { user } = useAuth();
