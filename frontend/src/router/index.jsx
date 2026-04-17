@@ -91,7 +91,7 @@ import AdminSettingsAdmins from "../components/admin/pages/components/settings/A
 
 import AdminTestsList from "@/components/admin/pages/AdminTestsList.jsx";
 import AdminTestDetails from "@/components/admin/pages/AdminTestsDetails.jsx";
-
+import AdminStudentContactsPage from "@/components/admin/pages/AdminStudentContactsPage.jsx";
 /* ===================== BOURSIER ===================== */
 import BoursierDashboard from "@/components/boursier/BoursierDashboard.jsx";
 //Experiment routes 
@@ -232,6 +232,7 @@ export const router = createBrowserRouter([
               { path: "notifications", element: <SendNotification /> },
               { path: "tests", element: <AdminTestsList /> },
               { path: "tests/:id", element: <AdminTestDetails /> },
+              { path: "student-contacts", element:<AdminStudentContactsPage />},
               // Notes / Admin
               {
                 path: "notes",
