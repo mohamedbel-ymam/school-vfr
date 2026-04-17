@@ -29,10 +29,10 @@ class UserSeeder extends Seeder
         $this->wipeUsers();
 
         // Create the two admins
-        $this->mkAdmin('Youssra', 'Yassir', 'youssrayassir@takwa.com', '123456789');
-        $this->mkAdmin('Zineb', 'El Hounaini', 'zinebelhounaini@takwa.com', '123456789');
+        
+        
 
-        $this->command?->info('Seeded 2 admin users with password: 123456789');
+        
     }
 
     /**
