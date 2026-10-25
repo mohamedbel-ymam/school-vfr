@@ -11,8 +11,8 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-        'https://school-vfr.render.com',
-        
+        "https://school-vfr.onrender.com",
+        "https://www.school-vfr.onrender.com"
     ],
 
     'allowed_origins_patterns' => [],
