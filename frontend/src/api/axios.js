@@ -1,8 +1,7 @@
-// src/api/axios.js
 import axios from "axios";
 
 /* -------------------------------------------------------------------------- */
-/* Base URL                                                                    */
+/* Base URL                                                                   */
 /* -------------------------------------------------------------------------- */
 
 function resolveBaseURL() {
@@ -17,15 +16,18 @@ function resolveBaseURL() {
 
   const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
-  return isLocal
-    ? "http://localhost:8000"
-    : "https://school-vfr.render.com";
+  if (isLocal) {
+    return "http://localhost:8000";
+  }
+
+  // En production sur Render (même domaine pour le Front et l'API)
+  return "https://school-vfr.onrender.com";
 }
 
 const API_BASE = resolveBaseURL();
 
 /* -------------------------------------------------------------------------- */
-/* Axios client (Sanctum SPA – NO CSRF)                                        */
+/* Axios client (Sanctum SPA)                                                 */
 /* -------------------------------------------------------------------------- */
 
 export const axiosClient = axios.create({
@@ -38,13 +40,12 @@ export const axiosClient = axios.create({
 });
 
 /* -------------------------------------------------------------------------- */
-/* Optional response interceptor                                               */
+/* Optional response interceptor                                              */
 /* -------------------------------------------------------------------------- */
 
 axiosClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Optional: global auth handling
     if (error?.response?.status === 401) {
       // not authenticated
     }
