@@ -1,22 +1,7 @@
-# Stage 1: Build React Frontend
-FROM node:20 AS frontend-builder
-WORKDIR /app/frontend
-
-# Copie uniquement les fichiers de dépendances d'abord pour optimiser le cache
-COPY frontend/package*.json ./
-RUN npm install
-
-# Copie tout le reste du code frontend
-COPY frontend/ ./
-
-# Exécute le build Vite
-RUN node node_modules/vite/bin/vite.js build
-
-
 # Stage 2: PHP 8.2 + Apache Runtime for Laravel
 FROM php:8.2-apache
 
-# Installation des dépendances système nécessaires pour Laravel et les extensions PHP
+# Installation des dépendances système et extensions PHP nécessaires
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg-dev \
@@ -25,25 +10,31 @@ RUN apt-get update && apt-get install -y \
     unzip \
     git \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install gd pdo pdo_mysql
+    && docker-php-ext-install gd pdo pdo_mysql bcmath mbstring xml curl zip
 
-# Activation de mod_rewrite pour Apache (nécessaire pour les routes Laravel)
+# Activation de mod_rewrite pour Apache
 RUN a2enmod rewrite
 
 # Installation de Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Définition du répertoire de travail de l'application Laravel
+# Définition du répertoire de travail à la racine de Laravel
 WORKDIR /var/www/html
 
-# Copie de tout le projet Laravel à la racine
+# Copie d'abord les fichiers de dépendances Composer pour profiter du cache Docker
+COPY composer.json composer.lock ./
+
+# Installation des dépendances PHP (sans les dev)
+RUN composer install --no-dev --optimize-autoloader --no-scripts --no-autoloader
+
+# Copie du reste du code source du projet
 COPY . .
 
-# Copie des fichiers compilés du React frontend (provenant du stage 1) vers le dossier public de Laravel
+# Copie des fichiers compilés du React frontend (provenant du stage 1) vers public/build
 COPY --from=frontend-builder /app/frontend/dist ./public/build
 
-# Installation des dépendances PHP de production
-RUN composer install --no-dev --optimize-autoloader
+# Finalisation de l'autoloader et des scripts Laravel
+RUN composer dump-autoload --optimize
 
 # Permissions correctes pour Laravel
 RUN chown -R www-data:www-data storage bootstrap/cache
