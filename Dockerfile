@@ -10,7 +10,7 @@ RUN npm install
 COPY frontend/ ./
 
 # Exécute le build Vite
-RUN npx vite build
+RUN node node_modules/vite/bin/vite.js build
 
 
 # Stage 2: PHP 8.2 + Apache Runtime for Laravel
