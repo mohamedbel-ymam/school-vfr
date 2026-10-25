@@ -12,6 +12,9 @@ RUN node node_modules/vite/bin/vite.js build
 # Stage 2: PHP 8.2 + Apache Runtime for Laravel
 FROM php:8.2-apache
 
+# Stage 2: PHP 8.2 + Apache Runtime for Laravel
+FROM php:8.2-apache
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
     libjpeg62-turbo-dev \
@@ -22,9 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zip \
     unzip \
     git \
-    && rm -rf /var/lib/apt/lists/* \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd pdo pdo_mysql bcmath mbstring xml curl zip
+    && docker-php-ext-install -j$(nproc) gd pdo pdo_mysql bcmath mbstring xml curl zip \
+    && rm -rf /var/lib/apt/lists/*
 RUN a2enmod rewrite
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
