@@ -12,14 +12,14 @@ RUN node node_modules/vite/bin/vite.js build
 # Stage 2: PHP 8.2 + Apache Runtime for Laravel
 FROM php:8.2-apache
 
-# Forcer le rafraîchissement du cache Render - URL corrigée mlocati
+# Installation de l'installateur d'extensions PHP
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 RUN chmod +x /usr/local/bin/install-php-extensions
 
-# Installation propre de toutes les extensions requises pour Laravel
+# Installation des extensions requises pour Laravel
 RUN install-php-extensions gd pdo_mysql bcmath mbstring xml curl zip
 
-# Installation des outils système de base (git, zip, unzip)
+# Installation des outils système de base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     zip \
@@ -32,18 +32,30 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copie des fichiers composer pour optimiser le cache Docker
+# Copie des fichiers composer pour optimiser le cache
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --optimize-autoloader --no-scripts --no-autoloader
 
 # Copie du reste du code source Laravel
 COPY . .
 
-# Récupération des fichiers React compilés depuis le stage "frontend-builder"
-COPY --from=frontend-builder /app/frontend/dist ./public/build
+# ⚠️ ÉTAPE CLÉ : Copier le contenu du build React DIRECTEMENT dans le dossier public/ de Laravel
+COPY --from=frontend-builder /app/frontend/dist/. ./public/
+
+# Création d'un fichier .htaccess dans public/ pour que React gère ses propres routes (React Router) et laisse /api à Laravel
+RUN echo '<IfModule mod_rewrite.c>' > ./public/.htaccess \
+    && echo '    RewriteEngine On' >> ./public/.htaccess \
+    && echo '    RewriteBase /' >> ./public/.htaccess \
+    && echo '    RewriteRule ^index\.html$ - [L]' >> ./public/.htaccess \
+    && echo '    RewriteCond %{REQUEST_URI} ^/api' >> ./public/.htaccess \
+    && echo '    RewriteRule ^ - [L]' >> ./public/.htaccess \
+    && echo '    RewriteCond %{REQUEST_FILENAME} !-f' >> ./public/.htaccess \
+    && echo '    RewriteCond %{REQUEST_FILENAME} !-d' >> ./public/.htaccess \
+    && echo '    RewriteRule . /index.html [L]' >> ./public/.htaccess \
+    && echo '</IfModule>' >> ./public/.htaccess
 
 RUN composer dump-autoload --optimize
-RUN chown -R www-data:www-data storage bootstrap/cache
+RUN chown -R www-data:www-data storage bootstrap/cache public
 
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
