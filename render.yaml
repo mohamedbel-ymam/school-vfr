@@ -3,11 +3,5 @@ services:
     name: school-vfr
     env: php
     plan: free
-    buildCommand: "composer install --no-dev --optimize-autoloader && cd frontend && npm install && npm run build && cd .. && php artisan config:clear && php artisan route:clear"    startCommand: "php artisan serve --host=0.0.0.0 --port=$PORT"
-    envVars:
-      - key: APP_ENV
-        value: production
-      - key: APP_DEBUG
-        value: "false"
-      - key: LOG_CHANNEL
-        value: stack
+    buildCommand: "composer install --no-dev --optimize-autoloader && cd frontend && npm install && npm run build && cd .. && php artisan config:clear && php artisan route:clear"
+    startCommand: "php artisan serve --host=0.0.0.0 --port=$PORT"
