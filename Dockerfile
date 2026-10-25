@@ -39,19 +39,25 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts --no-autoloader
 # Copie du reste du code source Laravel
 COPY . .
 
-# ⚠️ ÉTAPE CLÉ : Copier le contenu du build React DIRECTEMENT dans le dossier public/ de Laravel
+# Copie du build React DIRECTEMENT dans le dossier public/ de Laravel
 COPY --from=frontend-builder /app/frontend/dist/. ./public/
 
-# Création d'un fichier .htaccess dans public/ pour que React gère ses propres routes (React Router) et laisse /api à Laravel
-RUN echo '<IfModule mod_rewrite.c>' > ./public/.htaccess \
+# 1. Forcer Apache à lire index.html en priorité sur index.php
+RUN echo 'DirectoryIndex index.html index.php' > ./public/.htaccess \
+    && echo '<IfModule mod_rewrite.c>' >> ./public/.htaccess \
     && echo '    RewriteEngine On' >> ./public/.htaccess \
     && echo '    RewriteBase /' >> ./public/.htaccess \
-    && echo '    RewriteRule ^index\.html$ - [L]' >> ./public/.htaccess \
-    && echo '    RewriteCond %{REQUEST_URI} ^/api' >> ./public/.htaccess \
+    && echo '' >> ./public/.htaccess \
+    # 2. Si l'URL commence par /api, on l'envoie à index.php (Laravel)
+    && echo '    RewriteRule ^api(/.*)?$ index.php [QSA,L]' >> ./public/.htaccess \
+    && echo '' >> ./public/.htaccess \
+    # 3. Si le fichier ou dossier physique existe (assets JS, CSS, images), on le sert directement
+    && echo '    RewriteCond %{REQUEST_FILENAME} -f [OR]' >> ./public/.htaccess \
+    && echo '    RewriteCond %{REQUEST_FILENAME} -d' >> ./public/.htaccess \
     && echo '    RewriteRule ^ - [L]' >> ./public/.htaccess \
-    && echo '    RewriteCond %{REQUEST_FILENAME} !-f' >> ./public/.htaccess \
-    && echo '    RewriteCond %{REQUEST_FILENAME} !-d' >> ./public/.htaccess \
-    && echo '    RewriteRule . /index.html [L]' >> ./public/.htaccess \
+    && echo '' >> ./public/.htaccess \
+    # 4. Pour tout le reste (routes de React Router), on renvoie vers index.html
+    && echo '    RewriteRule ^ /index.html [L]' >> ./public/.htaccess \
     && echo '</IfModule>' >> ./public/.htaccess
 
 RUN composer dump-autoload --optimize
