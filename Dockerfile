@@ -12,22 +12,20 @@ RUN node node_modules/vite/bin/vite.js build
 # Stage 2: PHP 8.2 + Apache Runtime for Laravel
 FROM php:8.2-apache
 
-# Stage 2: PHP 8.2 + Apache Runtime for Laravel
-FROM php:8.2-apache
+# Installation de l'utilitaire officiel d'installation d'extensions PHP (plus simple et sans erreur)
+ADD https://github.com/ml-ocall/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+RUN chmod +x /usr/local/bin/install-php-extensions
 
+# Installation propre de toutes les extensions requises pour Laravel en une seule ligne
+RUN install-php-extensions gd pdo_mysql bcmath mbstring xml curl zip
+
+# Installation des outils système de base (git, zip, unzip)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpng-dev \
-    libjpeg62-turbo-dev \
-    libfreetype6-dev \
-    libxml2-dev \
-    libcurl4-openssl-dev \
-    libzip-dev \
+    git \
     zip \
     unzip \
-    git \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd pdo pdo_mysql bcmath mbstring xml curl zip \
     && rm -rf /var/lib/apt/lists/*
+
 RUN a2enmod rewrite
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
