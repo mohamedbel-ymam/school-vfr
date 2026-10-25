@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
+    libxml2-dev \
+    libcurl4-openssl-dev \
+    libzip-dev \
     zip \
     unzip \
     git \
