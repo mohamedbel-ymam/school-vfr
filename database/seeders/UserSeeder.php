@@ -35,10 +35,7 @@ class UserSeeder extends Seeder
         
     }
 
-    /**
-     * Hard-delete all users and detach role pivots.
-     * Keeps Role/Permission tables intact.
-     */
+ 
     private function wipeUsers(): void
     {
         // Detach role pivots first
@@ -106,7 +103,6 @@ class UserSeeder extends Seeder
             $attrs['degree_id'] = null; // change if you need a specific degree
         }
 
-        // Create user
         $u = new User();
         $u->forceFill($attrs)->save();
 

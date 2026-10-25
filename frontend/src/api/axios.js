@@ -19,7 +19,7 @@ function resolveBaseURL() {
 
   return isLocal
     ? "http://localhost:8000"
-    : "https://api.takwaetablissement.com";
+    : "https://school-vfr.render.com";
 }
 
 const API_BASE = resolveBaseURL();

@@ -156,7 +156,7 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN', '.takwaetablissement.com'),
+    'domain' => env('SESSION_DOMAIN', '.school-vfr.render.com'),
 
     /*
     |--------------------------------------------------------------------------
