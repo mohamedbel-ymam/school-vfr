@@ -19,34 +19,51 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-->withMiddleware(function (Middleware $middleware) {
+    ->withMiddleware(function (Middleware $middleware) {
+        // 🚪 Safe unauthenticated redirection for APIs (avoids 500 Route [login] not defined)
+        $middleware->redirectGuestsTo(fn ($request) => $request->expectsJson() ? null : '/connexion');
 
-    // 🌍 Global CORS
-    $middleware->use([
-        HandleCors::class,
-    ]);
+        // 🌍 Global CORS
+        $middleware->use([
+            HandleCors::class,
+        ]);
 
-    // 🔐 Sanctum SPA (stateful cookies)
-    $middleware->api(prepend: [
-        EnsureFrontendRequestsAreStateful::class,
-    ]);
+        // 🔐 Sanctum SPA (stateful cookies)
+        $middleware->api(prepend: [
+            EnsureFrontendRequestsAreStateful::class,
+        ]);
 
-    // 🚨🔥 DISABLE CSRF COMPLETELY (REQUIRED FOR CROSS-SUBDOMAIN SPA)
-    $middleware->validateCsrfTokens(except: [
-        '*', // 👈 THIS IS THE KEY
-    ]);
+        // 🚨🔥 DISABLE CSRF COMPLETELY (REQUIRED FOR CROSS-SUBDOMAIN SPA)
+        $middleware->validateCsrfTokens(except: [
+            '*', // 👈 THIS IS THE KEY
+        ]);
 
-    // Spatie
-    $middleware->alias([
-    'role'               => RoleMiddleware::class,
-    'permission'         => PermissionMiddleware::class,
-    'role_or_permission' => RoleOrPermissionMiddleware::class,    ]);
-})
-->withProviders([
-    App\Providers\RouteServiceProvider::class,
-])
-
+        // Spatie
+        $middleware->alias([
+            'role'               => RoleMiddleware::class,
+            'permission'         => PermissionMiddleware::class,
+            'role_or_permission' => RoleOrPermissionMiddleware::class,
+        ]);
+    })
+    ->withProviders([
+        App\Providers\RouteServiceProvider::class,
+    ])
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Non authentifié.'
+                ], 401);
+            }
+        });
+
+        $exceptions->render(function (\Illuminate\Database\UniqueConstraintViolationException $e, $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Un enregistrement avec ces informations existe déjà.',
+                    'error'   => 'duplicate_entry',
+                ], 422);
+            }
+        });
     })
     ->create();

@@ -20,13 +20,13 @@ class ChildGradesController extends Controller
 
         $grades = Grade::query()
             ->where('student_id', $child->id)
-            ->with(['subject:id,name', 'teacher:id,name'])
+            ->with(['subject:id,name', 'teacher:id,firstname,lastname'])
             ->latest()
             ->get()
-            ->groupBy(fn($g) => $g->subject->name);
+            ->groupBy(fn($g) => $g->subject?->name ?? 'Autre');
 
         return response()->json([
-            'child' => ['id' => $child->id, 'name' => $child->name],
+            'child' => ['id' => $child->id, 'name' => $child->full_name],
             'grades_by_subject' => $grades,
         ]);
     }

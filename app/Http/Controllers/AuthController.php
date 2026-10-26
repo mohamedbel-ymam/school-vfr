@@ -9,12 +9,17 @@ class AuthController extends Controller
 {
     public function login(Request $request)
     {
+        // Detect login input from 'login', 'email', or 'phone'
+        $rawLogin = $request->input('login') ?? $request->input('email') ?? $request->input('phone');
+        if ($rawLogin !== null) {
+            $request->merge(['login' => $rawLogin]);
+        }
+
         $request->validate([
             'login'    => ['required'],
             'password' => ['required'],
         ]);
 
-        // Detect email or phone
         $login = $request->login;
 
         $field = filter_var($login, FILTER_VALIDATE_EMAIL)
@@ -37,18 +42,17 @@ class AuthController extends Controller
         ]);
     }
 
-public function logout(Request $request)
-{
-    // IMPORTANT: force web guard for session-based auth
-    Auth::guard('web')->logout();
+    public function logout(Request $request)
+    {
+        // IMPORTANT: force web guard for session-based auth
+        Auth::guard('web')->logout();
 
-    // Invalidate session + rotate CSRF token
-    if ($request->hasSession()) {
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        // Invalidate session + rotate CSRF token
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+
+        return response()->json(['message' => 'Déconnecté avec succès']);
     }
-
-    return response()->json(['message' => 'Déconnecté avec succès']);
-}
-
 }

@@ -8,8 +8,7 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     private function indexExists(string $table, string $index): bool
     {
-        $rows = DB::select("SHOW INDEX FROM `{$table}` WHERE Key_name = ?", [$index]);
-        return !empty($rows);
+        return Schema::hasIndex($table, $index);
     }
 
     public function up(): void

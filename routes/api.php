@@ -74,6 +74,10 @@ use App\Http\Controllers\Api\Teacher\AttendanceTeacherController;
 
 
 Route::post('/connexion', [AuthController::class, 'login'])
+    ->name('login')
+    ->middleware(['api', 'throttle:auth-login']);
+
+Route::post('/login', [AuthController::class, 'login'])
     ->middleware(['api', 'throttle:auth-login']);
 
 // Public read endpoints: throttle to reduce scraping/abuse
@@ -115,7 +119,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class,'auth:sanctum','thro
     /*
     | Current user
     */
-    Route::post('/deconnexion', [AuthController::class, 'logout']);
+    Route::post('/deconnexion', [AuthController::class, 'logout'])->name('logout');
+    Route::post('/déconnexion', [AuthController::class, 'logout']);
 
     Route::get('/me', MeController::class);
     Route::put('/me/password', [AccountController::class, 'updatePassword']);
@@ -235,6 +240,13 @@ Route::middleware('role:admin|superadmin')
             ->get();
     	});
 	});
+    Route::middleware(['role:admin'])->prefix('tests')->group(function () {
+                Route::get('/', [TestAdminController::class, 'index']);
+                Route::get('/{test}', [TestAdminController::class, 'show']);
+                Route::get('/{test}/attempts', [TestAdminController::class, 'attempts']);
+                Route::delete('/attempts/{attempt}', [TestAdminController::class, 'invalidateAttempt']);
+                Route::delete('/{test}', [TestAdminController::class, 'destroy']);
+        });
     Route::middleware(['role:admin'])->prefix('admin/tests')->group(function () {
                 Route::get('/', [TestAdminController::class, 'index']);
                 Route::get('/{test}', [TestAdminController::class, 'show']);

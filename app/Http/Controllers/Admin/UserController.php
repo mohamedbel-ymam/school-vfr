@@ -36,12 +36,12 @@ class UserController extends Controller
         $perPage = max(1, min($perPage, 1000));
 
         $query = User::query()
-    ->with([
-        'subject:id,name',
-        'degree:id,name,slug',
-        'parentUser:id,firstname,lastname',
-        'groups:id,name,slug,degree_id' // 🆕 include groups
-    ])
+            ->with([
+                'subject:id,name',
+                'degree:id,name,slug',
+                'parentUser:id,firstname,lastname',
+                'groups:id,name,slug,degree_id' // 🆕 include groups
+            ])
             ->select([
                 'id','firstname','lastname','email',
                 'role',
@@ -51,7 +51,7 @@ class UserController extends Controller
 
         // Filtre: role (FR ou EN)
         if ($r->filled('role')) {
-            $role = $this->normalizeRole((string)$r->query('role'));
+            $role = $this->normalizeRole((string) ($r->input('role') ?? $r->query('role')));
             if (in_array($role, ['student','teacher','parent','admin'], true)) {
                 $modelHasRoles = config('permission.table_names.model_has_roles', 'model_has_roles');
                 // Si Spatie présent, utiliser scope role(), sinon colonne role
@@ -122,7 +122,7 @@ class UserController extends Controller
             'password'           => ['required','string','min:8'],
             'role'               => ['required','string'],
             'address'            => ['nullable','string','max:255'],
-            'phone'              => ['nullable','string','max:50'],
+            'phone'              => ['nullable','string','max:50','unique:users,phone'],
             'gender'             => ['nullable', Rule::in(['m','f'])],
             'blood_type'         => ['nullable','string','max:10'],
             'date_of_birth'      => ['nullable','date'],
@@ -201,7 +201,7 @@ class UserController extends Controller
             'password'           => ['sometimes','nullable','string','min:8'],
             'role'               => ['sometimes','string'],
             'address'            => ['nullable','string','max:255'],
-            'phone'              => ['nullable','string','max:50'],
+            'phone'              => ['nullable','string','max:50', Rule::unique('users','phone')->ignore($user->id)],
             'gender'             => ['nullable', Rule::in(['m','f'])],
             'blood_type'         => ['nullable','string','max:10'],
             'date_of_birth'      => ['nullable','date'],

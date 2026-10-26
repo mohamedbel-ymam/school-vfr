@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -29,9 +29,9 @@ class AttendanceGenerationController extends Controller
             ->count();
 
         // Get all students of the degree
-	$students = User::role('student')
-    ->where('degree_id', $degreeId)
-    ->get();
+        $students = User::role('student')
+            ->where('degree_id', $degreeId)
+            ->get();
 
         foreach ($students as $s) {
             // Get or create WEEK record

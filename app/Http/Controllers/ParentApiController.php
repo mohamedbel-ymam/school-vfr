@@ -10,7 +10,7 @@ class ParentApiController extends Controller
     {
         // assumes a hasMany/belongsToMany relation `children()` on User
         $children = $req->user()->children()
-            ->select('id','firstname','lastname','name')
+            ->select('id', 'firstname', 'lastname')
             ->orderBy('firstname')
             ->get();
 

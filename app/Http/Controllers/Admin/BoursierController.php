@@ -23,8 +23,11 @@ class BoursierController extends Controller
 
         if ($search = $request->get('q')) {
             $query->whereHas('user', function ($q) use ($search) {
-                $q->where('name', 'like', '%' . $search . '%')
-                  ->orWhere('email', 'like', '%' . $search . '%');
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('firstname', 'like', '%' . $search . '%')
+                        ->orWhere('lastname', 'like', '%' . $search . '%')
+                        ->orWhere('email', 'like', '%' . $search . '%');
+                });
             });
         }
 
@@ -39,42 +42,44 @@ class BoursierController extends Controller
      * Create new boursier user + profile
      */
     public function store(StoreBoursierRequest $request)
-{
-    $data = $request->validated();
+    {
+        $data = $request->validated();
 
-    [$user, $profile] = DB::transaction(function () use ($data) {
-        $first = $data['first_name'] ?? $data['firstname'] ?? '';
-        $last  = $data['last_name']  ?? $data['lastname']  ?? '';
-        $full  = trim($data['name'] ?? trim($first . ' ' . $last));
+        [$user, $profile] = DB::transaction(function () use ($data) {
+            $first = $data['first_name'] ?? $data['firstname'] ?? '';
+            $last  = $data['last_name']  ?? $data['lastname']  ?? '';
+            if (!$first && !empty($data['name'])) {
+                $parts = explode(' ', trim($data['name']), 2);
+                $first = $parts[0] ?? '';
+                $last  = $parts[1] ?? ($parts[0] ?? '');
+            }
 
-        $user = User::create([
-            'name'      => $full,
-            'firstname' => $first ?: null,
-            'lastname'  => $last ?: null,
-            'email'     => $data['email'],
-            'password'  => Hash::make($data['password']),
-        ]);
+            $user = User::create([
+                'firstname' => $first ?: 'Boursier',
+                'lastname'  => $last ?: 'Etudiant',
+                'email'     => $data['email'],
+                'password'  => Hash::make($data['password']),
+            ]);
 
-        $user->assignRole('boursier');
+            $user->assignRole('boursier');
 
-        $profile = BoursierProfile::create([
-            'user_id'        => $user->id,
-            'university'     => $data['university']     ?? null,
-            'field_of_study' => $data['field_of_study'] ?? null,
-            'start_year'     => $data['start_year']     ?? null,
-            'duration_years' => $data['duration_years'] ?? 3,
-            'status'         => 'active',
-        ]);
+            $profile = BoursierProfile::create([
+                'user_id'        => $user->id,
+                'university'     => $data['university']     ?? null,
+                'field_of_study' => $data['field_of_study'] ?? null,
+                'start_year'     => $data['start_year']     ?? null,
+                'duration_years' => $data['duration_years'] ?? 3,
+                'status'         => 'active',
+            ]);
 
-        return [$user, $profile];
-    });
+            return [$user, $profile];
+        });
 
-    return response()->json(
-        $profile->load('user'),
-        201
-    );
-}
-
+        return response()->json(
+            $profile->load('user'),
+            201
+        );
+    }
 
     /**
      * GET /api/admin/boursiers/{boursier}
@@ -106,7 +111,17 @@ class BoursierController extends Controller
             $user = $boursier->user;
 
             if (isset($data['name'])) {
-                $user->name = $data['name'];
+                $parts = explode(' ', trim($data['name']), 2);
+                $user->firstname = $parts[0] ?? $user->firstname;
+                if (isset($parts[1])) {
+                    $user->lastname = $parts[1];
+                }
+            }
+            if (isset($data['first_name'])) {
+                $user->firstname = $data['first_name'];
+            }
+            if (isset($data['last_name'])) {
+                $user->lastname = $data['last_name'];
             }
             if (isset($data['email'])) {
                 $user->email = $data['email'];
@@ -137,4 +152,3 @@ class BoursierController extends Controller
         return response()->noContent();
     }
 }
-

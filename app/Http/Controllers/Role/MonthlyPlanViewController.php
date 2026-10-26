@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Http\Controllers\Role;
 
 use App\Http\Controllers\Controller;
@@ -9,48 +8,64 @@ use Illuminate\Http\Request;
 
 class MonthlyPlanViewController extends Controller
 {
-  public function student(Request $r) {
-    $user = $r->user();
-    $month = $r->query('month') ?? date('Y-m');
-    $degreeId = $user->degree_id; // student degree
+    public function student(Request $r)
+    {
+        $user = $r->user();
+        $month = $r->query('month') ?? date('Y-m');
+        $degreeId = $user->degree_id;
 
-    return MonthlySubjectPlan::with(['subject:id,name','enseignant:id,firstname,lastname'])
-      ->where('degree_id', $degreeId)
-      ->whereBetween('plan_date', [
-        "{$month}-01",
-        date('Y-m-t', strtotime("{$month}-01")),
-      ])
-      ->orderBy('plan_date')
-      ->get();
-  }
+        if (!$degreeId) {
+            return response()->json([]);
+        }
 
-  public function teacher(Request $r) {
-    $user = $r->user();
-    $month = $r->query('month') ?? date('Y-m');
+        return MonthlySubjectPlan::with(['subject:id,name', 'enseignant:id,firstname,lastname'])
+            ->where('degree_id', $degreeId)
+            ->whereBetween('plan_date', [
+                "{$month}-01",
+                date('Y-m-t', strtotime("{$month}-01")),
+            ])
+            ->orderBy('plan_date')
+            ->get();
+    }
 
-    return MonthlySubjectPlan::with(['subject:id,name','degree:id,name'])
-      ->where('teacher_id', $user->id)
-      ->whereBetween('plan_date', [
-        "{$month}-01",
-        date('Y-m-t', strtotime("{$month}-01")),
-      ])
-      ->orderBy('plan_date')
-      ->get();
-  }
+    public function teacher(Request $r)
+    {
+        $user = $r->user();
+        $month = $r->query('month') ?? date('Y-m');
 
-  public function parent(Request $r) {
-    $month = $r->query('month') ?? date('Y-m');
-    $childId = $r->query('child_id'); // required in your parent UX
-    // lookup child degree
-    $degreeId = \App\Models\User::findOrFail($childId)->degree_id;
+        return MonthlySubjectPlan::with(['subject:id,name', 'degree:id,name'])
+            ->where('teacher_id', $user->id)
+            ->whereBetween('plan_date', [
+                "{$month}-01",
+                date('Y-m-t', strtotime("{$month}-01")),
+            ])
+            ->orderBy('plan_date')
+            ->get();
+    }
 
-    return MonthlySubjectPlan::with(['subject:id,name','enseignant:id,firstname,lastname'])
-      ->where('degree_id', $degreeId)
-      ->whereBetween('plan_date', [
-        "{$month}-01",
-        date('Y-m-t', strtotime("{$month}-01")),
-      ])
-      ->orderBy('plan_date')
-      ->get();
-  }
+    public function parent(Request $r)
+    {
+        $month = $r->query('month') ?? date('Y-m');
+        $childId = $r->query('child_id');
+        $parent = $r->user();
+
+        $child = $childId
+            ? $parent->children()->find($childId)
+            : $parent->children()->first();
+
+        if (!$child || !$child->degree_id) {
+            return response()->json([]);
+        }
+
+        $degreeId = $child->degree_id;
+
+        return MonthlySubjectPlan::with(['subject:id,name', 'enseignant:id,firstname,lastname'])
+            ->where('degree_id', $degreeId)
+            ->whereBetween('plan_date', [
+                "{$month}-01",
+                date('Y-m-t', strtotime("{$month}-01")),
+            ])
+            ->orderBy('plan_date')
+            ->get();
+    }
 }

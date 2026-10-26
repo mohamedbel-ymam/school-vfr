@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Grade;
 use Illuminate\Http\Request;
 use App\Support\AppliesTermDateFilter;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class GradeController extends Controller
 {
-     use AppliesTermDateFilter;
+    use AppliesTermDateFilter;
+
     public function index(Request $request)
     {
         $this->authorize('viewAny', Grade::class);
@@ -20,17 +22,16 @@ class GradeController extends Controller
 
         if ($request->filled('student_id')) $q->where('student_id', $request->integer('student_id'));
         if ($request->filled('subject_id')) $q->where('subject_id', $request->integer('subject_id'));
-	if ($request->filled('term')) {
+        if ($request->filled('term')) {
             $term = (string) $request->string('term');
-            $q->where('term', $term);               // optionnel si tu veux garder term
-            $this->applyTermDateFilter($q, $term);  // ✅ dates
+            $q->where('term', $term);
+            $this->applyTermDateFilter($q, $term);
         }
+
         // safe default: teacher sees only what they entered
         if ($request->user()->hasRole('teacher')) {
-   	$data['teacher_id'] = $request->user()->id;
-    	$data['subject_id'] = $request->user()->subject_id; // or $request->user()->subject->id
-	}
-
+            $q->where('teacher_id', $request->user()->id);
+        }
 
         return response()->json($q->paginate(20));
     }
@@ -54,7 +55,14 @@ class GradeController extends Controller
 
         $data['entered_by'] = $request->user()->id;
 
-        $grade = Grade::create($data); // exam_key computed by model
+        try {
+            $grade = Grade::create($data); // exam_key computed by model
+        } catch (UniqueConstraintViolationException $e) {
+            return response()->json([
+                'message' => 'Une note pour cet élève, matière, session et évaluation existe déjà.',
+                'errors'  => ['exam' => ['Une note pour cette évaluation existe déjà.']],
+            ], 422);
+        }
 
         return response()->json($grade->load(['subject:id,name', 'student:id,firstname,lastname,email', 'teacher:id,firstname,lastname']), 201);
     }
@@ -66,39 +74,45 @@ class GradeController extends Controller
         return response()->json($grade->load(['subject:id,name', 'student:id,firstname,lastname,email', 'teacher:id,firstname,lastname']));
     }
 
-public function update(Request $request, Grade $grade)
-{
-    $this->authorize('update', $grade);
+    public function update(Request $request, Grade $grade)
+    {
+        $this->authorize('update', $grade);
 
-    $data = $request->validate([
-        'teacher_id' => ['nullable', 'integer', 'exists:users,id'],
-        'term'       => ['sometimes', 'string', 'max:10'],
-        'exam_type'  => ['sometimes', 'string', 'max:20'],
-        'title'      => ['nullable', 'string', 'max:80'],
-        'score'      => ['sometimes', 'numeric', 'min:0'],
-        'max_score'  => ['sometimes', 'numeric', 'min:1'],
-        'graded_at'  => ['nullable', 'date'],
-        'comment'    => ['nullable', 'string'],
-    ]);
+        $data = $request->validate([
+            'teacher_id' => ['nullable', 'integer', 'exists:users,id'],
+            'term'       => ['sometimes', 'string', 'max:10'],
+            'exam_type'  => ['sometimes', 'string', 'max:20'],
+            'title'      => ['nullable', 'string', 'max:80'],
+            'score'      => ['sometimes', 'numeric', 'min:0'],
+            'max_score'  => ['sometimes', 'numeric', 'min:1'],
+            'graded_at'  => ['nullable', 'date'],
+            'comment'    => ['nullable', 'string'],
+        ]);
 
-    // ✅ compute final values (if not provided, use current values)
-    $finalScore    = array_key_exists('score', $data) ? (float) $data['score'] : (float) $grade->score;
-    $finalMaxScore = array_key_exists('max_score', $data) ? (float) $data['max_score'] : (float) $grade->max_score;
+        // ✅ compute final values (if not provided, use current values)
+        $finalScore    = array_key_exists('score', $data) ? (float) $data['score'] : (float) $grade->score;
+        $finalMaxScore = array_key_exists('max_score', $data) ? (float) $data['max_score'] : (float) $grade->max_score;
 
-    if ($finalScore > $finalMaxScore) {
-        return response()->json([
-            'message' => 'score cannot exceed max_score',
-            'errors'  => ['score' => ['score must be <= max_score']],
-        ], 422);
+        if ($finalScore > $finalMaxScore) {
+            return response()->json([
+                'message' => 'score cannot exceed max_score',
+                'errors'  => ['score' => ['score must be <= max_score']],
+            ], 422);
+        }
+
+        try {
+            $grade->update($data);
+        } catch (UniqueConstraintViolationException $e) {
+            return response()->json([
+                'message' => 'Une note pour cet élève, matière, session et évaluation existe déjà.',
+                'errors'  => ['exam' => ['Une note pour cette évaluation existe déjà.']],
+            ], 422);
+        }
+
+        return response()->json(
+            $grade->fresh()->load(['subject:id,name', 'student:id,firstname,lastname,email', 'teacher:id,firstname,lastname'])
+        );
     }
-
-    $grade->update($data);
-
-    return response()->json(
-        $grade->fresh()->load(['subject:id,name', 'student:id,firstname,lastname,email', 'teacher:id,firstname,lastname'])
-    );
-}
-
 
     public function destroy(Grade $grade)
     {

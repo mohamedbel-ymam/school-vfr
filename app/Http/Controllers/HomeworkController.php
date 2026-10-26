@@ -24,7 +24,56 @@ class HomeworkController extends Controller
         return $v;
     }
 
-    // ... adminIndex/teacherIndex/studentIndex/parentIndex unchanged ...
+    // Admin: list all (+filters)
+    public function adminIndex(Request $r)
+    {
+        $q = Homework::query()->latest('id');
+
+        if ($r->filled('degree_id')) $q->where('degree_id', $r->integer('degree_id'));
+        if ($r->filled('teacher_id')) $q->where('teacher_id', $r->integer('teacher_id'));
+
+        if ($s = trim((string)$r->query('search',''))) {
+            $q->where(function($w) use ($s){
+                $w->where('title','like',"%$s%")
+                  ->orWhere('teacher_name','like',"%$s%")
+                  ->orWhere('subject_name','like',"%$s%");
+            });
+        }
+
+        // Optional due filter: ?due=upcoming|past
+        if ($due = $r->query('due')) {
+            if ($due === 'upcoming') $q->where(function($w){ $w->whereNull('due_at')->orWhere('due_at','>=',now()); });
+            if ($due === 'past')     $q->where('due_at','<',now());
+        }
+
+        return response()->json(['data' => $q->with(['degree'])->paginate(20)]);
+    }
+
+    // Teacher: list own
+    public function teacherIndex(Request $r)
+    {
+        $t = $r->user();
+        $items = Homework::where('teacher_id', $t->id)->latest('id')->with(['degree'])->paginate(20);
+        return response()->json(['data' => $items]);
+    }
+
+    // Student: list by student's degree
+    public function studentIndex(Request $r)
+    {
+        $s = $r->user();
+        $degreeId = $s->degree_id;
+        $items = Homework::where('degree_id', $degreeId)->latest('id')->paginate(20);
+        return response()->json(['data' => $items]);
+    }
+
+    // Parent: aggregate all children degrees
+    public function parentIndex(Request $r)
+    {
+        $p = $r->user();
+        $degreeIds = $p->children()->pluck('degree_id')->filter()->unique()->values();
+        $items = Homework::whereIn('degree_id', $degreeIds)->latest('id')->paginate(20);
+        return response()->json(['data' => $items]);
+    }
 
     public function store(Request $r)
     {

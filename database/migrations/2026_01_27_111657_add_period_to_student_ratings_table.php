@@ -14,11 +14,19 @@ return new class extends Migration {
 
         // Backfill period for existing rows
         // If rated_at exists => use it, else use created_at month
-        DB::statement("
-            UPDATE student_ratings
-            SET period = DATE_FORMAT(COALESCE(rated_at, created_at), '%Y-%m')
-            WHERE period IS NULL
-        ");
+        if (DB::getDriverName() === 'sqlite') {
+            DB::statement("
+                UPDATE student_ratings
+                SET period = strftime('%Y-%m', COALESCE(rated_at, created_at))
+                WHERE period IS NULL
+            ");
+        } else {
+            DB::statement("
+                UPDATE student_ratings
+                SET period = DATE_FORMAT(COALESCE(rated_at, created_at), '%Y-%m')
+                WHERE period IS NULL
+            ");
+        }
 
         Schema::table('student_ratings', function (Blueprint $table) {
             // drop old unique

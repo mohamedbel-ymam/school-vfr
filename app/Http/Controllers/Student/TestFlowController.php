@@ -19,7 +19,9 @@ class TestFlowController extends Controller
         $tests = TestAssignment::where('student_id', $studentId)
             ->with('test')
             ->get()
-            ->pluck('test');
+            ->pluck('test')
+            ->filter()
+            ->values();
 
         return response()->json($tests);
     }
@@ -75,7 +77,7 @@ class TestFlowController extends Controller
         return response()->json([
             'test' => $test,
             'questions' => $test->questions()->orderBy('order')->get(),
-            'remaining_seconds' => $test->global_time_minutes * 60,
+            'remaining_seconds' => ((int) ($test->global_time_minutes ?? 60)) * 60,
         ]);
     }
 
@@ -121,12 +123,20 @@ class TestFlowController extends Controller
 
         foreach ($answers as $a) {
             $question = $test->questions()->find($a->question_id);
-            if ($question && $question->correct_index == $a->student_answer) {
-                $correct++;
+            if ($question) {
+                $expected = $question->correct_answer ?? ($question->correct_index ?? null);
+                if ($expected !== null && (string)$expected === (string)$a->student_answer) {
+                    $correct++;
+                }
             }
         }
 
-        $score = ($correct / $test->total_questions) * $test->grade_value;
+        $totalQuestions = (int)$test->total_questions > 0
+            ? (int)$test->total_questions
+            : max(1, $test->questions()->count());
+
+        $gradeValue = (float)($test->grade_value ?? 20);
+        $score = round(($correct / $totalQuestions) * $gradeValue, 2);
 
         $attempt->update([
             'score' => $score,
@@ -150,4 +160,3 @@ class TestFlowController extends Controller
         return response()->json($attempt);
     }
 }
-
