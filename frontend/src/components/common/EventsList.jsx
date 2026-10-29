@@ -4,6 +4,7 @@ import { EventApi } from "../../services/api/EventApi";
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { renderEventImage } from "../../services/media/EventImage";
+import { resolveMediaUrl } from "../../api/axios";
 
 // Optional: if you have shadcn Skeleton. If not, replace with a simple div shimmer.
 import { Skeleton } from "../ui/skeleton";
@@ -75,9 +76,8 @@ export default function EventsList({ query = {} }) {
         const arr = Array.isArray(res?.data) ? res.data : (res?.data?.data || []);
         if (!mounted) return;
         setItems(arr || []);
-        // kick off preview generation lazily
+        // Pre-generate crisp canvas fallback for all items so fallback is instant if storage fails
         arr?.forEach(async (ev) => {
-          if (ev.image_url) return;
           const dataURL = await renderEventImage(ev);
           if (!mounted) return;
           setGenMap((m) => (m[ev.id] ? m : { ...m, [ev.id]: dataURL }));
@@ -108,7 +108,8 @@ export default function EventsList({ query = {} }) {
   return (
     <div className="grid gap-5 p-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map((ev) => {
-        const preview = ev.image_url || genMap[ev.id];
+        const resolvedUrl = resolveMediaUrl(ev.image_url);
+        const preview = resolvedUrl || genMap[ev.id];
 
         return (
           <Card
@@ -121,6 +122,12 @@ export default function EventsList({ query = {} }) {
                 <img
                     src={preview}
                     alt={ev.title}
+                    onError={(e) => {
+                      const fallback = genMap[ev.id];
+                      if (fallback && e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                      }
+                    }}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                   />
               ) : (

@@ -104,4 +104,20 @@ class ErrorHandlingTest extends TestCase
         $res2 = $this->actingAs($teacher)->postJson('/api/enseignant/grades', $payload);
         $this->assertEquals(422, $res2->status());
     }
+
+    public function test_event_image_url_sanitizes_ssl_mismatch_domain(): void
+    {
+        $event = new \App\Models\Event();
+        $event->title = 'Test Event';
+        $event->template = 'GENERAL';
+        $event->starts_at = now();
+        $event->image_path = 'https://api.school-vfr.onrender.com/storage/events/IPbXybmCM8ycuBsetxXlQ18Ta8tsRYndsae2URno.jpg';
+
+        $this->assertStringNotContainsString('api.school-vfr.onrender.com', $event->image_url);
+        $this->assertEquals('https://school-vfr.onrender.com/storage/events/IPbXybmCM8ycuBsetxXlQ18Ta8tsRYndsae2URno.jpg', $event->image_url);
+
+        $event2 = new \App\Models\Event();
+        $event2->image_path = 'events/photo.jpg';
+        $this->assertStringNotContainsString('api.school-vfr.onrender.com', $event2->image_url);
+    }
 }

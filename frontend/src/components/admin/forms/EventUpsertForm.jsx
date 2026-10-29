@@ -10,6 +10,7 @@ import { Label } from "../../ui/label";
 import { Textarea } from "../../ui/textarea";
 import { toast } from "sonner";
 import { X } from "lucide-react";
+import { resolveMediaUrl } from "../../../api/axios";
 
 const TEMPLATES = [
   "GENERAL",
@@ -294,7 +295,7 @@ export default function EventUpsertForm({ initial, onDone }) {
           {(preview || (showExisting && initial?.image_url)) && (
             <div className="relative inline-block">
               <img
-                src={preview || initial.image_url}
+                src={preview || resolveMediaUrl(initial.image_url)}
                 alt="event"
                 className="h-28 w-48 object-cover rounded-lg border"
               />

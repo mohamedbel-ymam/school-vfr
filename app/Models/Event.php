@@ -27,6 +27,21 @@ class Event extends Model
     }
 
     public function getImageUrlAttribute() {
-        return $this->image_path ? Storage::url($this->image_path) : null;
+        if (!$this->image_path) {
+            return null;
+        }
+
+        if (str_starts_with($this->image_path, 'http://') || str_starts_with($this->image_path, 'https://')) {
+            $url = $this->image_path;
+        } else {
+            $url = Storage::url($this->image_path);
+        }
+
+        // Sanitize legacy or misconfigured api.school-vfr.onrender.com domain which has no SSL certificate
+        return str_replace(
+            ['https://api.school-vfr.onrender.com', 'http://api.school-vfr.onrender.com'],
+            'https://school-vfr.onrender.com',
+            $url
+        );
     }
 }

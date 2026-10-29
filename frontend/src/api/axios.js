@@ -27,6 +27,25 @@ function resolveBaseURL() {
 const API_BASE = resolveBaseURL();
 
 /* -------------------------------------------------------------------------- */
+/* Media URL resolver                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Resolves media/storage URLs safely:
+ * - Fixes net::ERR_SSL_VERSION_OR_CIPHER_MISMATCH by replacing api.school-vfr.onrender.com with school-vfr.onrender.com
+ * - Prepends backend origin for relative storage paths (/storage/...)
+ */
+export function resolveMediaUrl(url) {
+  if (!url) return "";
+  let clean = String(url).trim();
+  clean = clean.replace(/^https?:\/\/api\.school-vfr\.onrender\.com/i, "https://school-vfr.onrender.com");
+  if (clean.startsWith("/storage")) {
+    return `${API_BASE}${clean}`;
+  }
+  return clean;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Axios client (Sanctum SPA)                                                 */
 /* -------------------------------------------------------------------------- */
 

@@ -2,91 +2,114 @@ import React, { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
 import { LOGIN_ROUTE } from "../router/pahts.js";
-import { HomeIcon, LogInIcon, Menu, X } from "lucide-react";
+import {
+  HomeIcon,
+  LogInIcon,
+  Menu,
+  X,
+  BookOpen,
+  Award,
+  Calendar,
+  HelpCircle,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react";
 import { ModeToggle } from "../components/mode-toggle.jsx";
-
-// A sleek, evolutive, responsive layout header that keeps your existing routes.
-// - Sticky, translucent header with blur
-// - Active link styling via NavLink
-// - Mobile drawer
-// - Keeps: "/" (Home) and LOGIN_ROUTE (Login)
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
 
-  const navItem = (
-    <ul className="flex flex-col md:flex-row md:items-center gap-2 md:gap-1 text-sm">
-      <li>
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            `flex items-center gap-2 rounded-full px-3 py-2 transition ${
-              isActive
-                ? "bg-white/15 text-white ring-1 ring-white/20"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-          onClick={() => setOpen(false)}
-        >
-          <HomeIcon className="h-4 w-4" />
-          Accueil
-        </NavLink>
-      </li>
-      <li>
-        <NavLink
-          to={LOGIN_ROUTE}
-          className={({ isActive }) =>
-            `flex items-center gap-2 rounded-full px-3 py-2 transition ${
-              isActive
-                ? "bg-white/15 text-white ring-1 ring-white/20"
-                : "text-white/80 hover:text-white hover:bg-white/10"
-            }`
-          }
-          onClick={() => setOpen(false)}
-        >
-          <LogInIcon className="h-4 w-4" />
-          Connexion
-        </NavLink>
-      </li>
-    </ul>
-  );
+  const navLinks = [
+    { label: "Accueil", to: "/", icon: HomeIcon, isAnchor: false },
+    { label: "Cycles & Filières", to: "/#cycles", icon: BookOpen, isAnchor: true },
+    { label: "Pédagogie", to: "/#pedagogie", icon: Sparkles, isAnchor: true },
+    { label: "Bourse Top 3", to: "/#bourse", icon: Award, isAnchor: true },
+    { label: "Événements", to: "/#evenements", icon: Calendar, isAnchor: true },
+    { label: "FAQ", to: "/#faq", icon: HelpCircle, isAnchor: true },
+  ];
 
   return (
-    <>
+    <div className="min-h-screen flex flex-col bg-background text-foreground antialiased selection:bg-indigo-500/20 selection:text-indigo-600 dark:selection:text-indigo-400">
       {/* Skip link for accessibility */}
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] rounded bg-black px-3 py-2 text-white">Aller au contenu</a>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] rounded-lg bg-primary text-primary-foreground px-4 py-2 font-medium shadow-lg"
+      >
+        Aller au contenu principal
+      </a>
 
-      <header className="sticky top-0 z-50">
+      {/* Top Banner / Academic year notice */}
+      <div className="bg-slate-900 text-slate-200 text-xs py-1.5 px-4 text-center border-b border-slate-800/80">
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 font-medium">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold text-[11px] border border-emerald-500/30">
+            Session 2025 – 2026
+          </span>
+          <span className="hidden sm:inline">
+            Établissement Takwa — Soutien scolaire d'excellence, rigueur méthodologique et parrainage post-bac
+          </span>
+          <Link
+            to="/waiting-list"
+            className="inline-flex items-center gap-1 font-semibold text-amber-300 hover:text-amber-200 underline decoration-amber-400/50 underline-offset-2 ml-1"
+          >
+            Liste d'attente <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Sticky Header */}
+      <header className="sticky top-0 z-50 w-full transition-all duration-200 backdrop-blur-md bg-background/85 border-b border-border/60 supports-[backdrop-filter]:bg-background/70">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mt-3 mb-3 flex items-center justify-between rounded-2xl border border-white/10 bg-gray-800/80 shadow-xl backdrop-blur supports-[backdrop-filter]:backdrop-blur px-3 py-2">
-            {/* Left: Brand */}
-            <div className="flex items-center gap-3">
-              <Link to="/" className="inline-flex items-center gap-3">
-                <span className="sr-only">Aller à l'accueil</span>
-                <span className="hidden sm:inline text-white font-semibold tracking-wide">
-                  <Logo className='h-9 w-9 rounded-xl'/>
-                </span>
-              </Link>
-            </div>
-
-            {/* Desktop nav */}
-            <nav className="hidden md:flex items-center gap-2">
-              {navItem}
-              <div className="ml-2">
-                <ModeToggle />
+          <div className="flex h-16 items-center justify-between gap-4">
+            {/* Brand Logo & Name */}
+            <Link
+              to="/"
+              className="flex items-center gap-3 transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl py-1 px-1.5"
+            >
+              <div className="h-10 w-10 rounded-xl bg-slate-900 dark:bg-white/10 p-1 flex items-center justify-center shadow-sm border border-slate-800/20 dark:border-white/15">
+                <Logo />
               </div>
+              <div className="flex flex-col">
+                <span className="text-base font-bold tracking-tight text-foreground leading-tight">
+                  Takwa Établissement
+                </span>
+                <span className="text-[11px] font-medium tracking-wide text-muted-foreground hidden sm:block">
+                  Groupe Scolaire d'Excellence
+                </span>
+              </div>
+            </Link>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden lg:flex items-center gap-1 text-sm font-medium">
+              {navLinks.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.to}
+                  className="px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                >
+                  {item.label}
+                </a>
+              ))}
             </nav>
 
-            {/* Mobile actions */}
-            <div className="flex md:hidden items-center gap-2">
+            {/* Right actions: Theme + Connexion */}
+            <div className="flex items-center gap-2.5">
               <ModeToggle />
+
+              <Link
+                to={LOGIN_ROUTE}
+                className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold shadow-sm hover:opacity-90 active:scale-95 transition-all"
+              >
+                <LogInIcon className="h-4 w-4" />
+                <span>Espace Numérique</span>
+              </Link>
+
+              {/* Mobile menu button */}
               <button
                 type="button"
                 aria-label="Ouvrir le menu"
                 aria-expanded={open}
                 onClick={() => setOpen(!open)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15 active:scale-95"
+                className="inline-flex lg:hidden h-10 w-10 items-center justify-center rounded-xl border border-border bg-background text-foreground hover:bg-muted active:scale-95 transition-all"
               >
                 {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
@@ -94,24 +117,44 @@ export default function Layout() {
           </div>
         </div>
 
-        {/* Mobile drawer */}
-        <div
-          className={`md:hidden ${open ? "block" : "hidden"}`}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="mx-4 rounded-2xl border border-white/10 bg-gray-900/90 text-white backdrop-blur p-4">
-            {navItem}
+        {/* Mobile Navigation Drawer */}
+        {open && (
+          <div className="lg:hidden border-b border-border bg-background/95 backdrop-blur px-4 pt-2 pb-6 space-y-3 animate-in fade-in-50 duration-200">
+            <nav className="flex flex-col space-y-1">
+              {navLinks.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <a
+                    key={item.label}
+                    href={item.to}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                  >
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <span>{item.label}</span>
+                  </a>
+                );
+              })}
+            </nav>
+
+            <div className="pt-2 border-t border-border/80">
+              <Link
+                to={LOGIN_ROUTE}
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-sm font-semibold shadow-sm"
+              >
+                <LogInIcon className="h-4 w-4" />
+                <span>Connexion aux Espaces</span>
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
-      <main id="main" className="min-h-[calc(100vh-80px)]">
-        {/* Optional container wrapper for pages */}
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-          <Outlet />
-        </div>
+      {/* Main Content Area */}
+      <main id="main" className="flex-1 w-full flex flex-col">
+        <Outlet />
       </main>
-    </>
+    </div>
   );
 }

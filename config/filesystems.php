@@ -41,7 +41,7 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => env('APP_URL').'/storage',
+            'url' => str_replace('api.school-vfr.onrender.com', 'school-vfr.onrender.com', env('APP_URL', 'https://school-vfr.onrender.com')).'/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
