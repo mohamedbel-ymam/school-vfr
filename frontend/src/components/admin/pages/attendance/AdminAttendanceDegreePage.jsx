@@ -4,6 +4,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
 import { toast } from "sonner";
 import { adminAttendanceApi } from "../../../../services/api/admin/AdminAttendanceServices";
+import { attendanceScanApi } from "../../../../services/api/admin/AttendanceScanApi";
+import { Printer, FileScan } from "lucide-react";
 
 /* ------------------------- date helpers ------------------------- */
 function startOfWeekMonday(date = new Date()) {
