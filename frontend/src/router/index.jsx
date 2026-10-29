@@ -280,7 +280,7 @@ export const router = createBrowserRouter([
             path: "/parent",
             element: <ParentDashboardLayout />,
             children: [
-              { index: true, element: <ParentOverview /> },
+              { index: true, element: <Navigate to="tableau de bord" replace /> },
               { path: "tableau de bord", element: <ParentDashboard /> },
               { path: "événements", element: <ParentEvents /> },
               { path: "emploi du temps", element: <ParentTimetable /> },

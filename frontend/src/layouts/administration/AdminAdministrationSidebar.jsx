@@ -118,7 +118,7 @@ export function AdminAdministrationSidebar({ className, collapsed = false }) {
   const handleLogout = async () => {
     try {
       await logout();
-      navigate("/login", { replace: true });
+      navigate(LOGIN_ROUTE || "/connexion", { replace: true });
     } catch (e) {
       console.error("Logout failed:", e);
     }

@@ -233,7 +233,7 @@ export default function StudentDashboard() {
     case "bac1-sm":      return <Bac1SMDashboard />;
     case "bac2-gr1":     return <Bac2Gr1Dashboard />;
     case "bac2-gr2":     return <Bac2Gr2Dashboard />;
-    case "bac2":         return <Bac2Dashboard />; // optional legacy
+    case "bac2":         return <Bac2Gr1Dashboard />; // fallback legacy
     default:
       return <div className="text-center p-4">Degré inconnu.</div>;
   }

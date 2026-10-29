@@ -87,7 +87,7 @@ const colorForDegree = (id) =>
 function Header({ title, icon }) {
   return (
     <div className="p-4">
-      <div className="flex items-center gap-2 text-slate-800">
+      <div className="flex items-center gap-2 text-foreground">
         {icon}
         <h3 className="text-base font-semibold">{title}</h3>
       </div>
@@ -341,27 +341,61 @@ const seriesMerge = useMemo(() => {
   return (
     <div className="space-y-6">
       {/* HEADER */}
-      <div className="rounded-lg border bg-white p-6">
+      <div className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-sm">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Bonjour{adminFullName && `, ${adminFullName}`}
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary mb-1">
+              <ShieldCheck className="h-4 w-4" />
+              <span>Direction Générale • Tableau de Bord</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Bonjour{adminFullName && `, ${adminFullName}`} 👋
             </h1>
-            <p className="text-sm text-slate-600">Tableau de bord administrateur</p>
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+              Supervision des effectifs, flux des présences, plannings et ressources pédagogiques.
+            </p>
           </div>
-          <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200">
-            ADMIN
+          <Badge className="bg-primary/10 text-primary border border-primary/20 px-3 py-1 text-xs font-bold rounded-full">
+            DIRECTION ADMIN
           </Badge>
         </div>
 
         {/* Quick actions */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link to="/admin/manage-élèves"><Button size="sm" variant="secondary"><Users className="h-4 w-4 mr-1" />Étudiants</Button></Link>
-          <Link to="/admin/manage-enseignants"><Button size="sm" variant="outline">Enseignants</Button></Link>
-          <Link to="/admin/manage-parents"><Button size="sm" variant="outline">Parents</Button></Link>
-          <Link to="/admin/documents"><Button size="sm"><FilePlus2 className="h-4 w-4 mr-1" />Documents</Button></Link>
-          <Link to="/admin/devoirs"><Button size="sm"><ClipboardPlus className="h-4 w-4 mr-1" />Devoirs</Button></Link>
-          <Link to="/admin/presences"><Button size="sm" variant="outline"><UserX className="h-4 w-4 mr-1" />Présences</Button></Link>
+        <div className="mt-6 pt-5 border-t border-border/60 flex flex-wrap gap-2.5">
+          <Link to="/admin/manage-élèves">
+            <Button size="sm" className="rounded-xl gap-1.5 font-semibold shadow-sm">
+              <Users className="h-4 w-4" />
+              <span>Élèves</span>
+            </Button>
+          </Link>
+          <Link to="/admin/manage-enseignants">
+            <Button size="sm" variant="secondary" className="rounded-xl gap-1.5 border border-border">
+              <span>Enseignants</span>
+            </Button>
+          </Link>
+          <Link to="/admin/manage-parents">
+            <Button size="sm" variant="outline" className="rounded-xl border border-border">
+              <span>Parents</span>
+            </Button>
+          </Link>
+          <Link to="/admin/presences">
+            <Button size="sm" variant="outline" className="rounded-xl border border-border gap-1.5">
+              <UserX className="h-4 w-4" />
+              <span>Pointage Présences</span>
+            </Button>
+          </Link>
+          <Link to="/admin/documents">
+            <Button size="sm" variant="outline" className="rounded-xl border border-border gap-1.5">
+              <FilePlus2 className="h-4 w-4" />
+              <span>Documents</span>
+            </Button>
+          </Link>
+          <Link to="/admin/devoirs">
+            <Button size="sm" variant="outline" className="rounded-xl border border-border gap-1.5">
+              <ClipboardPlus className="h-4 w-4" />
+              <span>Devoirs</span>
+            </Button>
+          </Link>
         </div>
       </div>
       {/* GRID CONTENU */}

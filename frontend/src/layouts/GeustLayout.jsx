@@ -56,7 +56,7 @@ export default function GuestLayout() {
             [
               "flex items-center gap-2 rounded-full px-3 py-2 transition",
               isActive
-                ? "bg-slate-900/5 text-slate-900 ring-1 ring-slate-900/10 dark:bg.white/10 dark:text-white dark:ring-white/15"
+                ? "bg-slate-900/5 text-slate-900 ring-1 ring-slate-900/10 dark:bg-white/10 dark:text-white dark:ring-white/15"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:text-white dark:hover:bg-white/10",
             ].join(" ")
           }

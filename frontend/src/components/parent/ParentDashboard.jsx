@@ -1,13 +1,23 @@
 // src/components/parent/ParentDashboard.jsx
-// src/components/parent/ParentDashboard.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom"; // <-- changed
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { axiosClient } from "../../api/axios";
 import TimetableApi from "../../services/api/admin/TimeTableApi";
+import {
+  Users,
+  Calendar,
+  AlertTriangle,
+  Award,
+  Clock,
+  ChevronRight,
+  UserCheck,
+  BellRing,
+  BookOpen,
+} from "lucide-react";
 
 /* ------------------------------ helpers ------------------------------ */
-const unwrap           = (r) => r?.data?.data ?? r?.data ?? null;
+const unwrap         = (r) => r?.data?.data ?? r?.data ?? null;
 const unwrapChildren   = (r) => r?.data?.data ?? r?.data?.children ?? r?.data ?? [];
 const unwrapNotifs     = (r) => r?.data?.data ?? r?.data?.notifications ?? r?.data ?? [];
 const getStart         = (l) => l?.start_time ?? l?.starts_at ?? null;
@@ -49,7 +59,7 @@ export default function ParentDashboard() {
   const [loadingKids, setLoadingKids] = useState(true);
 
   // timetable
-  const [title, setTitle]       = useState("Emploi du temps de l’enfant");
+  const [title, setTitle]       = useState("Emploi du temps de l’élève");
   const [lessons, setLessons]   = useState([]);
   const [loadingTT, setLoadingTT] = useState(false);
 
@@ -62,7 +72,7 @@ export default function ParentDashboard() {
   const [absences, setAbsences] = useState(null);
   const [loadingAbs, setLoadingAbs] = useState(false);
 
-  // student badge (placeholder)
+  // student badge
   const [badge, setBadge] = useState(null);
   const [loadingBadge, setLoadingBadge] = useState(false);
 
@@ -79,12 +89,10 @@ export default function ParentDashboard() {
         const list = Array.isArray(kids) ? kids : [];
         setChildren(list);
 
-        // boot child selection:
         const urlChild = searchParams.get("child");
         if (urlChild && list.some(k => String(k.id) === String(urlChild))) {
           setChildId(String(urlChild));
         } else if (list.length && !childId) {
-          // fall back to first child and sync URL
           const first = String(list[0].id);
           setChildId(first);
           const sp = new URLSearchParams(searchParams);
@@ -95,10 +103,9 @@ export default function ParentDashboard() {
         setLoadingKids(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // keep URL in sync when childId changes (e.g., from <select>)
+  // keep URL in sync when childId changes
   useEffect(() => {
     if (!childId) return;
     const current = searchParams.get("child");
@@ -107,8 +114,7 @@ export default function ParentDashboard() {
       sp.set("child", String(childId));
       setSearchParams(sp, { replace: false });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [childId]);
+  }, [childId, searchParams, setSearchParams]);
 
   /* --------- load selected child's timetable --------- */
   useEffect(() => {
@@ -136,7 +142,7 @@ export default function ParentDashboard() {
     })();
   }, [childId]);
 
-  /* ---------------- load notifications (both) ---------------- */
+  /* ---------------- load notifications ---------------- */
   useEffect(() => {
     (async () => {
       setLoadingNotifs(true);
@@ -163,7 +169,7 @@ export default function ParentDashboard() {
     })();
   }, []);
 
-  /* ---------------- absences summary (soft fallback) ---------------- */
+  /* ---------------- absences summary ---------------- */
   useEffect(() => {
     if (!childId) return;
     (async () => {
@@ -172,7 +178,6 @@ export default function ParentDashboard() {
         const res = await firstOk([
           () => axiosClient.get(`/parent/children/${childId}/absences/summary`),
           () => axiosClient.get("/absences", { params: { student_id: childId, scope: "this_year" } }),
-          // as a last resort (may be forbidden for parent): admin endpoint filtered
           () => axiosClient.get("/admin/attendance", { params: { q: String(childId), per_page: 1 } }),
         ]);
         const data = res ? unwrap(res) : null;
@@ -188,7 +193,7 @@ export default function ParentDashboard() {
     })();
   }, [childId]);
 
-  /* ---------------- badge (placeholder) ---------------- */
+  /* ---------------- badge ---------------- */
   useEffect(() => {
     if (!childId) return;
     (async () => {
@@ -214,110 +219,185 @@ export default function ParentDashboard() {
       ? `${selectedChild.firstname ?? ""} ${selectedChild.lastname ?? ""}`.trim() || selectedChild.name || `#${selectedChild.id}`
       : "";
 
-  // keep your UI (unchanged except <select> onChange also updates URL via setChildId)
+  const parentName = user?.firstname && user?.lastname
+    ? `${user.firstname} ${user.lastname}`
+    : user?.name || "Parent";
+
   return (
-    <div className="p-4 space-y-6">
-      {/* Parent info */}
-      <div className="rounded-2xl border bg-card text-card-foreground overflow-hidden">
-        <div className="p-4">
-          <h1 className="text-xl font-semibold mb-3">Bienvenue 👋</h1>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase bg-muted/40">
-                <tr>
-                  <th className="px-4 py-2">ID</th>
-                  <th className="px-4 py-2">Nom</th>
-                  <th className="px-4 py-2">Email</th>
-                  <th className="px-4 py-2">Créé le</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="px-4 py-2">{user?.id}</td>
-                  <td className="px-4 py-2">{user?.firstname} {user?.lastname}</td>
-                  <td className="px-4 py-2">{user?.email}</td>
-                  <td className="px-4 py-2">{user?.created_at}</td>
-                </tr>
-              </tbody>
-            </table>
+    <div className="space-y-6">
+      {/* Welcome Header */}
+      <div className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary mb-1">
+              <Users className="h-4 w-4" />
+              <span>Espace Famille • Suivi Pédagogique</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
+              Bonjour, {parentName} 👋
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+              Consultez en temps réel l'emploi du temps, l'assiduité et les annonces scolaires de vos enfants.
+            </p>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-2">
+            <span className="px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+              Année Scolaire 2025–2026
+            </span>
+          </div>
+        </div>
+
+        {/* Multi-child selector pills */}
+        {children.length > 0 && (
+          <div className="mt-6 pt-5 border-t border-border/60">
+            <div className="text-xs font-semibold text-muted-foreground mb-2.5">
+              Sélectionnez un élève pour afficher ses informations :
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {children.map((c) => {
+                const isSelected = String(c.id) === String(childId);
+                const name = (c.firstname && c.lastname)
+                  ? `${c.firstname} ${c.lastname}`
+                  : (c.name ?? `Élève #${c.id}`);
+                const degree = c.degree?.name || c.degree_name || "";
+
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setChildId(String(c.id))}
+                    className={`flex items-center gap-2.5 px-4 py-2 rounded-2xl border text-xs font-semibold transition-all ${
+                      isSelected
+                        ? "border-primary bg-primary text-primary-foreground shadow-sm scale-100"
+                        : "border-border bg-muted/40 text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <UserCheck className="h-4 w-4 shrink-0" />
+                    <span>{name}</span>
+                    {degree && (
+                      <span className={`text-[10px] font-normal px-1.5 py-0.5 rounded ${
+                        isSelected ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {degree}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Child KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Élève sélectionné</span>
+            <Users className="h-4 w-4 text-primary" />
+          </div>
+          <div className="text-base sm:text-lg font-bold text-foreground truncate">
+            {loadingKids ? "Chargement…" : (childFullName || "—")}
+          </div>
+          <div className="text-[11px] text-muted-foreground">Dossier actif</div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Absences constatées</span>
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-foreground">
+            {loadingAbs ? "…" : (absences !== null ? absences : "0")}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {(absences === 0 || absences === null) ? "Assiduité exemplaire" : "À justifier auprès de l'école"}
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Séances hebdomadaires</span>
+            <Calendar className="h-4 w-4 text-emerald-500" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-foreground">
+            {loadingTT ? "…" : lessons.length}
+          </div>
+          <div className="text-[11px] text-muted-foreground">Créneaux d'appui programmés</div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Statut Takwa</span>
+            <Award className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="text-base sm:text-lg font-bold text-foreground truncate">
+            {badge?.label || badge?.name || "Inscrit régulier"}
+          </div>
+          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+            Assiduité suivie par scan
           </div>
         </div>
       </div>
 
-      {/* Child selector + quick stats + open timetable */}
-      <div className="rounded-2xl border p-4 bg-card text-card-foreground">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="text-lg font-semibold">{title}</div>
-          <div className="ml-auto flex items-center gap-2">
-            <label className="text-sm font-medium">Choisir l’enfant :</label>
-            <select
-              className="border rounded px-2 py-1 text-sm bg-background"
-              value={childId || ""}
-              onChange={(e) => setChildId(e.target.value)}
-              disabled={loadingKids || !children.length}
-            >
-              {children.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {(c.firstname && c.lastname) ? `${c.firstname} ${c.lastname}` : (c.name ?? `#${c.id}`)}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => navigate("/parent/emploi-du-temps")}
-              className="px-3 py-1.5 rounded-md border text-sm hover:bg-muted/60"
-              title="Ouvrir l’emploi du temps complet"
-            >
-              Ouvrir l’emploi du temps
-            </button>
+      {/* Timetable Section */}
+      <div className="rounded-3xl border border-border bg-card p-6 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-border/60">
+          <div>
+            <h2 className="text-lg font-bold text-foreground">{title}</h2>
+            <p className="text-xs text-muted-foreground">
+              Planning des séances de soutien pour {childFullName || "l'élève"}
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => navigate("/parent/emploi du temps")}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-border bg-background hover:bg-muted text-xs font-semibold transition-colors"
+          >
+            <span>Afficher la grille complète</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        {/* Quick stats */}
-        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <InfoStat label="Élève" value={loadingKids ? "Chargement…" : (childFullName || "—")} />
-          <InfoStat label="Absences" value={loadingAbs ? "Chargement…" : (absences ?? "—")} hint="(total année / période — à brancher)" />
-          <InfoStat label="Badge" value={loadingBadge ? "Chargement…" : (badge?.label ?? badge?.name ?? "—")} hint="(niveau/couleur à brancher)" />
-          <InfoStat label="Séances cette semaine" value={lessons?.length ?? 0} />
-        </div>
-
-        <div className="mt-4">
-          {loadingKids ? (
-            <div className="p-3 text-sm text-muted-foreground">Chargement des enfants…</div>
+        <div>
+          {loadingKids || loadingTT ? (
+            <div className="p-6 text-center text-xs text-muted-foreground">
+              Chargement de l'emploi du temps…
+            </div>
           ) : !children.length ? (
-            <div className="p-3 text-sm text-muted-foreground">Aucun enfant rattaché.</div>
+            <div className="p-6 text-center text-xs text-muted-foreground">
+              Aucun élève rattaché à votre compte.
+            </div>
           ) : (
             <WeekGrid lessons={lessons} />
           )}
-          {loadingTT && <div className="mt-2 text-xs text-muted-foreground">Mise à jour de l’emploi du temps…</div>}
         </div>
       </div>
 
-      {/* Notifications */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <NotificationsCard title="Notifications des enseignants" items={teacherNotifs} loading={loadingNotifs} emptyMsg="Aucune notification enseignant." />
-        <NotificationsCard title="Notifications de l’administration" items={adminNotifs} loading={loadingNotifs} emptyMsg="Aucune notification administration." />
+      {/* Notifications Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <NotificationsCard
+          title="Communications des Enseignants"
+          icon={BookOpen}
+          items={teacherNotifs}
+          loading={loadingNotifs}
+          emptyMsg="Aucun message récent de l'équipe pédagogique."
+        />
+        <NotificationsCard
+          title="Annonces Administratives"
+          icon={BellRing}
+          items={adminNotifs}
+          loading={loadingNotifs}
+          emptyMsg="Aucune communication administrative en cours."
+        />
       </div>
     </div>
   );
 }
 
-/* ----- subcomponents (unchanged) ----- */
-// ... keep your InfoStat, WeekGrid, NotificationsCard as-is
-
-
 /* =========================== subcomponents =========================== */
-
-function InfoStat({ label, value, hint }) {
-  return (
-    <div className="rounded-xl border p-3 bg-muted/30">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-lg font-semibold">{value}</div>
-      {hint ? <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div> : null}
-    </div>
-  );
-}
 
 function WeekGrid({ lessons }) {
   const rowsByDay = useMemo(() => {
@@ -331,7 +411,6 @@ function WeekGrid({ lessons }) {
       arr.sort((a, b) => {
         const sa = getStart(a), sb = getStart(b);
         if (sa && sb) return String(sa).localeCompare(String(sb));
-        // fallback by period number if time missing
         return (Number(a.period ?? 0)) - (Number(b.period ?? 0));
       });
       m.set(k, arr);
@@ -340,34 +419,48 @@ function WeekGrid({ lessons }) {
   }, [lessons]);
 
   return (
-    <div className="grid grid-cols-7 gap-2 text-sm">
-      {DAYS.map(({ label, val }) => (
-        <div key={val} className="min-w-0">
-          <div className="font-medium mb-1">{label}</div>
-          <div className="space-y-1">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
+      {DAYS.map(({ label, full, val }) => (
+        <div key={val} className="p-3 rounded-2xl border border-border/80 bg-background/50 space-y-2">
+          <div className="font-bold text-foreground text-center pb-1.5 border-b border-border/60">
+            {label}
+            <span className="hidden sm:inline text-muted-foreground font-normal text-[11px] ml-1">
+              ({full.slice(0, 3)})
+            </span>
+          </div>
+
+          <div className="space-y-2">
             {rowsByDay.get(val)?.map((l, idx) => {
-              const subject = l.subject?.name ?? "—";
+              const subject = l.subject?.name ?? "Séance";
               const teacher = l.teacher ? `${l.teacher.firstname ?? ""} ${l.teacher.lastname ?? ""}`.trim() : "";
               const room    = l.room?.name ?? l.room ?? "";
               const timeStr = (getStart(l) && getEnd(l))
-                ? `(${getStart(l)}–${getEnd(l)})`
-                : (l.period ? `• Créneau ${l.period}` : "");
+                ? `${getStart(l)}–${getEnd(l)}`
+                : (l.period ? `Créneau ${l.period}` : "");
 
               return (
                 <div
                   key={l.id ?? `${val}-${l.subject_id ?? "s"}-${getStart(l) ?? l.period ?? idx}`}
-                  className="rounded-xl border p-2 bg-background"
+                  className="rounded-xl border border-border p-2 bg-card space-y-1 shadow-2xs"
                 >
-                  <div className="font-medium">
-                    {subject} {timeStr && <span className="text-muted-foreground">{timeStr}</span>}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {teacher ? `Par ${teacher}` : ""}{room ? ` • ${room}` : ""}
-                  </div>
+                  <div className="font-bold text-foreground truncate">{subject}</div>
+                  {timeStr && (
+                    <div className="text-[10px] text-primary font-semibold flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      <span>{timeStr}</span>
+                    </div>
+                  )}
+                  {(teacher || room) && (
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      {teacher ? `Pr. ${teacher}` : ""}{room ? ` • ${room}` : ""}
+                    </div>
+                  )}
                 </div>
               );
             })}
-            {!rowsByDay.get(val)?.length && <div className="text-xs text-muted-foreground">—</div>}
+            {!rowsByDay.get(val)?.length && (
+              <div className="text-center py-4 text-[11px] text-muted-foreground/60">—</div>
+            )}
           </div>
         </div>
       ))}
@@ -375,32 +468,40 @@ function WeekGrid({ lessons }) {
   );
 }
 
-function NotificationsCard({ title, items, loading, emptyMsg }) {
+function NotificationsCard({ title, icon: Icon, items, loading, emptyMsg }) {
   return (
-    <div className="rounded-2xl border p-4 bg-card text-card-foreground">
-      <div className="text-lg font-semibold mb-3">{title}</div>
+    <div className="rounded-3xl border border-border bg-card p-6 shadow-sm space-y-4">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-border/60">
+        <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+          <Icon className="h-4 w-4" />
+        </div>
+        <h3 className="text-base font-bold text-foreground">{title}</h3>
+      </div>
+
       {loading ? (
-        <div className="text-sm text-muted-foreground">Chargement…</div>
+        <div className="text-xs text-muted-foreground py-4 text-center">Chargement…</div>
       ) : !items?.length ? (
-        <div className="text-sm text-muted-foreground">{emptyMsg}</div>
+        <div className="text-xs text-muted-foreground py-6 text-center">{emptyMsg}</div>
       ) : (
-        <ul className="space-y-2">
-          {items.map((n, i) => (
+        <ul className="space-y-3">
+          {items.slice(0, 5).map((n, i) => (
             <li
               key={n.id ?? `${n.type ?? "notif"}-${n.created_at ?? n.date ?? i}`}
-              className="rounded-xl border p-3 bg-muted/30"
+              className="rounded-2xl border border-border p-3.5 bg-background/50 space-y-1"
             >
-              <div className="text-sm font-medium">
-                {n.title ?? n.subject ?? n.type ?? "Notification"}
+              <div className="text-xs font-bold text-foreground">
+                {n.title ?? n.subject ?? n.type ?? "Communication"}
               </div>
-              {n.message || n.body ? (
-                <div className="text-sm text-foreground/80">
+              {(n.message || n.body) && (
+                <div className="text-xs text-muted-foreground leading-relaxed">
                   {n.message ?? n.body}
                 </div>
-              ) : null}
-              <div className="text-[11px] text-muted-foreground mt-1">
-                {n.created_at ?? n.date ?? ""}
-              </div>
+              )}
+              {n.created_at && (
+                <div className="text-[10px] text-muted-foreground/70 font-mono">
+                  {new Date(n.created_at).toLocaleDateString()}
+                </div>
+              )}
             </li>
           ))}
         </ul>
