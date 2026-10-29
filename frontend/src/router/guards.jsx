@@ -33,6 +33,15 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
+export function GuestOnly() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+}
+
 export function RequireRole({ roles }) {
   const { user, loading } = useAuth();
 

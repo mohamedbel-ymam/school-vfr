@@ -71,6 +71,8 @@ use App\Http\Controllers\Api\Student\MyAvatarController;
 use App\Http\Controllers\Api\Admin\AvatarReviewController;
 use App\Http\Controllers\Api\Admin\AttendanceAdminController;
 use App\Http\Controllers\Api\Teacher\AttendanceTeacherController;
+use App\Http\Controllers\Attendance\AttendanceSheetController;
+use App\Http\Controllers\Attendance\ScanProcessingController;
 
 
 Route::post('/connexion', [AuthController::class, 'login'])
@@ -212,6 +214,12 @@ Route::middleware('role:admin|superadmin')
         Route::get('attendance/export',   [AttendanceAdminController::class, 'export']);   // ?degree_id=&from=&to=
 	Route::get('attendance/export-weekly-summary', [AttendanceAdminController::class, 'exportWeeklySummary']);
 	Route::post('attendance/backfill', [AttendanceAdminController::class, 'backfill']);
+
+        // Scanned paper sheet generation & OMR processing
+        Route::get('attendance/weekly-sheet/pdf',  [AttendanceSheetController::class, 'generateWeeklyPdf']);
+        Route::get('attendance/weekly-sheet/data', [AttendanceSheetController::class, 'getSheetData']);
+        Route::post('attendance/upload-scan',      [ScanProcessingController::class, 'uploadScan']);
+        Route::post('attendance/confirm-scan',     [ScanProcessingController::class, 'confirmScan']);
 
         // Boursier
         Route::get('boursiers', [BoursierController::class,'index']);
@@ -398,3 +406,14 @@ Route::prefix('student')->middleware(['auth:sanctum','role:student'])->group(fun
 });
 
 
+
+
+// Scanned Paper Attendance Module (Direct prefix)
+Route::middleware([EnsureFrontendRequestsAreStateful::class, 'auth:sanctum', 'throttle:api-auth'])
+    ->prefix('attendances')
+    ->group(function () {
+        Route::get('weekly-sheet/pdf',  [AttendanceSheetController::class, 'generateWeeklyPdf']);
+        Route::get('weekly-sheet/data', [AttendanceSheetController::class, 'getSheetData']);
+        Route::post('upload-scan',      [ScanProcessingController::class, 'uploadScan']);
+        Route::post('confirm-scan',     [ScanProcessingController::class, 'confirmScan']);
+    });

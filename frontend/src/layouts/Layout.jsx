@@ -42,7 +42,7 @@ export default function Layout() {
       <div className="bg-slate-900 text-slate-200 text-xs py-1.5 px-4 text-center border-b border-slate-800/80">
         <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 font-medium">
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold text-[11px] border border-emerald-500/30">
-            Session 2025 – 2026
+            Session 2026 – 2027
           </span>
           <span className="hidden sm:inline">
             Établissement Takwa — Soutien scolaire d'excellence, rigueur méthodologique et parrainage post-bac

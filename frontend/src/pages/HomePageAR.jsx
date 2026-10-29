@@ -1,7 +1,4 @@
-// HomePageAR.jsx — نسخة عربية احترافية (Hero + Programs + Platform + Roles + Footer)
-// ✅ React + Tailwind (اختياري Framer Motion)
-// ✅ نفس “Option A” ولكن بالعربية
-// ✅ اتجاه RTL
+
 
 import React from "react";
 import { motion } from "framer-motion";

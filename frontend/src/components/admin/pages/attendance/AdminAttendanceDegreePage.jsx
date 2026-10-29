@@ -225,6 +225,29 @@ export default function AdminAttendanceDegreePage() {
             />
           </div>
 
+          <a
+            href={attendanceScanApi.getPdfDownloadUrl({
+              degreeId: Number(degreeId),
+              date: weekStart,
+              download: false,
+            })}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border bg-secondary text-secondary-foreground hover:bg-secondary/80 transition shadow-xs"
+          >
+            <Printer className="w-3.5 h-3.5 text-primary" />
+            Imprimer Fiche A4
+          </a>
+
+          <Button
+            size="sm"
+            onClick={() => navigate(`/admin/presences/scanner?degree_id=${degreeId}`)}
+            className="rounded-xl flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
+          >
+            <FileScan className="w-3.5 h-3.5" />
+            Scanner la Feuille
+          </Button>
+
           <Button variant="outline" onClick={() => navigate("/admin/presences")}>
             Retour
           </Button>
