@@ -286,15 +286,30 @@ export default function AttendanceScanner() {
     });
   }, [scanResult, filterMode, editedMatrix]);
 
-  // Print PDF URL
-  const pdfUrl = selectedDegree
-    ? attendanceScanApi.getPdfDownloadUrl({
-        degreeId: selectedDegree,
+  const [printingPdf, setPrintingPdf] = useState(false);
+
+  const handlePrintPdf = async () => {
+    if (!selectedDegree) {
+      toast.error("Veuillez sélectionner une classe.");
+      return;
+    }
+    setPrintingPdf(true);
+    try {
+      await attendanceScanApi.openWeeklyPdf({
+        degreeId: Number(selectedDegree),
         weekNumber: selectedWeek,
         year: selectedYear,
-        download: false,
-      })
-    : null;
+      });
+      toast.success("Fiche d'émargement A4 générée avec succès !");
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err?.response?.data?.message || "Erreur lors de la génération de la fiche A4."
+      );
+    } finally {
+      setPrintingPdf(false);
+    }
+  };
 
   return (
     <div className="p-4 sm:p-6 max-w-[1700px] mx-auto space-y-6">
@@ -324,17 +339,24 @@ export default function AttendanceScanner() {
         </div>
 
         {/* Action: Print sheet directly */}
-        {pdfUrl && (
-          <a
-            href={pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-secondary text-secondary-foreground hover:bg-secondary/80 transition shadow-sm border"
-          >
-            <Printer className="w-4 h-4 text-primary" />
-            Imprimer la Fiche Vierge (A4)
-          </a>
-        )}
+        <Button
+          variant="secondary"
+          disabled={!selectedDegree || printingPdf}
+          onClick={handlePrintPdf}
+          className="rounded-xl flex items-center gap-2 text-sm font-medium border shadow-xs"
+        >
+          {printingPdf ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+              Génération du PDF...
+            </>
+          ) : (
+            <>
+              <Printer className="w-4 h-4 text-primary" />
+              Imprimer la Fiche Vierge (A4)
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Screen 1: Document Upload & Parameters (Visible if no scan result yet) */}

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Attendance\WeeklyAttendanceSheetService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class AttendanceSheetController extends Controller
 {
@@ -17,9 +18,18 @@ class AttendanceSheetController extends Controller
      * Generate and download or stream the printable weekly A4 PDF attendance sheet.
      * 
      * Route: GET /api/attendances/weekly-sheet/pdf
+     * Route: GET /attendances/weekly-sheet/pdf
      */
     public function generateWeeklyPdf(Request $request)
     {
+        $user = $request->user() ?? Auth::guard('web')->user() ?? Auth::guard('sanctum')->user();
+        if (!$user) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json(['message' => 'Non authentifié. Veuillez vous connecter.'], 401);
+            }
+            return redirect('/connexion');
+        }
+
         $validated = $request->validate([
             'degree_id'   => ['required', 'integer', 'exists:degrees,id'],
             'group_id'    => ['nullable', 'integer', 'exists:groups,id'],
@@ -59,6 +69,11 @@ class AttendanceSheetController extends Controller
      */
     public function getSheetData(Request $request)
     {
+        $user = $request->user() ?? Auth::guard('web')->user() ?? Auth::guard('sanctum')->user();
+        if (!$user) {
+            return response()->json(['message' => 'Non authentifié. Veuillez vous connecter.'], 401);
+        }
+
         $validated = $request->validate([
             'degree_id'   => ['required', 'integer', 'exists:degrees,id'],
             'group_id'    => ['nullable', 'integer', 'exists:groups,id'],

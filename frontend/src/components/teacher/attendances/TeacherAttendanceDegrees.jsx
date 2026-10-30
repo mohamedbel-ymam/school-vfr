@@ -5,7 +5,8 @@ import { attendanceScanApi } from "../../../services/api/admin/AttendanceScanApi
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { FileText, Printer, CheckCircle2 } from "lucide-react";
+import { FileText, Printer, CheckCircle2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 /**
  * Notice: L'ancienne méthode de saisie unitaire d'appel a été obsolétée.
@@ -15,6 +16,20 @@ export default function TeacherAttendanceDegrees() {
   const navigate = useNavigate();
   const [degrees, setDegrees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  const handleOpenPdf = async (degreeId) => {
+    setDownloadingId(degreeId);
+    try {
+      await attendanceScanApi.openWeeklyPdf({ degreeId });
+      toast.success("Fiche d'émargement A4 générée avec succès !");
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || "Erreur lors de la génération de la fiche A4.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -90,15 +105,24 @@ export default function TeacherAttendanceDegrees() {
                     </div>
                   </div>
 
-                  <a
-                    href={pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/80 transition border shadow-xs"
+                  <Button
+                    variant="secondary"
+                    disabled={downloadingId === d.id}
+                    onClick={() => handleOpenPdf(d.id)}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl text-xs font-semibold border shadow-xs"
                   >
-                    <Printer className="w-3.5 h-3.5 text-primary" />
-                    Télécharger la Fiche A4
-                  </a>
+                    {downloadingId === d.id ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
+                        Génération...
+                      </>
+                    ) : (
+                      <>
+                        <Printer className="w-3.5 h-3.5 text-primary" />
+                        Télécharger la Fiche A4
+                      </>
+                    )}
+                  </Button>
                 </CardContent>
               </Card>
             );

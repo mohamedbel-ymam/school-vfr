@@ -5,7 +5,7 @@ import { Button } from "../../../../components/ui/button";
 import { toast } from "sonner";
 import { adminAttendanceApi } from "../../../../services/api/admin/AdminAttendanceServices";
 import { attendanceScanApi } from "../../../../services/api/admin/AttendanceScanApi";
-import { Printer, FileScan } from "lucide-react";
+import { Printer, FileScan, RefreshCw } from "lucide-react";
 
 /* ------------------------- date helpers ------------------------- */
 function startOfWeekMonday(date = new Date()) {
@@ -45,6 +45,7 @@ export default function AdminAttendanceDegreePage() {
   // Dirty: recordId -> newStatus
   const [dirty, setDirty] = useState({});
   const dirtyCount = Object.keys(dirty).length;
+  const [printingPdf, setPrintingPdf] = useState(false);
 
   const daysOfWeek = useMemo(
     () => Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i)),
@@ -197,6 +198,23 @@ export default function AdminAttendanceDegreePage() {
     window.open(url, "_blank");
   }
 
+  async function handlePrintPdf() {
+    setPrintingPdf(true);
+    try {
+      await attendanceScanApi.openWeeklyPdf({
+        degreeId: Number(degreeId),
+        date: weekStart,
+      });
+      toast.success("Fiche d'émargement A4 générée avec succès !");
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err?.response?.data?.message || "Erreur lors de la génération de la fiche A4."
+      );
+    } finally {
+      setPrintingPdf(false);
+    }
+  }
   const resultsRows = useMemo(() => {
     return rows.map((r) => ({
       student_id: r.student_id,
@@ -227,19 +245,25 @@ export default function AdminAttendanceDegreePage() {
             />
           </div>
 
-          <a
-            href={attendanceScanApi.getPdfDownloadUrl({
-              degreeId: Number(degreeId),
-              date: weekStart,
-              download: false,
-            })}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border bg-secondary text-secondary-foreground hover:bg-secondary/80 transition shadow-xs"
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={printingPdf}
+            onClick={handlePrintPdf}
+            className="rounded-xl flex items-center gap-1.5 text-xs font-semibold border shadow-xs"
           >
-            <Printer className="w-3.5 h-3.5 text-primary" />
-            Imprimer Fiche A4
-          </a>
+            {printingPdf ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
+                Génération PDF...
+              </>
+            ) : (
+              <>
+                <Printer className="w-3.5 h-3.5 text-primary" />
+                Imprimer Fiche A4
+              </>
+            )}
+          </Button>
 
           <Button
             size="sm"
