@@ -37,22 +37,30 @@ class WeeklyAttendanceSheetService
 
         $timetables = $ttQuery->get();
 
-        foreach ($timetables as $tt) {
+        // Deduplicate slots by day, start_time, subject, and group
+        $uniqueTimetables = $timetables->unique(function ($tt) {
+            $time = substr($tt->start_time ?? ($tt->period ? '08:00' : '08:00'), 0, 5);
+            return "{$tt->day_of_week}_{$time}_{$tt->subject_id}_{$tt->group_id}";
+        });
+
+        foreach ($uniqueTimetables as $tt) {
             // Day of week: 1 = Monday ... 7 = Sunday
             $dayOffset = max(0, min(6, (int)$tt->day_of_week - 1));
             $sessionDate = (clone $monday)->addDays($dayOffset)->toDateString();
+            $startTime = $tt->start_time ?? ($tt->period ? '08:00:00' : '08:00:00');
+            $startTimeFormatted = strlen($startTime) === 5 ? "{$startTime}:00" : $startTime;
 
             AttendanceSession::firstOrCreate(
                 [
                     'degree_id'    => $degreeId,
                     'session_date' => $sessionDate,
-                    'timetable_id' => $tt->id,
+                    'start_time'   => $startTimeFormatted,
+                    'subject_id'   => $tt->subject_id,
                 ],
                 [
                     'group_id'     => $tt->group_id,
                     'teacher_id'   => $tt->teacher_id,
-                    'subject_id'   => $tt->subject_id,
-                    'start_time'   => $tt->start_time ?? ($tt->period ? '08:00:00' : '08:00:00'),
+                    'timetable_id' => $tt->id,
                     'end_time'     => $tt->end_time ?? '09:30:00',
                     'session_type' => 'regular',
                     'week_number'  => $weekNumber,
@@ -67,11 +75,17 @@ class WeeklyAttendanceSheetService
         $sessions = AttendanceSession::query()
             ->where('degree_id', $degreeId)
             ->whereBetween('session_date', [$monday->toDateString(), $sunday->toDateString()])
+            ->whereNotNull('subject_id')
             ->when($groupId, fn($q) => $q->where(fn($sub) => $sub->whereNull('group_id')->orWhere('group_id', $groupId)))
             ->with(['subject', 'teacher', 'timetable'])
             ->orderBy('session_date')
             ->orderBy('start_time')
-            ->get();
+            ->get()
+            ->unique(function ($s) {
+                $time = substr($s->start_time ?? '08:00', 0, 5);
+                return "{$s->session_date}_{$time}_{$s->subject_id}_{$s->group_id}";
+            })
+            ->values();
 
         return [
             'monday'   => $monday,
@@ -148,8 +162,9 @@ class WeeklyAttendanceSheetService
 
         $pdf = Pdf::loadView('attendance.weekly_sheet', $data)
             ->setPaper('a4', 'landscape')
-            ->setOption('isRemoteEnabled', true)
-            ->setOption('dpi', 150);
+            ->setOption('isRemoteEnabled', false)
+            ->setOption('defaultFont', 'Helvetica')
+            ->setOption('dpi', 120);
 
         return $pdf;
     }
